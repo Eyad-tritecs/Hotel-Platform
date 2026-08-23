@@ -157,7 +157,8 @@ function renderSteps(){
   document.getElementById('stepsBar').innerHTML = STEP_LABELS.map(function(label, i){
     var n = i+1;
     var cls = n===currentStep ? 'active' : (n<currentStep ? 'done' : '');
-    return '<div class="pg-step '+cls+'"><div class="num">'+(n<currentStep?'&#10003;':n)+'</div><div class="label">'+label+'</div></div>';
+    var connector = i>0 ? '<div class="pg-step-connector'+(n<=currentStep?' done':'')+'"></div>' : '';
+    return connector + '<div class="pg-step '+cls+'"><div class="num">'+(n<currentStep?'&#10003;':n)+'</div><div class="label">'+label+'</div></div>';
   }).join('');
 }
 
