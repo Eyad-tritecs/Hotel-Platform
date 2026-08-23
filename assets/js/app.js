@@ -413,14 +413,16 @@
     return html;
   }
 
-  function renderHeader(crumbs) {
+  function renderHeader(crumbs, activeKey) {
     var crumbHtml = crumbs.map(function (c, i) {
       return i === crumbs.length - 1 ? "<b>" + esc(c) + "</b>" : esc(c);
     }).join(' <span>/</span> ');
     var html = '<header class="pg-header">';
     html += '<div class="pg-header-left"><div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
     html += '<div class="pg-header-right">';
-    html += '<a class="pg-header-btn" href="reservations-ar.html" title="Arabic (RTL) preview of the Reservations worklist">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
+    if (activeKey === "reservations") {
+      html += '<a class="pg-header-btn" href="reservations-ar.html" title="Switch this screen to Arabic (RTL)">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
+    }
     html += '<a class="pg-header-btn" href="new-reservation.html">' + ICONS.plus + " New Reservation</a>";
     html += '<button class="pg-header-btn" id="pg-reset-btn" title="Reset all prototype data back to the seeded demo state">&#8635; Reset Demo Data</button>';
     html += '<div class="pg-user"><div class="avatar">HA</div><div><div class="u-name">Hotel Admin</div><div class="u-role">Palestine Grand Hotel</div></div></div>';
@@ -431,7 +433,7 @@
   function mount(activeKey, crumbs) {
     var root = document.getElementById("pg-app");
     root.className = "pg-shell";
-    root.innerHTML = renderSidebar(activeKey) + '<div class="pg-main">' + renderHeader(crumbs) + '<main class="pg-content" id="pg-page"></main></div>';
+    root.innerHTML = renderSidebar(activeKey) + '<div class="pg-main">' + renderHeader(crumbs, activeKey) + '<main class="pg-content" id="pg-page"></main></div>';
     document.getElementById("pg-reset-btn").addEventListener("click", function () {
       if (confirm("Reset all prototype data to the original seeded demo state? This clears any reservations, edits, or inventory changes you made.")) {
         resetState();
