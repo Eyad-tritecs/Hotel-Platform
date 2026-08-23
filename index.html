@@ -42,6 +42,11 @@ var html = '';
 html += '<div class="pg-page-head"><div><h1>Welcome back, Hotel Admin</h1><div class="sub">Palestine Grand Hotel &middot; Bethlehem, Palestine &middot; ' + PG.fmtDate(PG.TODAY) + '</div></div>' +
   '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a><a class="btn btn-outline" href="reservations.html">View Reservations</a></div></div>';
 
+html += '<div class="card" style="background:linear-gradient(135deg,var(--pg-primary-light),#fff);border-color:#cfe6ff;"><div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">' +
+  '<div><h3 style="font-size:15px;margin-bottom:4px;">New here? Take the Guided Journey</h3><div class="muted text-sm">A clickable, step-by-step walkthrough of one real booking &mdash; from WhatsApp request to payment to cancellation.</div></div>' +
+  '<a class="btn btn-primary" href="demo-journey.html">Start Guided Journey &rarr;</a>' +
+'</div></div>';
+
 html += '<div class="grid-4">';
 html += '<div class="kpi"><div class="kpi-label">Active Reservations</div><div class="kpi-value">' + k.active + '</div><div class="kpi-note">Excludes cancelled</div></div>';
 html += '<div class="kpi"><div class="kpi-label">Today\'s Occupancy</div><div class="kpi-value">' + k.occPct + '%</div><div class="kpi-note">' + k.bookedToday + ' of ' + k.totalRoomsSellable + ' rooms booked</div></div>';

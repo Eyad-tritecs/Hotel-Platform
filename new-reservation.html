@@ -63,6 +63,22 @@ var wizard = {
   notes: ''
 };
 wizard.items[0].ratePlanId = ratePlansFor(wizard.items[0].roomTypeId)[0].id;
+
+// Guided demo pre-fill — launched from the Guided Journey page for the Ahmad Khalil / WhatsApp scenario.
+var demoTaxOverride = null;
+if (new URLSearchParams(location.search).get('demo') === 'ahmad-whatsapp'){
+  wizard.source = 'WhatsApp';
+  wizard.customerMode = 'existing';
+  wizard.customerId = 'cus-1';
+  wizard.checkIn = '2026-08-20';
+  wizard.checkOut = '2026-08-23';
+  wizard.items = [
+    {roomTypeId:'dlx', ratePlanId: ratePlansFor('dlx')[0].id, qty:2, adults:2, children:0},
+    {roomTypeId:'fam', ratePlanId: ratePlansFor('fam')[0].id, qty:1, adults:2, children:2}
+  ];
+  wizard.paymentMethod = 'Payment Link';
+  demoTaxOverride = 50;
+}
 var currentStep = 1;
 
 var html = '';
@@ -222,7 +238,7 @@ document.getElementById('checkOut').addEventListener('change', function(){ wizar
 
 function pricingBreakdown(){
   var roomCharges = wizard.items.reduce(function(a,it){return a+itemTotal(it);},0);
-  var taxes = Math.round(roomCharges*0.04*100)/100;
+  var taxes = demoTaxOverride!=null ? demoTaxOverride : Math.round(roomCharges*0.04*100)/100;
   var fees = wizard.items.length ? 20 : 0;
   return {roomCharges:roomCharges, taxes:taxes, fees:fees, total:roomCharges+taxes+fees};
 }
@@ -405,10 +421,12 @@ function createReservation(mode){
   else if (wizard.paymentMethod==='Pay on Arrival') activity.push({ts: PG.nowIso(), text: 'Payment method set to Pay on Arrival. Reservation confirmed.'});
   else activity.push({ts: PG.nowIso(), text: 'Payment method set to Payment Link. Awaiting link generation.'});
 
+  var p = pricingBreakdown();
   var reservation = {
     id: id, customerId: customerId, source: wizard.source, createdAt: PG.nowIso(),
     checkIn: wizard.checkIn, checkOut: wizard.checkOut, status: status, paymentStatus: paymentStatus, paymentMethod: wizard.paymentMethod,
-    rooms: wizard.items.map(function(it){ return {roomTypeId:it.roomTypeId, qty:it.qty}; }),
+    rooms: wizard.items.map(function(it){ return {roomTypeId:it.roomTypeId, qty:it.qty, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; }),
+    taxAmount: p.taxes, feeAmount: p.fees,
     notes: wizard.notes, activity: activity
   };
   st.reservations.push(reservation);

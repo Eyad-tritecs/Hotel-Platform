@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guided Journey — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .phase{border:1px solid var(--pg-border);border-radius:10px;margin-bottom:16px;overflow:hidden;}
+  .phase-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);}
+  .phase-head h3{font-size:14px;}
+  .phase-body{padding:6px 18px 16px;}
+  .step-row{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed var(--pg-gray-200);}
+  .step-row:last-child{border-bottom:none;}
+  .step-num{flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--pg-primary-light);color:var(--pg-primary);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .step-text{font-size:12.8px;color:var(--pg-gray-800);padding-top:2px;}
+  .step-text b{color:var(--pg-gray-900);}
+  .expect{display:inline-block;margin-top:4px;font-size:11px;font-weight:700;color:#0bb463;background:var(--pg-success-light);padding:2px 8px;border-radius:20px;}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("guided-journey", ["Reservations", "Guided Journey"]);
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Guided Journey</h1><div class="sub">A clickable, step-by-step walkthrough of one real scenario — keep this page open and follow along in a second tab.</div></div></div>';
+
+html += '<div class="help-note" style="margin-bottom:20px;">' +
+  '<b>Scenario:</b> Reservation Staff receives a WhatsApp booking request from <b>Ahmad Khalil</b> — 2 Deluxe Rooms + 1 Family Room, 20&ndash;23 Aug 2026, paid via Payment Link.' +
+'</div>';
+
+function phase(title, ctaHtml, steps){
+  return '<div class="phase"><div class="phase-head"><h3>'+title+'</h3>'+(ctaHtml||'')+'</div><div class="phase-body">' +
+    steps.map(function(st){
+      return '<div class="step-row"><div class="step-num">'+st.n+'</div><div class="step-text">'+st.text+(st.expect?'<br><span class="expect">'+st.expect+'</span>':'')+'</div></div>';
+    }).join('') +
+  '</div></div>';
+}
+
+html += phase('1 &middot; Start the Booking', '<a class="btn btn-primary btn-sm" href="reservations.html" target="_blank">Open Reservations &#8599;</a>', [
+  {n:1, text:'Start on the <b>Reservations</b> page.'},
+  {n:2, text:'Click <b>+ New Reservation</b> in the top-right (or use the button above, which opens the wizard already pre-filled for this exact scenario).'}
+]);
+
+html += phase('2 &middot; Guided Reservation Wizard', '<a class="btn btn-primary btn-sm" href="new-reservation.html?demo=ahmad-whatsapp" target="_blank">Start Pre-filled Wizard &#8599;</a>', [
+  {n:3, text:'Step 1 &mdash; Source is set to <b>WhatsApp</b>.'},
+  {n:4, text:'Guest is <b>Ahmad Khalil</b> (existing customer, phone &amp; email shown). Click Continue.'},
+  {n:5, text:'Step 2 &mdash; Stay dates are set: Arrival <b>20 Aug 2026</b>, Departure <b>23 Aug 2026</b>.'},
+  {n:6, text:'Reservation Item 1: <b>Deluxe Room</b>, Quantity 2, Flexible + Breakfast.'},
+  {n:7, text:'Reservation Item 2: <b>Family Room</b>, Quantity 1, Flexible + Breakfast.'},
+  {n:8, text:'Each item shows a live availability check against current inventory.', expect:'Both items: Available'},
+  {n:9, text:'Confirm both items read "Available" (not "Insufficient Inventory"). Click Continue.'},
+  {n:10, text:'Step 3 &mdash; Pricing Summary is shown.', expect:'Rooms $1,170 · Taxes $50 · Fees $20 · Total $1,240'},
+  {n:11, text:'<b>Payment Link</b> is pre-selected as the payment method. Click Continue.'},
+  {n:12, text:'Step 4 &mdash; Review the summary, then click <b>Confirm / Continue with Payment</b> to save.'}
+]);
+
+html += phase('3 &middot; Reservation Saved', '', [
+  {n:13, text:'You land on the new Reservation Detail page automatically.', expect:'Reservation Status: Pending Payment'},
+  {n:14, text:'Check the Payment section.', expect:'Payment Status: Payment Required'}
+]);
+
+html += phase('4 &middot; Generate &amp; Collect Payment', '', [
+  {n:15, text:'In the Payment card, click <b>Generate Payment Link</b>, review the modal, then click Generate Link.'},
+  {n:16, text:'The link is issued.', expect:'Payment Status: Link Sent'},
+  {n:17, text:'Click <b>Simulate Payment Success</b> to act as the payment gateway.'},
+  {n:18, text:'Payment updates automatically.', expect:'Payment Status: Paid'},
+  {n:19, text:'Reservation status updates automatically.', expect:'Reservation Status: Confirmed'},
+  {n:20, text:'You are already on Reservation Detail &mdash; no navigation needed.'},
+  {n:21, text:'Check Section 5 (Payment).', expect:'Transaction reference shown (PAY-YYYY-#####)'}
+]);
+
+html += phase('5 &middot; Verify Inventory Was Committed', '<a class="btn btn-outline btn-sm" href="availability-inventory.html" target="_blank">Open Availability &amp; Inventory &#8599;</a>', [
+  {n:22, text:'Click <b>More &rarr; View Inventory</b> on Reservation Detail, or use the button above.'},
+  {n:23, text:'Look at Deluxe Room and Family Room for 20&ndash;22 Aug.', expect:'Both show reduced availability vs. baseline'}
+]);
+
+html += phase('6 &middot; Cancel the Reservation', '', [
+  {n:24, text:'Return to Reservation Detail &mdash; use the browser Back button, or open Reservations and click the newest row (top of the list).'},
+  {n:25, text:'Click <b>Cancel Reservation</b>.'},
+  {n:26, text:'In the modal, review the before/after inventory, then choose a Cancellation Reason (default: "Guest requested cancellation").'},
+  {n:27, text:'Click <b>Confirm Cancellation</b>.'},
+  {n:28, text:'Reservation updates.', expect:'Reservation Status: Cancelled'},
+  {n:29, text:'Payment updates (it was Paid).', expect:'Payment Status: Refund Pending'}
+]);
+
+html += phase('7 &middot; Verify Inventory Was Restored', '<a class="btn btn-outline btn-sm" href="availability-inventory.html" target="_blank">Open Availability &amp; Inventory &#8599;</a>', [
+  {n:30, text:'Navigate back to <b>Availability &amp; Inventory</b>.'},
+  {n:31, text:'Look at Deluxe Room and Family Room for 20&ndash;22 Aug again.', expect:'Both restored to their original availability'}
+]);
+
+html += '<div class="pg-lightweight-note">This journey creates a real reservation in the prototype\'s local state. Use <b>Reset Demo Data</b> in the header at any time to start over from a clean slate.</div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>
