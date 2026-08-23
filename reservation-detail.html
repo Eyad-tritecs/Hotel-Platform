@@ -92,6 +92,7 @@ function render(){
     (r.paymentLinkExpiresAt && r.paymentStatus==='Link Sent' ? field('Expires At', PG.fmtDate(r.paymentLinkExpiresAt.slice(0,10)) + ' ' + r.paymentLinkExpiresAt.slice(11)) : '') +
     (r.transactionRef ? field('Transaction Reference', r.transactionRef) : '') +
     (r.paymentPaidAt ? field('Paid At', PG.fmtDate(r.paymentPaidAt.slice(0,10)) + ' ' + r.paymentPaidAt.slice(11)) : '') +
+    (r.paymentStatus==='Pay on Arrival' ? field('Payment Amount', PG.fmtMoney(total())) + field('Outstanding', PG.fmtMoney(total())) : '') +
     '<div class="divider"></div>' +
     '<div id="paymentActions" style="display:flex;flex-direction:column;gap:8px;"></div>' +
   '</div></div>';
@@ -145,7 +146,8 @@ function renderPaymentActions(){
       html += '<div class="text-sm muted">Payment complete. No further action needed.</div>';
     }
   } else {
-    html += '<div class="text-sm muted">Guest will pay on arrival at check-in.</div>';
+    html += '<div class="text-sm muted" style="margin-bottom:10px;">Guest will pay on arrival at check-in.</div>';
+    html += '<div class="help-note">Payment will be collected offline by the hotel. Cash collection, folio and accounting settlement are outside the Initial MVP.</div>';
   }
   box.innerHTML = html;
 

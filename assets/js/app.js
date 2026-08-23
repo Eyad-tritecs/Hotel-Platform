@@ -75,6 +75,9 @@
         rates[rt.id][d] = rt.baseRate + (weekend ? 20 : 0);
       });
     });
+    // Fixed nightly rate for Sara Ali's RES-10246 scenario so 2 nights totals exactly $260.
+    rates.std["2026-08-22"] = 130;
+    rates.std["2026-08-23"] = 130;
 
     var customers = [
       { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian", notes: "" },
@@ -102,20 +105,19 @@
       {
         id: "RES-10246",
         customerId: "cus-2",
-        source: "WhatsApp",
+        source: "Phone",
         createdAt: TODAY + "T11:40",
-        checkIn: addDays(TODAY, 4),
-        checkOut: addDays(TODAY, 7),
+        checkIn: "2026-08-22",
+        checkOut: "2026-08-24",
         status: "Confirmed",
         paymentStatus: "Pay on Arrival",
         paymentMethod: "Pay on Arrival",
         rooms: [
-          { roomTypeId: "dlx", qty: 1 },
           { roomTypeId: "std", qty: 1 }
         ],
-        notes: "Two-room booking for extended family visit.",
+        notes: "Short two-night stay.",
         activity: [
-          { ts: TODAY + "T11:40", text: "Reservation created via WhatsApp by Hotel Admin." },
+          { ts: TODAY + "T11:40", text: "Reservation created via Phone by Hotel Admin." },
           { ts: TODAY + "T11:41", text: "Payment method set to Pay on Arrival." },
           { ts: TODAY + "T11:41", text: "Reservation confirmed." }
         ]
