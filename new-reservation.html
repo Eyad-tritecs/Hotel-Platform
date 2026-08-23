@@ -264,6 +264,14 @@ function renderSummary(){
 function srow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;"><span class="muted">'+l+'</span><span style="font-weight:600;text-align:right;">'+v+'</span></div>'; }
 
 function renderReview(){
+  s = PG.getState(); // re-check live state — availability may have changed in another tab/session
+  var stillOk = wizard.checkOut>wizard.checkIn && wizard.items.every(function(it){ return itemAvailability(it).ok; });
+  var warningHtml = '';
+  if (!stillOk){
+    warningHtml = '<div class="help-note" style="background:var(--pg-warning-light);border-color:#f3d98a;color:#8a5a00;margin-bottom:16px;">' +
+      'Availability changed while this reservation was being created. Please review the selected room items before confirming.<br>' +
+      '<button class="btn btn-outline btn-sm" id="reviewAvailBtn" style="margin-top:10px;">Review Availability</button></div>';
+  }
   var p = pricingBreakdown();
   var html2 = '<div class="grid-2">' +
     revBlock('Guest', guestName() + '<br><span class="muted text-sm">'+guestPhone()+'</span>') +
@@ -276,7 +284,17 @@ function renderReview(){
   '<div class="divider"></div>' +
   prow('Room Charges', PG.fmtMoney(p.roomCharges)) + prow('Taxes', PG.fmtMoney(p.taxes)) + prow('Fees', PG.fmtMoney(p.fees)) +
   '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;margin-top:6px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
-  document.getElementById('reviewBody').innerHTML = html2;
+  document.getElementById('reviewBody').innerHTML = warningHtml + html2;
+
+  var fwd = document.getElementById('forwardActions');
+  if (!stillOk){
+    fwd.innerHTML = '<button class="btn btn-outline" disabled title="Resolve the availability warning above to continue">Save as Draft</button><button class="btn btn-primary" disabled title="Resolve the availability warning above to continue">Confirm / Continue with Payment</button>';
+    document.getElementById('reviewAvailBtn').addEventListener('click', function(){ showStep(2); });
+  } else {
+    fwd.innerHTML = '<button class="btn btn-outline" id="draftBtn">Save as Draft</button><button class="btn btn-primary" id="confirmBtn">Confirm / Continue with Payment</button>';
+    document.getElementById('draftBtn').addEventListener('click', function(){ createReservation('Draft'); });
+    document.getElementById('confirmBtn').addEventListener('click', function(){ createReservation('Confirm'); });
+  }
 }
 function revBlock(l,v){ return '<div class="form-group"><div class="form-label">'+l+'</div><div style="font-size:13px;">'+v+'</div></div>'; }
 

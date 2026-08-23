@@ -147,16 +147,20 @@
         checkIn: addDays(TODAY, 1),
         checkOut: addDays(TODAY, 2),
         status: "Pending Payment",
-        paymentStatus: "Link Sent",
+        paymentStatus: "Expired",
         paymentMethod: "Payment Link",
         rooms: [{ roomTypeId: "fam", qty: 1 }],
         taxAmount: 0,
         feeAmount: 0,
         notes: "Booked through Al-Quds Travel Agency.",
-        paymentLinkSentAt: TODAY + "T08:07",
+        paymentLinkUrl: "https://pay.example.com/RES-10247",
+        paymentLinkGeneratedAt: addDays(TODAY, -1) + "T08:07",
+        paymentLinkExpiresAt: TODAY + "T08:07",
         activity: [
-          { ts: TODAY + "T08:05", text: "Reservation created via Travel Agency by Hotel Admin." },
-          { ts: TODAY + "T08:07", text: "Payment link generated and sent to guest." }
+          { ts: addDays(TODAY, -1) + "T08:05", text: "Reservation created via Travel Agency by Hotel Admin." },
+          { ts: addDays(TODAY, -1) + "T08:07", text: "Payment Link generated." },
+          { ts: addDays(TODAY, -1) + "T08:08", text: "Payment Link sent via Email." },
+          { ts: TODAY + "T08:07", text: "Payment link expired without payment." }
         ]
       }
     ];
