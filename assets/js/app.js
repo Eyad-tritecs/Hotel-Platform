@@ -78,6 +78,8 @@
     // Fixed nightly rate for Sara Ali's RES-10246 scenario so 2 nights totals exactly $260.
     rates.std["2026-08-22"] = 130;
     rates.std["2026-08-23"] = 130;
+    // Fixed nightly rates for Ahmad Khalil's RES-10245 scenario (Deluxe $720, Family $450 over 3 nights).
+    ["2026-08-20","2026-08-21","2026-08-22"].forEach(function(d){ rates.dlx[d] = 120; rates.fam[d] = 150; });
 
     var customers = [
       { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian", notes: "" },
@@ -90,16 +92,29 @@
         id: "RES-10245",
         customerId: "cus-1",
         source: "Phone",
-        createdAt: TODAY + "T09:14",
-        checkIn: addDays(TODAY, 2),
-        checkOut: addDays(TODAY, 5),
-        status: "Pending Payment",
-        paymentStatus: "Payment Required",
+        createdAt: TODAY + "T10:15",
+        checkIn: "2026-08-20",
+        checkOut: "2026-08-23",
+        status: "Confirmed",
+        paymentStatus: "Paid",
         paymentMethod: "Payment Link",
-        rooms: [{ roomTypeId: "std", qty: 1 }],
+        rooms: [
+          { roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast" },
+          { roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast" }
+        ],
         notes: "Guest requested early check-in if possible.",
+        taxAmount: 50,
+        feeAmount: 20,
+        transactionRef: "PAY-2026-45892",
+        paymentLinkUrl: "https://pay.example.com/RES-10245",
+        paymentLinkGeneratedAt: TODAY + "T10:17",
+        paymentPaidAt: TODAY + "T10:24",
         activity: [
-          { ts: TODAY + "T09:14", text: "Reservation created via Phone by Hotel Admin." }
+          { ts: TODAY + "T10:15", text: "Reservation created via Phone by Hotel Admin." },
+          { ts: TODAY + "T10:17", text: "Payment Link generated." },
+          { ts: TODAY + "T10:18", text: "Payment Link sent via Email." },
+          { ts: TODAY + "T10:24", text: "Payment received — Transaction Ref: PAY-2026-45892." },
+          { ts: TODAY + "T10:24", text: "Reservation confirmed." }
         ]
       },
       {
@@ -115,6 +130,8 @@
         rooms: [
           { roomTypeId: "std", qty: 1 }
         ],
+        taxAmount: 0,
+        feeAmount: 0,
         notes: "Short two-night stay.",
         activity: [
           { ts: TODAY + "T11:40", text: "Reservation created via Phone by Hotel Admin." },
@@ -133,6 +150,8 @@
         paymentStatus: "Link Sent",
         paymentMethod: "Payment Link",
         rooms: [{ roomTypeId: "fam", qty: 1 }],
+        taxAmount: 0,
+        feeAmount: 0,
         notes: "Booked through Al-Quds Travel Agency.",
         paymentLinkSentAt: TODAY + "T08:07",
         activity: [

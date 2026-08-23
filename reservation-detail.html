@@ -15,6 +15,17 @@
   .t-item::before{content:"";position:absolute;left:-22px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--pg-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--pg-primary);}
   .t-item .t-time{font-size:11px;color:var(--pg-gray-500);}
   .t-item .t-text{font-size:12.8px;color:var(--pg-gray-800);margin-top:2px;}
+  .section-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--pg-gray-200);color:var(--pg-gray-700);font-size:11px;font-weight:700;margin-right:8px;}
+  .more-wrap{position:relative;display:inline-block;}
+  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:190px;z-index:30;display:none;overflow:hidden;}
+  .more-menu.show{display:block;}
+  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
+  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+  .room-item-card{border:1px solid var(--pg-border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:var(--pg-gray-100);}
+  .room-item-card .ri-top{display:flex;justify-content:space-between;align-items:center;}
+  .room-item-card h4{font-size:13.5px;}
+  .room-item-card .ri-meta{font-size:12px;color:var(--pg-gray-600);margin-top:4px;}
+  .room-item-card .ri-total{font-weight:700;font-size:14px;}
 </style>
 </head>
 <body>
@@ -34,72 +45,90 @@ if (!r){
 
 function cust(){ return s.customers.find(function(c){return c.id===r.customerId;}); }
 function nights(){ return PG.dateRange(r.checkIn, r.checkOut); }
+function ratePlanNameFor(room){
+  if (room.ratePlanName) return room.ratePlanName;
+  var plans = s.ratePlans.filter(function(p){ return p.roomTypeId===room.roomTypeId && p.active; });
+  return plans.length ? plans[0].name : 'Standard Rate';
+}
 function lines(){
   var n = nights();
   return r.rooms.map(function(room){
     var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
     var subtotal = 0;
     n.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
-    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal};
+    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room)};
   });
 }
-function total(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
+function roomCharges(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
+function taxAmount(){ return r.taxAmount != null ? r.taxAmount : Math.round(roomCharges()*0.04*100)/100; }
+function feeAmount(){ return r.feeAmount != null ? r.feeAmount : (r.rooms.length ? 20 : 0); }
+function total(){ return roomCharges() + taxAmount() + feeAmount(); }
 
 function render(){
   var c = cust();
   var canCancel = r.status!=='Cancelled' && r.status!=='Completed';
   var html = '';
 
-  html += '<div class="pg-page-head"><div><h1>'+r.id+' <span style="font-size:14px;">'+PG.statusBadge(r.status)+'</span></h1>' +
+  html += '<div class="pg-page-head"><div><h1>'+r.id+' <span style="font-size:14px;display:inline-flex;gap:6px;">'+PG.statusBadge(r.status)+PG.payBadge(r.paymentStatus)+'</span></h1>' +
     '<div class="sub">Created '+PG.fmtDate(r.createdAt.slice(0,10))+' via '+r.source+'</div></div>' +
     '<div class="pg-actions">' +
       (canCancel ? '<button class="btn btn-danger-outline" id="cancelBtn">Cancel Reservation</button>' : '') +
-      '<a class="btn btn-outline" href="availability-inventory.html">View Inventory</a>' +
-      '<a class="btn btn-light" href="reservations.html">Back to List</a>' +
+      '<div class="more-wrap">' +
+        '<button class="btn btn-outline" id="moreBtn">More &#9662;</button>' +
+        '<div class="more-menu" id="moreMenu">' +
+          '<a href="availability-inventory.html">View Inventory</a>' +
+          '<a href="reservations.html">Back to Reservations</a>' +
+          '<button id="printStub">Print Summary</button>' +
+        '</div>' +
+      '</div>' +
     '</div></div>';
 
   html += '<div class="row"><div class="col" style="flex:2;">';
 
-  html += '<div class="card"><div class="card-header"><h3>Stay Details</h3></div><div class="card-body"><div class="grid-4">' +
-    field('Check-in', PG.fmtDate(r.checkIn)) + field('Check-out', PG.fmtDate(r.checkOut)) +
-    field('Nights', nights().length) + field('Rooms', r.rooms.reduce(function(a,x){return a+x.qty;},0)) +
-  '</div></div></div>';
+  // Section 1 — Reservation Summary
+  html += sectionCard(1, 'Reservation Summary', '<div class="grid-3">' +
+    field('Reservation ID', r.id) + field('Reservation Source', r.source) + field('Created Date', PG.fmtDate(r.createdAt.slice(0,10))) +
+    field('Arrival', PG.fmtDate(r.checkIn)) + field('Departure', PG.fmtDate(r.checkOut)) + field('Nights', nights().length) +
+    field('Status', PG.statusBadge(r.status)) +
+  '</div>');
 
-  html += '<div class="card"><div class="card-header"><h3>Room &amp; Pricing</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt">' +
-    '<thead><tr><th>Room Type</th><th class="center">Qty</th><th class="center">Nights</th><th class="num">Subtotal</th></tr></thead><tbody>' +
-    lines().map(function(l){ return '<tr><td>'+l.name+'</td><td class="center">'+l.qty+'</td><td class="center">'+l.nights+'</td><td class="num">'+PG.fmtMoney(l.subtotal)+'</td></tr>'; }).join('') +
-    '</tbody></table></div></div>' +
-    '<div class="card-footer" style="display:flex;justify-content:space-between;"><strong>Total</strong><strong>'+PG.fmtMoney(total())+'</strong></div>' +
-  '</div>';
+  // Section 2 — Guest
+  html += sectionCard(2, 'Guest', '<div class="grid-3">' +
+    field('Name', c.name) + field('Mobile', c.phone) + field('Email', c.email) +
+  '</div>' + (r.notes ? '<div class="form-group" style="margin-top:6px;"><div class="form-label">Notes</div><div class="text-sm">'+PG.esc(r.notes)+'</div></div>' : ''));
 
-  html += '<div class="card"><div class="card-header"><h3>Guest Information</h3></div><div class="card-body"><div class="grid-2">' +
-    field('Name', c.name) + field('Phone', c.phone) + field('Email', c.email) + field('Nationality', c.nationality||'—') +
-  '</div>' + (r.notes ? '<div class="form-group" style="margin-top:6px;"><div class="form-label">Notes</div><div class="text-sm">'+PG.esc(r.notes)+'</div></div>' : '') + '</div></div>';
+  // Section 3 — Room Items
+  html += sectionCard(3, 'Room Items', lines().map(function(l){
+    return '<div class="room-item-card"><div class="ri-top"><h4>'+l.qty+'× '+l.name+'</h4><span class="ri-total">'+PG.fmtMoney(l.subtotal)+'</span></div>' +
+      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+'</div></div>';
+  }).join(''));
 
-  html += '<div class="card"><div class="card-header"><h3>Activity</h3></div><div class="card-body"><div class="timeline">' +
+  // Section 4 — Pricing
+  html += sectionCard(4, 'Pricing', prow('Room Charges', PG.fmtMoney(roomCharges())) + prow('Taxes', PG.fmtMoney(taxAmount())) + prow('Fees', PG.fmtMoney(feeAmount())) +
+    '<div class="divider"></div><div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;"><span>Total</span><span>'+PG.fmtMoney(total())+'</span></div>');
+
+  // Section 6 — Activity / Audit
+  html += sectionCard(6, 'Activity / Audit', '<div class="timeline">' +
     r.activity.slice().reverse().map(function(a){ return '<div class="t-item"><div class="t-time">'+PG.fmtDate(a.ts.slice(0,10),{month:'short',day:'numeric'})+' &middot; '+a.ts.slice(11)+'</div><div class="t-text">'+PG.esc(a.text)+'</div></div>'; }).join('') +
-  '</div></div></div>';
+  '</div>');
 
   html += '</div>';
 
-  // Right column: payment panel
+  // Right column — Section 5: Payment
   html += '<div class="col">';
-  html += '<div class="card"><div class="card-header"><h3>Payment</h3></div><div class="card-body">' +
+  html += sectionCard(5, 'Payment',
     field('Method', r.paymentMethod) +
     '<div class="form-group"><div class="form-label">Status</div>'+PG.payBadge(r.paymentStatus)+'</div>' +
     (r.paymentLinkUrl ? field('Payment Link', '<a href="#" onclick="return false;" style="word-break:break-all;">'+r.paymentLinkUrl+'</a>') : '') +
     (r.paymentLinkGeneratedAt ? field('Generated At', PG.fmtDate(r.paymentLinkGeneratedAt.slice(0,10)) + ' ' + r.paymentLinkGeneratedAt.slice(11)) : '') +
     (r.paymentLinkExpiresAt && r.paymentStatus==='Link Sent' ? field('Expires At', PG.fmtDate(r.paymentLinkExpiresAt.slice(0,10)) + ' ' + r.paymentLinkExpiresAt.slice(11)) : '') +
-    (r.transactionRef ? field('Transaction Reference', r.transactionRef) : '') +
+    (r.transactionRef ? field('Transaction', r.transactionRef) : '') +
+    (r.paymentStatus==='Paid' ? field('Paid Amount', PG.fmtMoney(total())) : '') +
     (r.paymentPaidAt ? field('Paid At', PG.fmtDate(r.paymentPaidAt.slice(0,10)) + ' ' + r.paymentPaidAt.slice(11)) : '') +
     (r.paymentStatus==='Pay on Arrival' ? field('Payment Amount', PG.fmtMoney(total())) + field('Outstanding', PG.fmtMoney(total())) : '') +
     '<div class="divider"></div>' +
-    '<div id="paymentActions" style="display:flex;flex-direction:column;gap:8px;"></div>' +
-  '</div></div>';
-
-  html += '<div class="card"><div class="card-header"><h3>Reservation Meta</h3></div><div class="card-body">' +
-    field('Source', r.source) + field('Reservation ID', r.id) + field('Status', PG.statusBadge(r.status)) +
-  '</div></div>';
+    '<div id="paymentActions" style="display:flex;flex-direction:column;gap:8px;"></div>'
+  );
 
   html += '</div></div>';
 
@@ -107,7 +136,15 @@ function render(){
   renderPaymentActions();
 
   if (canCancel) document.getElementById('cancelBtn').addEventListener('click', openCancelConfirm);
+  document.getElementById('moreBtn').addEventListener('click', function(e){ e.stopPropagation(); document.getElementById('moreMenu').classList.toggle('show'); });
+  document.addEventListener('click', function(){ var m=document.getElementById('moreMenu'); if(m) m.classList.remove('show'); });
+  document.getElementById('printStub').addEventListener('click', function(){ PG.toast('Printing / export is outside this MVP prototype.', 'warn'); });
 }
+
+function sectionCard(num, title, bodyHtml){
+  return '<div class="card"><div class="card-header"><h3><span class="section-num">'+num+'</span>'+title+'</h3></div><div class="card-body">'+bodyHtml+'</div></div>';
+}
+function prow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;"><span class="muted">'+l+'</span><span style="font-weight:600;">'+v+'</span></div>'; }
 
 function field(label, value){
   return '<div class="form-group"><div class="form-label">'+label+'</div><div style="font-size:13px;font-weight:500;">'+value+'</div></div>';
