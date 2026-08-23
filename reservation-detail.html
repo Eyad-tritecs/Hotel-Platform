@@ -87,7 +87,10 @@ function render(){
   html += '<div class="card"><div class="card-header"><h3>Payment</h3></div><div class="card-body">' +
     field('Method', r.paymentMethod) +
     '<div class="form-group"><div class="form-label">Status</div>'+PG.payBadge(r.paymentStatus)+'</div>' +
-    (r.paymentLinkSentAt ? field('Link Sent', PG.fmtDate(r.paymentLinkSentAt.slice(0,10)) + ' ' + r.paymentLinkSentAt.slice(11)) : '') +
+    (r.paymentLinkUrl ? field('Payment Link', '<a href="#" onclick="return false;" style="word-break:break-all;">'+r.paymentLinkUrl+'</a>') : '') +
+    (r.paymentLinkGeneratedAt ? field('Generated At', PG.fmtDate(r.paymentLinkGeneratedAt.slice(0,10)) + ' ' + r.paymentLinkGeneratedAt.slice(11)) : '') +
+    (r.paymentLinkExpiresAt && r.paymentStatus==='Link Sent' ? field('Expires At', PG.fmtDate(r.paymentLinkExpiresAt.slice(0,10)) + ' ' + r.paymentLinkExpiresAt.slice(11)) : '') +
+    (r.transactionRef ? field('Transaction Reference', r.transactionRef) : '') +
     (r.paymentPaidAt ? field('Paid At', PG.fmtDate(r.paymentPaidAt.slice(0,10)) + ' ' + r.paymentPaidAt.slice(11)) : '') +
     '<div class="divider"></div>' +
     '<div id="paymentActions" style="display:flex;flex-direction:column;gap:8px;"></div>' +
@@ -124,16 +127,20 @@ function renderPaymentActions(){
     }
   } else if (r.paymentMethod==='Payment Link'){
     if (r.paymentStatus==='Payment Required'){
-      html += '<button class="btn btn-primary btn-block" id="sendLink">Generate &amp; Send Payment Link</button>';
+      html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Generate Payment Link</button>';
     } else if (r.paymentStatus==='Link Sent'){
-      html += '<div class="help-note" style="margin-bottom:4px;">Payment link sent to guest. Simulate the outcome below.</div>';
-      html += '<button class="btn btn-success btn-block" id="markPaid">Simulate: Payment Received</button>';
+      html += '<div class="form-group"><div class="form-label">Payment Link</div>' +
+        '<div style="display:flex;gap:6px;"><input class="form-control" id="linkUrlBox" value="'+r.paymentLinkUrl+'" readonly style="font-size:12px;">' +
+        '<button class="btn btn-outline btn-sm" id="copyLinkBtn" title="Copy Link">Copy</button></div></div>';
+      html += '<div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" style="flex:1;" id="sendLinkBtn">Send</button><button class="btn btn-outline btn-sm" style="flex:1;" id="resendLinkBtn">Resend</button></div>';
+      html += '<div class="divider"></div>';
+      html += '<div class="help-note" style="margin-bottom:4px;">Prototype actions — simulate the guest\'s payment outcome.</div>';
+      html += '<button class="btn btn-success btn-block" id="markPaid">Simulate Payment Success</button>';
       html += '<button class="btn btn-outline btn-block" id="markFailed">Simulate: Payment Failed</button>';
       html += '<button class="btn btn-light btn-block" id="markExpired">Simulate: Link Expired</button>';
-      html += '<button class="btn btn-outline btn-block" id="resendLink">Resend Link</button>';
     } else if (r.paymentStatus==='Failed' || r.paymentStatus==='Expired'){
       html += '<div class="text-sm muted" style="margin-bottom:8px;">Payment '+r.paymentStatus.toLowerCase()+'. Generate a new link to retry.</div>';
-      html += '<button class="btn btn-primary btn-block" id="sendLink">Generate New Payment Link</button>';
+      html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Generate New Payment Link</button>';
     } else if (r.paymentStatus==='Paid'){
       html += '<div class="text-sm muted">Payment complete. No further action needed.</div>';
     }
@@ -143,13 +150,71 @@ function renderPaymentActions(){
   box.innerHTML = html;
 
   var b;
-  if (b=document.getElementById('sendLink')) b.addEventListener('click', function(){ transition('Link Sent', 'Pending Payment', 'Payment link generated and sent to guest.'); r.paymentLinkSentAt = PG.nowIso(); save('Payment Link Sent', r.id + ' — payment link generated and sent.'); });
-  if (b=document.getElementById('resendLink')) b.addEventListener('click', function(){ r.paymentLinkSentAt = PG.nowIso(); r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest.'}); save('Payment Link Resent', r.id + ' — payment link resent.'); });
-  if (b=document.getElementById('markPaid')) b.addEventListener('click', function(){ r.paymentPaidAt = PG.nowIso(); transition('Paid', 'Confirmed', 'Payment received — status updated to Paid.'); save('Payment Received', 'Payment confirmed for ' + r.id + '.'); });
+  if (b=document.getElementById('genLinkBtn')) b.addEventListener('click', openGenLinkModal);
+  if (b=document.getElementById('copyLinkBtn')) b.addEventListener('click', function(){
+    var input = document.getElementById('linkUrlBox');
+    input.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(input.value).catch(function(){});
+    else document.execCommand('copy');
+    PG.toast('Payment link copied to clipboard.', 'success');
+  });
+  if (b=document.getElementById('sendLinkBtn')) b.addEventListener('click', function(){ r.activity.push({ts:PG.nowIso(), text:'Payment link sent to guest.'}); save('Payment Link Sent', r.id + ' — payment link sent to guest.'); });
+  if (b=document.getElementById('resendLinkBtn')) b.addEventListener('click', function(){ r.paymentLinkExpiresAt = PG.nowIso(); r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest.'}); save('Payment Link Resent', r.id + ' — payment link resent.'); });
+  if (b=document.getElementById('markPaid')) b.addEventListener('click', function(){
+    r.paymentPaidAt = PG.nowIso();
+    r.transactionRef = 'PAY-' + new Date().getFullYear() + '-' + Math.floor(10000 + Math.random()*89999);
+    transition('Paid', 'Confirmed', 'Payment successful — Transaction Ref: ' + r.transactionRef + '.');
+    r.activity.push({ts: PG.nowIso(), text: 'Reservation confirmed.'});
+    save('Payment Received', 'Payment confirmed for ' + r.id + ' — Transaction Ref: ' + r.transactionRef + '.');
+  });
   if (b=document.getElementById('markFailed')) b.addEventListener('click', function(){ transition('Failed', r.status, 'Payment attempt failed.'); save('Payment Failed', 'Payment attempt failed for ' + r.id + '.'); });
   if (b=document.getElementById('markExpired')) b.addEventListener('click', function(){ transition('Expired', r.status, 'Payment link expired without payment.'); save('Payment Link Expired', 'Payment link expired for ' + r.id + '.'); });
   if (b=document.getElementById('markRefunded')) b.addEventListener('click', function(){ transition('Refunded', r.status, 'Refund completed for cancelled reservation.'); save('Refund Completed', 'Refund completed for ' + r.id + '.'); });
 }
+
+// Generate Payment Link modal
+if (r && r.paymentMethod==='Payment Link'){
+  var linkModal = document.createElement('div');
+  linkModal.className = 'pg-modal-overlay';
+  linkModal.id = 'genLinkModal';
+  linkModal.innerHTML = '<div class="pg-modal">' +
+    '<div class="pg-modal-header"><h3>Generate Payment Link</h3><button class="pg-modal-close" onclick="PG.closeModal(\'genLinkModal\')">&times;</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Reservation ID</label><input class="form-control" value="'+r.id+'" disabled></div>' +
+        '<div class="form-group"><label class="form-label">Guest</label><input class="form-control" value="'+PG.esc(cust().name)+'" disabled></div>' +
+        '<div class="form-group"><label class="form-label">Amount</label><input class="form-control" value="'+total().toFixed(2)+'" disabled></div>' +
+        '<div class="form-group"><label class="form-label">Currency</label><input class="form-control" value="'+s.hotel.currency+'" disabled></div>' +
+        '<div class="form-group"><label class="form-label">Expiry</label><select class="form-control" id="link-expiry"><option value="24">24 hours</option><option value="48">48 hours</option><option value="72">72 hours</option></select></div>' +
+      '</div>' +
+      '<div class="form-check" style="margin-top:6px;"><input type="checkbox" id="send-email" checked><label class="form-label" style="margin:0;" for="send-email">Send via Email</label></div>' +
+      '<div class="form-check" style="margin-top:10px;"><input type="checkbox" id="send-sms"><label class="form-label" style="margin:0;" for="send-sms">Send via SMS <span class="opt">(optional)</span></label></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'genLinkModal\')">Cancel</button><button class="btn btn-primary" id="genLinkSave">Generate Link</button></div>' +
+  '</div>';
+  document.body.appendChild(linkModal);
+
+  document.getElementById('genLinkSave').addEventListener('click', function(){
+    var hours = parseInt(document.getElementById('link-expiry').value, 10);
+    var viaEmail = document.getElementById('send-email').checked;
+    var viaSms = document.getElementById('send-sms').checked;
+    r.paymentLinkUrl = 'https://pay.example.com/' + r.id;
+    r.paymentLinkGeneratedAt = PG.nowIso();
+    var expiryDate = new Date(PG.nowIso() + ':00Z');
+    expiryDate.setUTCHours(expiryDate.getUTCHours() + hours);
+    r.paymentLinkExpiresAt = expiryDate.toISOString().slice(0,16);
+    r.paymentStatus = 'Link Sent';
+    r.status = 'Pending Payment';
+    r.activity.push({ts: PG.nowIso(), text: 'Payment Link generated.'});
+    var via = [];
+    if (viaEmail) via.push('Email');
+    if (viaSms) via.push('SMS');
+    r.activity.push({ts: PG.nowIso(), text: 'Payment Link sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.'});
+    PG.closeModal('genLinkModal');
+    save('Payment Link Sent', r.id + ' — payment link generated and sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.');
+  });
+}
+function openGenLinkModal(){ PG.openModal('genLinkModal'); }
 
 function transition(paymentStatus, status, note){
   r.paymentStatus = paymentStatus;

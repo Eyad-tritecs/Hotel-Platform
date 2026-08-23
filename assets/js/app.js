@@ -90,18 +90,13 @@
         createdAt: TODAY + "T09:14",
         checkIn: addDays(TODAY, 2),
         checkOut: addDays(TODAY, 5),
-        status: "Confirmed",
-        paymentStatus: "Paid",
+        status: "Pending Payment",
+        paymentStatus: "Payment Required",
         paymentMethod: "Payment Link",
         rooms: [{ roomTypeId: "std", qty: 1 }],
         notes: "Guest requested early check-in if possible.",
-        paymentLinkSentAt: TODAY + "T09:16",
-        paymentPaidAt: TODAY + "T10:02",
         activity: [
-          { ts: TODAY + "T09:14", text: "Reservation created via Phone by Hotel Admin." },
-          { ts: TODAY + "T09:16", text: "Payment link generated and sent to guest." },
-          { ts: TODAY + "T10:02", text: "Payment received — status updated to Paid." },
-          { ts: TODAY + "T10:02", text: "Reservation confirmed." }
+          { ts: TODAY + "T09:14", text: "Reservation created via Phone by Hotel Admin." }
         ]
       },
       {
@@ -181,8 +176,6 @@
         { ts: TODAY + "T08:05", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10247 created via Travel Agency." },
         { ts: TODAY + "T08:07", actor: "Hotel Admin", action: "Payment Link Sent", details: "Payment link sent for RES-10247." },
         { ts: TODAY + "T09:14", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10245 created via Phone." },
-        { ts: TODAY + "T09:16", actor: "Hotel Admin", action: "Payment Link Sent", details: "Payment link sent for RES-10245." },
-        { ts: TODAY + "T10:02", actor: "System", action: "Payment Received", details: "Payment confirmed for RES-10245." },
         { ts: TODAY + "T11:40", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10246 created via WhatsApp." }
       ]
     };
