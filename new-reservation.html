@@ -284,7 +284,7 @@ function renderReview(){
   var stillOk = wizard.checkOut>wizard.checkIn && wizard.items.every(function(it){ return itemAvailability(it).ok; });
   var warningHtml = '';
   if (!stillOk){
-    warningHtml = '<div class="help-note" style="background:var(--pg-warning-light);border-color:#f3d98a;color:#8a5a00;margin-bottom:16px;">' +
+    warningHtml = '<div class="help-note help-note-warning" style="margin-bottom:16px;">' +
       'Availability changed while this reservation was being created. Please review the selected room items before confirming.<br>' +
       '<button class="btn btn-outline btn-sm" id="reviewAvailBtn" style="margin-top:10px;">Review Availability</button></div>';
   }

@@ -310,7 +310,7 @@
     return '<span class="badge ' + (STATUS_BADGE[status] || "badge-gray") + '"><span class="badge-dot"></span>' + status + "</span>";
   }
   function payBadge(status) {
-    return '<span class="badge ' + (PAY_BADGE[status] || "badge-gray") + '"><span class="badge-dot"></span>' + status + "</span>";
+    return '<span class="badge badge-outline ' + (PAY_BADGE[status] || "badge-gray") + '"><span class="badge-dot"></span>' + status + "</span>";
   }
   function esc(s) {
     var d = document.createElement("div");

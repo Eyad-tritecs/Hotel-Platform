@@ -165,7 +165,7 @@ stopModal.innerHTML = '<div class="pg-modal">' +
       '<div class="form-group"><label class="form-label">To Date</label><input type="date" class="form-control" id="stop-to"></div>' +
     '</div>' +
     '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="stop-reason">'+stopReasonOptions+'</select></div>' +
-    '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;" id="stop-confirm-msg"></div>' +
+    '<div class="help-note help-note-danger" id="stop-confirm-msg"></div>' +
   '</div>' +
   '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'stopModal\')">Cancel</button><button class="btn btn-danger" id="stopSave">Stop Sell</button></div>' +
 '</div>';
@@ -272,13 +272,13 @@ document.getElementById('reopenSave').addEventListener('click', function(){
 // no dates-as-stay-nights framing, no room-number concept. Just quantity + reason.
 var REASONS = ['Maintenance block','Management allocation','Inventory correction','Temporary operational hold','Hotel decision','Other'];
 var modal = document.createElement('div');
-modal.className = 'pg-modal-overlay';
+modal.className = 'pg-drawer-overlay';
 modal.id = 'adjModal';
 var rtOptions = s.roomTypes.map(function(rt){return '<option value="'+rt.id+'">'+rt.name+'</option>';}).join('');
 var reasonOptions = REASONS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
-modal.innerHTML = '<div class="pg-modal" style="width:520px;">' +
-  '<div class="pg-modal-header"><h3>Adjust Inventory</h3><button class="pg-modal-close" onclick="PG.closeModal(\'adjModal\')">&times;</button></div>' +
-  '<div class="pg-modal-body">' +
+modal.innerHTML = '<div class="pg-drawer">' +
+  '<div class="pg-drawer-header"><h3>Adjust Inventory</h3><button class="pg-modal-close" onclick="PG.closeModal(\'adjModal\')">&times;</button></div>' +
+  '<div class="pg-drawer-body">' +
     '<div class="grid-2">' +
       '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control" id="adj-rt">'+rtOptions+'</select></div>' +
       '<div class="form-group"><label class="form-label">Current Sellable Quantity</label><input class="form-control" id="adj-current" disabled></div>' +
@@ -294,9 +294,9 @@ modal.innerHTML = '<div class="pg-modal" style="width:520px;">' +
     '<div class="form-group" id="adj-qty-group"><label class="form-label">Quantity</label><input type="number" min="1" value="1" class="form-control" id="adj-qty"></div>' +
     '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="adj-reason">'+reasonOptions+'</select></div>' +
     '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="adj-notes" placeholder="Additional context for this adjustment"></textarea></div>' +
-    '<div class="help-note" style="background:var(--pg-warning-light);border-color:#f3d98a;color:#8a5a00;">This changes sellable room-type inventory for the selected dates. The action will be recorded in the audit log.</div>' +
+    '<div class="help-note help-note-warning">This changes sellable room-type inventory for the selected dates. The action will be recorded in the audit log.</div>' +
   '</div>' +
-  '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'adjModal\')">Cancel</button><button class="btn btn-primary" id="adjSave">Confirm Adjustment</button></div>' +
+  '<div class="pg-drawer-footer"><button class="btn btn-light" onclick="PG.closeModal(\'adjModal\')">Cancel</button><button class="btn btn-primary" id="adjSave">Confirm Adjustment</button></div>' +
 '</div>';
 document.body.appendChild(modal);
 

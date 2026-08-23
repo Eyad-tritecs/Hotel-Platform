@@ -232,6 +232,15 @@ table.dt td.center, table.dt th.center{text-align:center;}
 .badge-yellow{background:var(--pg-warning-light);color:#a56a00;}
 .badge-red{background:var(--pg-danger-light);color:var(--pg-danger);}
 .badge-purple{background:var(--pg-info-light);color:var(--pg-info);}
+/* Payment-status badges use the outline variant so they stay visually distinct from
+   solid Reservation-status badges even when they share the same color semantic. */
+.badge-outline{background:#fff;border:1.5px solid currentColor;}
+.badge-outline.badge-gray{color:var(--pg-gray-600);}
+.badge-outline.badge-blue{color:var(--pg-primary);}
+.badge-outline.badge-green{color:#0bb463;}
+.badge-outline.badge-yellow{color:#a56a00;}
+.badge-outline.badge-red{color:var(--pg-danger);}
+.badge-outline.badge-purple{color:var(--pg-info);}
 
 /* ===== Forms ===== */
 .form-group{margin-bottom:16px;}
@@ -273,6 +282,21 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .pg-modal-body{padding:22px;}
 .pg-modal-footer{padding:16px 22px;border-top:1px solid var(--pg-border);display:flex;justify-content:flex-end;gap:10px;}
 
+/* ===== Drawer ===== */
+/* Side panel for form-heavy actions (e.g. Adjust Inventory) — same open/close mechanics as
+   Modal (PG.openModal/closeModal, toggling .show), just slides in from the edge instead of
+   appearing centered. Reserve Modal for confirmations, Drawer for longer forms. */
+.pg-drawer-overlay{position:fixed;inset:0;background:rgba(24,28,50,.45);display:none;z-index:100;}
+.pg-drawer-overlay.show{display:block;}
+.pg-drawer{position:fixed;top:0;right:0;height:100vh;width:440px;max-width:92vw;background:#fff;box-shadow:-10px 0 30px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;}
+.pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
+.pg-drawer-header{padding:18px 22px;border-bottom:1px solid var(--pg-border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.pg-drawer-header h3{font-size:15px;}
+.pg-drawer-body{padding:22px;overflow-y:auto;flex:1;}
+.pg-drawer-footer{padding:16px 22px;border-top:1px solid var(--pg-border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;}
+html[dir="rtl"] .pg-drawer{right:auto;left:0;transform:translateX(-100%);box-shadow:10px 0 30px rgba(0,0,0,.18);}
+html[dir="rtl"] .pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
+
 /* ===== Toast ===== */
 .pg-toast{position:fixed;top:20px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px;}
 .pg-toast-item{
@@ -295,6 +319,10 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .pill-toggle button{border:none;background:none;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;color:var(--pg-gray-600);cursor:pointer;}
 .pill-toggle button.active{background:#fff;color:var(--pg-gray-900);box-shadow:0 1px 3px rgba(0,0,0,.1);}
 .help-note{background:var(--pg-primary-light);border:1px solid #cfe6ff;color:#0f5aa8;padding:12px 14px;border-radius:8px;font-size:12.5px;display:flex;gap:10px;align-items:flex-start;}
+/* Semantic alert variants — info (default), warning, danger, success. One component, four meanings. */
+.help-note-warning{background:var(--pg-warning-light);border-color:#f3d98a;color:#8a5a00;}
+.help-note-danger{background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;}
+.help-note-success{background:var(--pg-success-light);border-color:#b7ecd3;color:#0bb463;}
 .avail-cell{text-align:center;font-weight:700;border-radius:5px;padding:6px 4px;font-size:12px;}
 .avail-ok{background:var(--pg-success-light);color:#0bb463;}
 .avail-low{background:var(--pg-warning-light);color:#a56a00;}

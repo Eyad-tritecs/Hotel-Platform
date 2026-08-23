@@ -177,11 +177,11 @@ function renderPaymentActions(){
       html += '<button class="btn btn-outline btn-block" id="markFailed">Simulate: Payment Failed</button>';
       html += '<button class="btn btn-light btn-block" id="markExpired">Simulate: Link Expired</button>';
     } else if (r.paymentStatus==='Expired'){
-      html += '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;margin-bottom:10px;">The payment link has expired.</div>';
+      html += '<div class="help-note help-note-danger" style="margin-bottom:10px;">The payment link has expired.</div>';
       html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Regenerate Payment Link</button>';
       html += '<button class="btn btn-outline btn-block" id="quickResendBtn">Resend</button>';
     } else if (r.paymentStatus==='Failed'){
-      html += '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;margin-bottom:10px;">The payment attempt failed. The reservation remains pending according to hotel policy.</div>';
+      html += '<div class="help-note help-note-danger" style="margin-bottom:10px;">The payment attempt failed. The reservation remains pending according to hotel policy.</div>';
       html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Generate New Link</button>';
       html += '<button class="btn btn-outline btn-block" id="quickResendBtn">Resend Link</button>';
     } else if (r.paymentStatus==='Paid'){
@@ -324,7 +324,7 @@ function renderCancelModal(stage){
       cancelModal.innerHTML = '<div class="pg-modal">' +
         '<div class="pg-modal-header"><h3>Cancel Reservation '+r.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'cancelModal\')">&times;</button></div>' +
         '<div class="pg-modal-body">' +
-          '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;margin-bottom:16px;">Cancelling this reservation will release all committed inventory for all room items.</div>' +
+          '<div class="help-note help-note-danger" style="margin-bottom:16px;">Cancelling this reservation will release all committed inventory for all room items.</div>' +
           '<div class="form-label">Inventory Impact</div>' +
           '<div style="margin-bottom:16px;">'+invHtml+'</div>' +
           '<div class="form-group"><label class="form-label">Cancellation Reason <span class="opt">(required)</span></label><select class="form-control" id="cancel-reason">' +
@@ -340,7 +340,7 @@ function renderCancelModal(stage){
       cancelModal.innerHTML = '<div class="pg-modal">' +
         '<div class="pg-modal-header"><h3>Cancel Reservation '+r.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'cancelModal\'); location.reload();">&times;</button></div>' +
         '<div class="pg-modal-body">' +
-          '<div class="help-note" style="background:var(--pg-success-light);border-color:#b7ecd3;color:#0bb463;margin-bottom:16px;">&#10003; Reservation cancelled. Inventory has been restored.</div>' +
+          '<div class="help-note help-note-success" style="margin-bottom:16px;">&#10003; Reservation cancelled. Inventory has been restored.</div>' +
           '<div class="form-label">Inventory Restored</div>' +
           '<div>'+invHtml+'</div>' +
         '</div>' +
