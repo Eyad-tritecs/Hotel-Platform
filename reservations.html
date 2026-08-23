@@ -7,6 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .filters-grid .form-group{margin-bottom:0;}
+  .filters-grid .form-label{font-size:11px;}
+  @media (max-width:1100px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
@@ -15,12 +21,7 @@
 var page = PG.mount("reservations", ["Reservations", "Reservations"]);
 var s = PG.getState();
 
-function roomSummary(r){
-  return r.rooms.map(function(room){
-    var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
-    return room.qty + '× ' + rt.name;
-  }).join(', ');
-}
+function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
 function reservationTotal(r) {
   var nights = PG.dateRange(r.checkIn, r.checkOut);
   var total = 0;
@@ -31,22 +32,30 @@ function reservationTotal(r) {
 }
 
 var STATUSES = ['All','Draft','Pending Payment','Confirmed','Cancelled','Completed','No Show'];
+var PAY_STATUSES = ['All','Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
+var SOURCES = ['All','Admin / Direct Manual','Phone','WhatsApp','Walk-in','Travel Agency','Other Manual'];
 
 var html = '';
 html += '<div class="pg-page-head"><div><h1>Reservations</h1><div class="sub">All bookings for Palestine Grand Hotel</div></div>' +
   '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a></div></div>';
 
-html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">' +
-  '<input class="form-control" style="max-width:280px;" id="searchBox" placeholder="Search by reservation ID or guest name">' +
-  '<select class="form-control" style="max-width:190px;" id="statusFilter">' + STATUSES.map(function(st){return '<option value="'+st+'">'+(st==='All'?'All Statuses':st)+'</option>';}).join('') + '</select>' +
-  '<select class="form-control" style="max-width:190px;" id="sourceFilter"><option value="All">All Sources</option>' +
-  ['Admin / Direct Manual','Phone','WhatsApp','Walk-in','Travel Agency','Other Manual'].map(function(src){return '<option value="'+src+'">'+src+'</option>';}).join('') +
-  '</select>' +
-  '<span class="muted text-sm" id="resultCount" style="margin-left:auto;"></span>' +
+html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
+  '<input class="form-control" id="searchBox" placeholder="Search by Reservation ID, Guest Name or Mobile">' +
+  '<div class="filters-grid">' +
+    '<div class="form-group"><label class="form-label">RESERVATION STATUS</label><select class="form-control" id="statusFilter">' + STATUSES.map(function(st){return '<option value="'+st+'">'+(st==='All'?'All Statuses':st)+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-group"><label class="form-label">PAYMENT STATUS</label><select class="form-control" id="payFilter">' + PAY_STATUSES.map(function(p){return '<option value="'+p+'">'+(p==='All'?'All Payment Statuses':p)+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-group"><label class="form-label">RESERVATION SOURCE</label><select class="form-control" id="sourceFilter">' + SOURCES.map(function(src){return '<option value="'+src+'">'+(src==='All'?'All Sources':src)+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-group"><label class="form-label">ARRIVAL DATE</label><input type="date" class="form-control" id="arrivalFilter"></div>' +
+    '<div class="form-group"><label class="form-label">DEPARTURE DATE</label><input type="date" class="form-control" id="departureFilter"></div>' +
+  '</div>' +
+  '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+    '<span class="muted text-sm" id="resultCount"></span>' +
+  '</div>' +
 '</div></div>';
 
 html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-  '<th>Reservation</th><th>Guest</th><th>Rooms</th><th>Check-in</th><th>Check-out</th><th>Source</th><th>Status</th><th>Payment</th><th class="num">Total</th>' +
+  '<th>Reservation #</th><th>Guest</th><th>Arrival</th><th>Departure</th><th>Rooms</th><th>Source</th><th>Reservation Status</th><th>Payment Status</th><th class="num">Total</th><th>Created</th><th></th>' +
   '</tr></thead><tbody id="resBody"></tbody></table></div></div></div>';
 
 page.innerHTML = html;
@@ -54,40 +63,60 @@ page.innerHTML = html;
 function render(){
   var q = document.getElementById('searchBox').value.trim().toLowerCase();
   var statusF = document.getElementById('statusFilter').value;
+  var payF = document.getElementById('payFilter').value;
   var sourceF = document.getElementById('sourceFilter').value;
+  var arrivalF = document.getElementById('arrivalFilter').value;
+  var departureF = document.getElementById('departureFilter').value;
+
   var rows = s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).filter(function(r){
     var cust = s.customers.find(function(c){return c.id===r.customerId;});
     if (statusF!=='All' && r.status!==statusF) return false;
+    if (payF!=='All' && r.paymentStatus!==payF) return false;
     if (sourceF!=='All' && r.source!==sourceF) return false;
-    if (q && !(r.id.toLowerCase().indexOf(q)>-1 || cust.name.toLowerCase().indexOf(q)>-1)) return false;
+    if (arrivalF && r.checkIn!==arrivalF) return false;
+    if (departureF && r.checkOut!==departureF) return false;
+    if (q && !(r.id.toLowerCase().indexOf(q)>-1 || cust.name.toLowerCase().indexOf(q)>-1 || (cust.phone||'').toLowerCase().replace(/\s/g,'').indexOf(q.replace(/\s/g,''))>-1)) return false;
     return true;
   });
+
   document.getElementById('resultCount').textContent = rows.length + ' reservation' + (rows.length===1?'':'s');
   var body = document.getElementById('resBody');
   if (!rows.length){
-    body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128203;</div>No reservations match your filters.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="ic">&#128203;</div>No reservations match your filters.</div></td></tr>';
     return;
   }
   body.innerHTML = rows.map(function(r){
     var cust = s.customers.find(function(c){return c.id===r.customerId;});
-    return '<tr onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">' +
-      '<td class="row-link">'+r.id+'</td>' +
+    var n = roomCount(r);
+    return '<tr>' +
+      '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
       '<td>'+PG.esc(cust.name)+'</td>' +
-      '<td class="text-sm">'+roomSummary(r)+'</td>' +
-      '<td>'+PG.fmtDateShort(r.checkIn)+'</td>' +
-      '<td>'+PG.fmtDateShort(r.checkOut)+'</td>' +
+      '<td>'+PG.fmtDate(r.checkIn)+'</td>' +
+      '<td>'+PG.fmtDate(r.checkOut)+'</td>' +
+      '<td>'+n+' room'+(n===1?'':'s')+'</td>' +
       '<td class="text-sm">'+r.source+'</td>' +
       '<td>'+PG.statusBadge(r.status)+'</td>' +
       '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
       '<td class="num">'+PG.fmtMoney(reservationTotal(r))+'</td>' +
+      '<td class="text-sm">'+PG.fmtDate(r.createdAt.slice(0,10))+'</td>' +
+      '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">View Reservation</a></td>' +
     '</tr>';
   }).join('');
 }
 
 ['input','change'].forEach(function(ev){
-  document.getElementById('searchBox').addEventListener(ev, render);
-  document.getElementById('statusFilter').addEventListener(ev, render);
-  document.getElementById('sourceFilter').addEventListener(ev, render);
+  ['searchBox','statusFilter','payFilter','sourceFilter','arrivalFilter','departureFilter'].forEach(function(id){
+    document.getElementById(id).addEventListener(ev, render);
+  });
+});
+document.getElementById('clearFilters').addEventListener('click', function(){
+  document.getElementById('searchBox').value = '';
+  document.getElementById('statusFilter').value = 'All';
+  document.getElementById('payFilter').value = 'All';
+  document.getElementById('sourceFilter').value = 'All';
+  document.getElementById('arrivalFilter').value = '';
+  document.getElementById('departureFilter').value = '';
+  render();
 });
 render();
 </script>
