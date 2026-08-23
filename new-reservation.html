@@ -425,7 +425,7 @@ function createReservation(mode){
   var reservation = {
     id: id, customerId: customerId, source: wizard.source, createdAt: PG.nowIso(),
     checkIn: wizard.checkIn, checkOut: wizard.checkOut, status: status, paymentStatus: paymentStatus, paymentMethod: wizard.paymentMethod,
-    rooms: wizard.items.map(function(it){ return {roomTypeId:it.roomTypeId, qty:it.qty, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; }),
+    rooms: wizard.items.map(function(it){ return {roomTypeId:it.roomTypeId, qty:it.qty, adults:it.adults, children:it.children, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; }),
     taxAmount: p.taxes, feeAmount: p.fees,
     notes: wizard.notes, activity: activity
   };

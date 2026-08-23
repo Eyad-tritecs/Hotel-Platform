@@ -56,7 +56,7 @@ function lines(){
     var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
     var subtotal = 0;
     n.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
-    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room)};
+    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room), adults: room.adults, children: room.children};
   });
 }
 function roomCharges(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
@@ -99,8 +99,9 @@ function render(){
 
   // Section 3 — Room Items
   html += sectionCard(3, 'Room Items', lines().map(function(l){
+    var occ = l.adults != null ? l.adults+' Adult'+(l.adults===1?'':'s')+(l.children ? ', '+l.children+' Child'+(l.children===1?'':'ren') : '') : null;
     return '<div class="room-item-card"><div class="ri-top"><h4>'+l.qty+'× '+l.name+'</h4><span class="ri-total">'+PG.fmtMoney(l.subtotal)+'</span></div>' +
-      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+'</div></div>';
+      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div></div>';
   }).join(''));
 
   // Section 4 — Pricing

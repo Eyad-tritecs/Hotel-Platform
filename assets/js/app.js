@@ -99,8 +99,8 @@
         paymentStatus: "Paid",
         paymentMethod: "Payment Link",
         rooms: [
-          { roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast" },
-          { roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast" }
+          { roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast", adults: 2, children: 0 },
+          { roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast", adults: 2, children: 2 }
         ],
         notes: "Guest requested early check-in if possible.",
         taxAmount: 50,
@@ -128,7 +128,7 @@
         paymentStatus: "Pay on Arrival",
         paymentMethod: "Pay on Arrival",
         rooms: [
-          { roomTypeId: "std", qty: 1 }
+          { roomTypeId: "std", qty: 1, adults: 2, children: 0 }
         ],
         taxAmount: 0,
         feeAmount: 0,
@@ -149,7 +149,7 @@
         status: "Pending Payment",
         paymentStatus: "Expired",
         paymentMethod: "Payment Link",
-        rooms: [{ roomTypeId: "fam", qty: 1 }],
+        rooms: [{ roomTypeId: "fam", qty: 1, adults: 2, children: 1 }],
         taxAmount: 0,
         feeAmount: 0,
         notes: "Booked through Al-Quds Travel Agency.",
