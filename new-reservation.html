@@ -8,11 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
-  .room-line{border:1px solid var(--pg-border);border-radius:8px;padding:14px;margin-bottom:12px;background:var(--pg-gray-100);}
-  .room-line-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-  .avail-msg{font-size:12px;margin-top:8px;padding:8px 10px;border-radius:6px;}
-  .avail-msg.ok{background:var(--pg-success-light);color:#0bb463;}
-  .avail-msg.bad{background:var(--pg-danger-light);color:var(--pg-danger);}
+  .item-card{border:1px solid var(--pg-border);border-radius:8px;padding:16px;margin-bottom:14px;background:var(--pg-gray-100);}
+  .item-card.insufficient{border-color:var(--pg-danger);background:var(--pg-danger-light);}
+  .item-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .item-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .item-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--pg-border);}
+  .avail-tag{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;}
+  .avail-tag.ok{background:var(--pg-success-light);color:#0bb463;}
+  .avail-tag.bad{background:var(--pg-danger-light);color:var(--pg-danger);}
   .source-opt{border:1px solid var(--pg-border);border-radius:8px;padding:12px;cursor:pointer;text-align:center;font-size:12.5px;font-weight:600;}
   .source-opt.active{border-color:var(--pg-primary);background:var(--pg-primary-light);color:var(--pg-primary);}
   .pay-opt{border:1px solid var(--pg-border);border-radius:8px;padding:16px;cursor:pointer;flex:1;}
@@ -31,44 +34,47 @@
 <script>
 var page = PG.mount("new-reservation", ["Reservations", "New Reservation"]);
 var s = PG.getState();
+var SOURCES = ['Admin / Direct Manual','Phone','WhatsApp','Walk-in','Travel Agency','Other Manual'];
+
+function ratePlansFor(roomTypeId){
+  var list = s.ratePlans.filter(function(rp){ return rp.roomTypeId===roomTypeId && rp.active; });
+  if (!list.length){
+    var rt = s.roomTypes.find(function(r){return r.id===roomTypeId;});
+    return [{id:'default-'+roomTypeId, name:'Standard Rate', roomTypeId:roomTypeId, price:rt.baseRate}];
+  }
+  return list;
+}
+function ratePlanPrice(roomTypeId, ratePlanId){
+  var plan = ratePlansFor(roomTypeId).find(function(p){return p.id===ratePlanId;});
+  return plan ? plan.price : s.roomTypes.find(function(r){return r.id===roomTypeId;}).baseRate;
+}
 
 var wizard = {
-  checkIn: PG.TODAY,
-  checkOut: PG.addDays(PG.TODAY, 1),
-  rooms: [{roomTypeId: s.roomTypes[0].id, qty: 1}],
+  source: 'Admin / Direct Manual',
   customerMode: 'existing',
   customerId: s.customers[0].id,
-  newCustomer: {name:'', phone:'', email:''},
-  source: 'Admin / Direct Manual',
+  newCustomer: {name:'', phone:'', email:'', country:'', notes:''},
+  checkIn: PG.TODAY,
+  checkOut: PG.addDays(PG.TODAY, 3),
+  items: [
+    {roomTypeId: s.roomTypes[1] ? s.roomTypes[1].id : s.roomTypes[0].id, ratePlanId: null, qty: 1, adults: 2, children: 0}
+  ],
   paymentMethod: 'Pay on Arrival',
   notes: ''
 };
+wizard.items[0].ratePlanId = ratePlansFor(wizard.items[0].roomTypeId)[0].id;
 var currentStep = 1;
-var SOURCES = ['Admin / Direct Manual','Phone','WhatsApp','Walk-in','Travel Agency','Other Manual'];
 
 var html = '';
-html += '<div class="pg-page-head"><div><h1>New Reservation</h1><div class="sub">Create a manual reservation for Palestine Grand Hotel</div></div></div>';
-
+html += '<div class="pg-page-head"><div><h1>New Reservation</h1><div class="sub">Guided reservation workflow for Palestine Grand Hotel</div></div></div>';
 html += '<div class="pg-steps" id="stepsBar"></div>';
-
 html += '<div class="row"><div class="col" style="flex:2;">';
 
-// Step 1
+// Step 1 — Guest & Source
 html += '<div class="step-panel" id="step1">' +
-  '<div class="card"><div class="card-header"><h3>Stay Details &amp; Rooms</h3></div><div class="card-body">' +
-    '<div class="grid-2">' +
-      '<div class="form-group"><label class="form-label">Check-in Date</label><input type="date" class="form-control" id="checkIn" value="'+wizard.checkIn+'"></div>' +
-      '<div class="form-group"><label class="form-label">Check-out Date</label><input type="date" class="form-control" id="checkOut" value="'+wizard.checkOut+'"></div>' +
-    '</div>' +
-    '<div class="form-label" style="margin-top:6px;">Rooms <span class="opt">— add one or more room types for a multi-room reservation</span></div>' +
-    '<div id="roomLines"></div>' +
-    '<button class="btn btn-outline btn-sm" id="addRoomLine">+ Add Another Room</button>' +
-    '<div id="availSummary"></div>' +
+  '<div class="card"><div class="card-header"><h3>Reservation Source</h3><div class="desc">Manual source selection — required for every reservation</div></div><div class="card-body">' +
+    '<div class="grid-3" id="sourceGrid">' + SOURCES.map(function(src){ return '<div class="source-opt" data-src="'+src+'">'+src+'</div>'; }).join('') + '</div>' +
   '</div></div>' +
-'</div>';
-
-// Step 2
-html += '<div class="step-panel" id="step2">' +
   '<div class="card"><div class="card-header"><h3>Guest Information</h3></div><div class="card-body">' +
     '<div class="pill-toggle" id="custModePill" style="margin-bottom:16px;"><button type="button" class="active" data-m="existing">Existing Customer</button><button type="button" data-m="new">New Customer</button></div>' +
     '<div id="existingCustWrap">' + s.customers.map(function(c){
@@ -76,168 +82,203 @@ html += '<div class="step-panel" id="step2">' +
     }).join('') + '</div>' +
     '<div id="newCustWrap" style="display:none;">' +
       '<div class="grid-2">' +
-        '<div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="nc-name" placeholder="e.g. Layla Nasser"></div>' +
-        '<div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="nc-phone" placeholder="+970 5X XXX XXXX"></div>' +
+        '<div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="nc-name" placeholder="e.g. Ahmad Khalil"></div>' +
+        '<div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="nc-phone" placeholder="+970 599 123 456"></div>' +
+        '<div class="form-group"><label class="form-label">Email</label><input class="form-control" id="nc-email" placeholder="ahmad@example.com"></div>' +
+        '<div class="form-group"><label class="form-label">Country</label><input class="form-control" id="nc-country" placeholder="Palestine"></div>' +
       '</div>' +
-      '<div class="form-group"><label class="form-label">Email <span class="opt">(optional)</span></label><input class="form-control" id="nc-email" placeholder="guest@example.com"></div>' +
+      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="nc-notes" placeholder="Any relevant guest notes"></textarea></div>' +
     '</div>' +
-  '</div></div>' +
-  '<div class="card"><div class="card-header"><h3>Reservation Source</h3><div class="desc">Manual source selection — required for every reservation</div></div><div class="card-body">' +
-    '<div class="grid-3" id="sourceGrid">' + SOURCES.map(function(src){ return '<div class="source-opt" data-src="'+src+'">'+src+'</div>'; }).join('') + '</div>' +
   '</div></div>' +
 '</div>';
 
-// Step 3
+// Step 2 — Stay & Rooms
+html += '<div class="step-panel" id="step2">' +
+  '<div class="card"><div class="card-header"><h3>Stay</h3></div><div class="card-body">' +
+    '<div class="grid-3">' +
+      '<div class="form-group"><label class="form-label">Arrival Date</label><input type="date" class="form-control" id="checkIn" value="'+wizard.checkIn+'"></div>' +
+      '<div class="form-group"><label class="form-label">Departure Date</label><input type="date" class="form-control" id="checkOut" value="'+wizard.checkOut+'"></div>' +
+      '<div class="form-group"><label class="form-label">Number of Nights</label><input class="form-control" id="nightsDisplay" disabled></div>' +
+    '</div>' +
+  '</div></div>' +
+  '<div class="card"><div class="card-header"><h3>Reservation Items</h3><div class="desc">Add one or more room types for a multi-room reservation</div></div><div class="card-body">' +
+    '<div id="itemCards"></div>' +
+    '<button class="btn btn-outline btn-sm" id="addItem">+ Add Another Room</button>' +
+    '<div class="help-note" style="margin-top:14px;">All reservation items must be available before the reservation can be confirmed.</div>' +
+  '</div></div>' +
+'</div>';
+
+// Step 3 — Pricing & Payment
 html += '<div class="step-panel" id="step3">' +
-  '<div class="card"><div class="card-header"><h3>Pricing Summary</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt" id="priceTable"></table></div></div>' +
-    '<div class="card-footer" style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:600;">Total Amount Due</span><span style="font-size:19px;font-weight:800;color:var(--pg-gray-900);" id="grandTotal"></span></div>' +
-  '</div>' +
+  '<div class="card"><div class="card-header"><h3>Pricing Summary</h3></div><div class="card-body" id="pricingBody"></div></div>' +
   '<div class="card"><div class="card-header"><h3>Payment Method</h3></div><div class="card-body">' +
     '<div style="display:flex;gap:14px;" id="payGrid">' +
-      '<div class="pay-opt" data-pm="Pay on Arrival"><h4>Pay on Arrival</h4><p>Guest pays at the hotel during check-in. Reservation is confirmed immediately.</p></div>' +
-      '<div class="pay-opt" data-pm="Payment Link"><h4>Payment Link</h4><p>Generate a payment link to send to the guest. Reservation stays Pending Payment until paid.</p></div>' +
+      '<div class="pay-opt" data-pm="Pay on Arrival"><h4>Pay on Arrival</h4><p>Reservation can be confirmed according to hotel policy. Payment remains outstanding.</p></div>' +
+      '<div class="pay-opt" data-pm="Payment Link"><h4>Payment Link</h4><p>Generate a secure payment link and track payment status.</p></div>' +
     '</div>' +
     '<div class="form-group" style="margin-top:16px;"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="notesInput" placeholder="Internal notes about this reservation"></textarea></div>' +
   '</div></div>' +
 '</div>';
 
-// Step 4
+// Step 4 — Review & Save
 html += '<div class="step-panel" id="step4">' +
-  '<div class="card"><div class="card-body" style="text-align:center;padding:48px 20px;">' +
-    '<div style="font-size:42px;margin-bottom:14px;">&#10003;&#65039;</div>' +
-    '<h2 style="font-size:19px;margin-bottom:8px;">Ready to Create Reservation</h2>' +
-    '<div class="muted" style="margin-bottom:20px;">Review the summary on the right, then confirm to create this reservation and reserve inventory.</div>' +
-  '</div></div>' +
+  '<div class="card"><div class="card-header"><h3>Review Reservation</h3></div><div class="card-body" id="reviewBody"></div></div>' +
 '</div>';
 
 html += '<div style="display:flex;justify-content:space-between;margin-top:6px;">' +
   '<button class="btn btn-light" id="backBtn" style="visibility:hidden;">&larr; Back</button>' +
-  '<button class="btn btn-primary" id="nextBtn">Continue &rarr;</button>' +
+  '<div style="display:flex;gap:10px;" id="forwardActions"></div>' +
 '</div>';
 
 html += '</div>';
-
-// Right summary column
 html += '<div class="col"><div class="card" style="position:sticky;top:80px;"><div class="card-header"><h3>Booking Summary</h3></div><div class="card-body" id="summaryBox"></div></div></div>';
-
 html += '</div>';
 
 page.innerHTML = html;
 
-var STEP_LABELS = ['Stay & Rooms','Guest & Source','Pricing & Payment','Confirm'];
+var STEP_LABELS = ['Guest & Source','Stay & Rooms','Pricing & Payment','Review & Save'];
 function renderSteps(){
-  var bar = document.getElementById('stepsBar');
-  bar.innerHTML = STEP_LABELS.map(function(label, i){
+  document.getElementById('stepsBar').innerHTML = STEP_LABELS.map(function(label, i){
     var n = i+1;
     var cls = n===currentStep ? 'active' : (n<currentStep ? 'done' : '');
     return '<div class="pg-step '+cls+'"><div class="num">'+(n<currentStep?'&#10003;':n)+'</div><div class="label">'+label+'</div></div>';
   }).join('');
 }
 
-function renderRoomLines(){
-  var wrap = document.getElementById('roomLines');
-  wrap.innerHTML = wizard.rooms.map(function(line, idx){
-    var opts = s.roomTypes.map(function(rt){ return '<option value="'+rt.id+'"'+(rt.id===line.roomTypeId?' selected':'')+'>'+rt.name+' ('+PG.fmtMoney(rt.baseRate)+'/night)</option>'; }).join('');
-    return '<div class="room-line" data-idx="'+idx+'">' +
-      '<div class="room-line-head"><strong class="text-sm">Room '+(idx+1)+'</strong>' + (wizard.rooms.length>1 ? '<button class="btn btn-danger-outline btn-sm remove-line" data-idx="'+idx+'">Remove</button>' : '') + '</div>' +
-      '<div class="grid-2">' +
-        '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control rt-select" data-idx="'+idx+'">'+opts+'</select></div>' +
-        '<div class="form-group"><label class="form-label">Number of Rooms</label><input type="number" min="1" max="10" class="form-control qty-input" data-idx="'+idx+'" value="'+line.qty+'"></div>' +
+function nights(){ return PG.dateRange(wizard.checkIn, wizard.checkOut); }
+function itemAvailability(item){
+  return PG.validateAvailability(s, item.roomTypeId, wizard.checkIn, wizard.checkOut, item.qty);
+}
+function itemTotal(item){
+  return ratePlanPrice(item.roomTypeId, item.ratePlanId) * item.qty * nights().length;
+}
+function allItemsAvailable(){
+  return wizard.items.every(function(it){ return wizard.checkOut>wizard.checkIn && itemAvailability(it).ok; });
+}
+
+function renderItemCards(){
+  document.getElementById('nightsDisplay').value = nights().length + ' night' + (nights().length===1?'':'s');
+  var wrap = document.getElementById('itemCards');
+  wrap.innerHTML = wizard.items.map(function(item, idx){
+    var rt = s.roomTypes.find(function(r){return r.id===item.roomTypeId;});
+    var plans = ratePlansFor(item.roomTypeId);
+    var a = wizard.checkOut>wizard.checkIn ? itemAvailability(item) : {ok:false, problems:[{available:0}]};
+    var worst = a.problems && a.problems.length ? a.problems[0].available : rt.sellable;
+    var ok = a.ok;
+    var rtOptions = s.roomTypes.map(function(r){return '<option value="'+r.id+'"'+(r.id===item.roomTypeId?' selected':'')+'>'+r.name+'</option>';}).join('');
+    var planOptions = plans.map(function(p){return '<option value="'+p.id+'"'+(p.id===item.ratePlanId?' selected':'')+'>'+p.name+' ('+PG.fmtMoney(p.price)+'/night)</option>';}).join('');
+    return '<div class="item-card'+(ok?'':' insufficient')+'" data-idx="'+idx+'">' +
+      '<div class="item-card-head"><strong class="text-sm">Room Item '+(idx+1)+'</strong>' +
+        (wizard.items.length>1 ? '<button class="btn btn-danger-outline btn-sm remove-item" data-idx="'+idx+'">Remove</button>' : '') +
       '</div>' +
-      '<div class="avail-line" data-idx="'+idx+'"></div>' +
+      '<div class="item-grid">' +
+        '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control it-rt" data-idx="'+idx+'">'+rtOptions+'</select></div>' +
+        '<div class="form-group"><label class="form-label">Quantity</label><input type="number" min="1" class="form-control it-qty" data-idx="'+idx+'" value="'+item.qty+'"></div>' +
+        '<div class="form-group"><label class="form-label">Rate Plan</label><select class="form-control it-plan" data-idx="'+idx+'">'+planOptions+'</select></div>' +
+        '<div class="form-group"><label class="form-label">Adults</label><input type="number" min="1" class="form-control it-adults" data-idx="'+idx+'" value="'+item.adults+'"></div>' +
+        '<div class="form-group"><label class="form-label">Children</label><input type="number" min="0" class="form-control it-children" data-idx="'+idx+'" value="'+item.children+'"></div>' +
+        '<div class="form-group"><label class="form-label">Price per Night</label><input class="form-control" disabled value="'+PG.fmtMoney(ratePlanPrice(item.roomTypeId, item.ratePlanId))+'"></div>' +
+      '</div>' +
+      '<div class="item-foot">' +
+        '<span class="text-sm"><strong>Item Total: '+PG.fmtMoney(itemTotal(item))+'</strong></span>' +
+        '<span class="text-sm">Available: '+worst+' &middot; Requested: '+item.qty+'</span>' +
+        '<span class="avail-tag '+(ok?'ok':'bad')+'">'+(ok?'Available':'Insufficient Inventory')+'</span>' +
+      '</div>' +
+      (ok ? '' : '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+worst+' '+rt.name+' room(s) available for the selected dates. Reduce quantity, change dates, or remove this item to continue.</div>') +
     '</div>';
   }).join('');
-  bindRoomLineEvents();
-  refreshAvailability();
+  bindItemEvents();
 }
 
-function bindRoomLineEvents(){
-  document.querySelectorAll('.rt-select').forEach(function(sel){
-    sel.addEventListener('change', function(){ wizard.rooms[+sel.dataset.idx].roomTypeId = sel.value; refreshAvailability(); renderSummary(); });
-  });
-  document.querySelectorAll('.qty-input').forEach(function(inp){
-    inp.addEventListener('input', function(){ wizard.rooms[+inp.dataset.idx].qty = Math.max(1, parseInt(inp.value,10)||1); refreshAvailability(); renderSummary(); });
-  });
-  document.querySelectorAll('.remove-line').forEach(function(btn){
-    btn.addEventListener('click', function(){ wizard.rooms.splice(+btn.dataset.idx,1); renderRoomLines(); renderSummary(); });
-  });
+function bindItemEvents(){
+  document.querySelectorAll('.it-rt').forEach(function(el){ el.addEventListener('change', function(){
+    var idx=+el.dataset.idx; wizard.items[idx].roomTypeId = el.value; wizard.items[idx].ratePlanId = ratePlansFor(el.value)[0].id;
+    renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.it-qty').forEach(function(el){ el.addEventListener('input', function(){
+    wizard.items[+el.dataset.idx].qty = Math.max(1, parseInt(el.value,10)||1); renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.it-plan').forEach(function(el){ el.addEventListener('change', function(){
+    wizard.items[+el.dataset.idx].ratePlanId = el.value; renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.it-adults').forEach(function(el){ el.addEventListener('input', function(){
+    wizard.items[+el.dataset.idx].adults = Math.max(1, parseInt(el.value,10)||1); renderSummary();
+  });});
+  document.querySelectorAll('.it-children').forEach(function(el){ el.addEventListener('input', function(){
+    wizard.items[+el.dataset.idx].children = Math.max(0, parseInt(el.value,10)||0); renderSummary();
+  });});
+  document.querySelectorAll('.remove-item').forEach(function(el){ el.addEventListener('click', function(){
+    wizard.items.splice(+el.dataset.idx,1); renderItemCards(); renderSummary();
+  });});
 }
 
-var allValid = true;
-function refreshAvailability(){
-  allValid = true;
-  wizard.checkIn = document.getElementById('checkIn') ? document.getElementById('checkIn').value : wizard.checkIn;
-  wizard.checkOut = document.getElementById('checkOut') ? document.getElementById('checkOut').value : wizard.checkOut;
-  wizard.rooms.forEach(function(line, idx){
-    var el = document.querySelector('.avail-line[data-idx="'+idx+'"]');
-    if (!el) return;
-    if (wizard.checkOut <= wizard.checkIn){
-      el.innerHTML = '<div class="avail-msg bad">Check-out date must be after check-in date.</div>';
-      allValid = false; return;
-    }
-    var v = PG.validateAvailability(s, line.roomTypeId, wizard.checkIn, wizard.checkOut, line.qty);
-    var rtName = s.roomTypes.find(function(r){return r.id===line.roomTypeId;}).name;
-    if (v.ok){
-      el.innerHTML = '<div class="avail-msg ok">&#10003; '+line.qty+' × '+rtName+' available for all '+v.nights.length+' night(s).</div>';
-    } else {
-      allValid = false;
-      var worst = v.problems[0];
-      el.innerHTML = '<div class="avail-msg bad">&#9888; Not enough availability on '+PG.fmtDateShort(worst.date)+' — only '+worst.available+' '+rtName+' room(s) left'+(worst.stopSell?' (Stop Sell active)':'')+'. Reduce quantity or change dates.</div>';
-    }
-  });
-  document.getElementById('nextBtn').disabled = (currentStep===1 && !allValid);
+document.getElementById('addItem').addEventListener('click', function(){
+  var rtId = s.roomTypes[0].id;
+  wizard.items.push({roomTypeId: rtId, ratePlanId: ratePlansFor(rtId)[0].id, qty:1, adults:1, children:0});
+  renderItemCards(); renderSummary();
+});
+document.getElementById('checkIn').addEventListener('change', function(){ wizard.checkIn=this.value; renderItemCards(); renderSummary(); });
+document.getElementById('checkOut').addEventListener('change', function(){ wizard.checkOut=this.value; renderItemCards(); renderSummary(); });
+
+function pricingBreakdown(){
+  var roomCharges = wizard.items.reduce(function(a,it){return a+itemTotal(it);},0);
+  var taxes = Math.round(roomCharges*0.04*100)/100;
+  var fees = wizard.items.length ? 20 : 0;
+  return {roomCharges:roomCharges, taxes:taxes, fees:fees, total:roomCharges+taxes+fees};
 }
-
-function nights(){ return PG.dateRange(wizard.checkIn, wizard.checkOut); }
-
-function reservationLines(){
-  var n = nights();
-  return wizard.rooms.map(function(line){
-    var rt = s.roomTypes.find(function(r){return r.id===line.roomTypeId;});
-    var subtotal = 0;
-    n.forEach(function(d){ subtotal += PG.rateFor(s, line.roomTypeId, d) * line.qty; });
-    return {roomTypeId: line.roomTypeId, name: rt.name, qty: line.qty, nights: n.length, subtotal: subtotal};
-  });
-}
-
 function renderPricing(){
-  var lines = reservationLines();
-  var total = lines.reduce(function(a,l){return a+l.subtotal;},0);
-  var table = document.getElementById('priceTable');
-  table.innerHTML = '<thead><tr><th>Room Type</th><th class="center">Qty</th><th class="center">Nights</th><th class="num">Subtotal</th></tr></thead><tbody>' +
-    lines.map(function(l){ return '<tr><td>'+l.name+'</td><td class="center">'+l.qty+'</td><td class="center">'+l.nights+'</td><td class="num">'+PG.fmtMoney(l.subtotal)+'</td></tr>'; }).join('') +
-  '</tbody>';
-  document.getElementById('grandTotal').textContent = PG.fmtMoney(total);
+  var p = pricingBreakdown();
+  document.getElementById('pricingBody').innerHTML =
+    prow('Room Charges', PG.fmtMoney(p.roomCharges)) +
+    prow('Taxes', PG.fmtMoney(p.taxes)) +
+    prow('Fees', PG.fmtMoney(p.fees)) +
+    '<div class="divider"></div>' +
+    '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
 }
+function prow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;"><span class="muted">'+l+'</span><span style="font-weight:600;">'+v+'</span></div>'; }
 
 function guestName(){
-  if (wizard.customerMode==='existing'){
-    var c = s.customers.find(function(c){return c.id===wizard.customerId;});
-    return c ? c.name : '—';
-  }
+  if (wizard.customerMode==='existing'){ var c = s.customers.find(function(c){return c.id===wizard.customerId;}); return c ? c.name : '—'; }
   return wizard.newCustomer.name || 'New Guest';
+}
+function guestPhone(){
+  if (wizard.customerMode==='existing'){ var c = s.customers.find(function(c){return c.id===wizard.customerId;}); return c ? c.phone : '—'; }
+  return wizard.newCustomer.phone || '—';
 }
 
 function renderSummary(){
-  var lines = reservationLines();
-  var total = lines.reduce(function(a,l){return a+l.subtotal;},0);
+  var p = pricingBreakdown();
   var box = document.getElementById('summaryBox');
   box.innerHTML =
     srow('Guest', guestName()) +
-    srow('Check-in', PG.fmtDateShort(wizard.checkIn)) +
-    srow('Check-out', PG.fmtDateShort(wizard.checkOut)) +
+    srow('Source', wizard.source) +
+    srow('Arrival', PG.fmtDateShort(wizard.checkIn)) +
+    srow('Departure', PG.fmtDateShort(wizard.checkOut)) +
     srow('Nights', nights().length) +
     '<div class="divider"></div>' +
-    lines.map(function(l){ return srow(l.qty+'× '+l.name, PG.fmtMoney(l.subtotal)); }).join('') +
+    wizard.items.map(function(it){ var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;}); return srow(it.qty+'× '+rt.name, PG.fmtMoney(itemTotal(it))); }).join('') +
     '<div class="divider"></div>' +
-    srow('Source', wizard.source) +
     (currentStep>=3 ? srow('Payment Method', wizard.paymentMethod) : '') +
-    '<div class="divider"></div>' +
-    '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;"><span>Total</span><span>'+PG.fmtMoney(total)+'</span></div>';
+    '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;margin-top:6px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
 }
-function srow(label, value){
-  return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;"><span class="muted">'+label+'</span><span style="font-weight:600;text-align:right;">'+value+'</span></div>';
+function srow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;"><span class="muted">'+l+'</span><span style="font-weight:600;text-align:right;">'+v+'</span></div>'; }
+
+function renderReview(){
+  var p = pricingBreakdown();
+  var html2 = '<div class="grid-2">' +
+    revBlock('Guest', guestName() + '<br><span class="muted text-sm">'+guestPhone()+'</span>') +
+    revBlock('Source', wizard.source) +
+    revBlock('Stay', PG.fmtDate(wizard.checkIn) + ' &rarr; ' + PG.fmtDate(wizard.checkOut) + ' ('+nights().length+' nights)') +
+    revBlock('Payment Method', wizard.paymentMethod) +
+  '</div><div class="divider"></div>' +
+  '<div class="form-label">Room Items</div>' +
+  wizard.items.map(function(it){ var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;}); return '<div class="text-sm" style="padding:6px 0;">'+it.qty+'× '+rt.name+' — '+it.adults+' Adults'+(it.children?', '+it.children+' Children':'')+' — '+PG.fmtMoney(itemTotal(it))+'</div>'; }).join('') +
+  '<div class="divider"></div>' +
+  prow('Room Charges', PG.fmtMoney(p.roomCharges)) + prow('Taxes', PG.fmtMoney(p.taxes)) + prow('Fees', PG.fmtMoney(p.fees)) +
+  '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;margin-top:6px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
+  document.getElementById('reviewBody').innerHTML = html2;
 }
+function revBlock(l,v){ return '<div class="form-group"><div class="form-label">'+l+'</div><div style="font-size:13px;">'+v+'</div></div>'; }
 
 function showStep(n){
   currentStep = n;
@@ -245,28 +286,50 @@ function showStep(n){
   document.getElementById('step'+n).classList.add('active');
   renderSteps();
   document.getElementById('backBtn').style.visibility = n===1 ? 'hidden' : 'visible';
-  document.getElementById('nextBtn').textContent = n===4 ? 'Create Reservation' : 'Continue →';
+  var fwd = document.getElementById('forwardActions');
+  if (n===4){
+    fwd.innerHTML = '<button class="btn btn-outline" id="draftBtn">Save as Draft</button><button class="btn btn-primary" id="confirmBtn">Confirm / Continue with Payment</button>';
+    document.getElementById('draftBtn').addEventListener('click', function(){ createReservation('Draft'); });
+    document.getElementById('confirmBtn').addEventListener('click', function(){ createReservation('Confirm'); });
+  } else {
+    fwd.innerHTML = '<button class="btn btn-primary" id="nextBtn">Continue &rarr;</button>';
+    document.getElementById('nextBtn').addEventListener('click', onNext);
+  }
+  if (n===2) renderItemCards();
   if (n===3) renderPricing();
-  if (n===2) { /* nothing extra */ }
+  if (n===4) renderReview();
   renderSummary();
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
-// Init step 1
-renderRoomLines();
-document.getElementById('checkIn').addEventListener('change', function(){ refreshAvailability(); renderSummary(); });
-document.getElementById('checkOut').addEventListener('change', function(){ refreshAvailability(); renderSummary(); });
-document.getElementById('addRoomLine').addEventListener('click', function(){
-  wizard.rooms.push({roomTypeId: s.roomTypes[0].id, qty:1});
-  renderRoomLines(); renderSummary();
-});
+function onNext(){
+  if (currentStep===1){
+    if (wizard.customerMode==='new' && !wizard.newCustomer.name.trim()){ PG.toast('Enter the guest\'s full name to continue.', 'danger'); return; }
+    if (wizard.customerMode==='new' && !wizard.newCustomer.phone.trim()){ PG.toast('Enter the guest\'s mobile number to continue.', 'danger'); return; }
+    showStep(2); return;
+  }
+  if (currentStep===2){
+    if (wizard.checkOut<=wizard.checkIn){ PG.toast('Departure date must be after arrival date.', 'danger'); return; }
+    if (!wizard.items.length){ PG.toast('Add at least one room item.', 'danger'); return; }
+    if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
+    showStep(3); return;
+  }
+  if (currentStep===3){ showStep(4); return; }
+}
 
-// Step 2 bindings
+document.getElementById('backBtn').addEventListener('click', function(){ if(currentStep>1) showStep(currentStep-1); });
+
+document.querySelectorAll('.source-opt').forEach(function(el){
+  if (el.dataset.src===wizard.source) el.classList.add('active');
+  el.addEventListener('click', function(){
+    document.querySelectorAll('.source-opt').forEach(function(o){o.classList.remove('active');});
+    el.classList.add('active'); wizard.source = el.dataset.src; renderSummary();
+  });
+});
 document.getElementById('custModePill').addEventListener('click', function(e){
   var btn = e.target.closest('button'); if(!btn) return;
   document.querySelectorAll('#custModePill button').forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active');
-  wizard.customerMode = btn.dataset.m;
+  btn.classList.add('active'); wizard.customerMode = btn.dataset.m;
   document.getElementById('existingCustWrap').style.display = wizard.customerMode==='existing' ? 'block' : 'none';
   document.getElementById('newCustWrap').style.display = wizard.customerMode==='new' ? 'block' : 'none';
   renderSummary();
@@ -275,64 +338,30 @@ document.querySelectorAll('.cust-opt').forEach(function(el){
   if (el.dataset.cid===wizard.customerId) el.classList.add('active');
   el.addEventListener('click', function(){
     document.querySelectorAll('.cust-opt').forEach(function(o){o.classList.remove('active');});
-    el.classList.add('active');
-    wizard.customerId = el.dataset.cid;
-    renderSummary();
+    el.classList.add('active'); wizard.customerId = el.dataset.cid; renderSummary();
   });
 });
-['nc-name','nc-phone','nc-email'].forEach(function(id){
+['nc-name','nc-phone','nc-email','nc-country','nc-notes'].forEach(function(id){
   document.getElementById(id).addEventListener('input', function(){
     wizard.newCustomer.name = document.getElementById('nc-name').value;
     wizard.newCustomer.phone = document.getElementById('nc-phone').value;
     wizard.newCustomer.email = document.getElementById('nc-email').value;
+    wizard.newCustomer.country = document.getElementById('nc-country').value;
+    wizard.newCustomer.notes = document.getElementById('nc-notes').value;
     renderSummary();
   });
 });
-document.querySelectorAll('.source-opt').forEach(function(el){
-  if (el.dataset.src===wizard.source) el.classList.add('active');
-  el.addEventListener('click', function(){
-    document.querySelectorAll('.source-opt').forEach(function(o){o.classList.remove('active');});
-    el.classList.add('active');
-    wizard.source = el.dataset.src;
-    renderSummary();
-  });
-});
-
-// Step 3 bindings
 document.querySelectorAll('.pay-opt').forEach(function(el){
   if (el.dataset.pm===wizard.paymentMethod) el.classList.add('active');
   el.addEventListener('click', function(){
     document.querySelectorAll('.pay-opt').forEach(function(o){o.classList.remove('active');});
-    el.classList.add('active');
-    wizard.paymentMethod = el.dataset.pm;
-    renderSummary();
+    el.classList.add('active'); wizard.paymentMethod = el.dataset.pm; renderSummary();
   });
 });
 document.getElementById('notesInput').addEventListener('input', function(){ wizard.notes = this.value; });
 
-document.getElementById('backBtn').addEventListener('click', function(){ if(currentStep>1) showStep(currentStep-1); });
-
-document.getElementById('nextBtn').addEventListener('click', function(){
-  if (currentStep===1){
-    refreshAvailability();
-    if (!allValid){ PG.toast('Please resolve availability issues before continuing.', 'danger'); return; }
-    if (wizard.checkOut<=wizard.checkIn){ PG.toast('Check-out date must be after check-in date.', 'danger'); return; }
-    showStep(2); return;
-  }
-  if (currentStep===2){
-    if (wizard.customerMode==='new' && !wizard.newCustomer.name.trim()){ PG.toast('Enter the guest\'s full name to continue.', 'danger'); return; }
-    if (wizard.customerMode==='new' && !wizard.newCustomer.phone.trim()){ PG.toast('Enter the guest\'s phone number to continue.', 'danger'); return; }
-    showStep(3); return;
-  }
-  if (currentStep===3){
-    showStep(4); return;
-  }
-  if (currentStep===4){
-    createReservation();
-  }
-});
-
-function createReservation(){
+function createReservation(mode){
+  if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
   var st = PG.getState();
   var id = 'RES-' + st.nextResId;
   st.nextResId += 1;
@@ -340,38 +369,34 @@ function createReservation(){
   var customerId = wizard.customerId;
   if (wizard.customerMode==='new'){
     customerId = 'cus-' + Date.now();
-    st.customers.push({id:customerId, name:wizard.newCustomer.name, phone:wizard.newCustomer.phone, email:wizard.newCustomer.email||'—', nationality:'—', notes:''});
+    st.customers.push({id:customerId, name:wizard.newCustomer.name, phone:wizard.newCustomer.phone, email:wizard.newCustomer.email||'—', nationality:wizard.newCustomer.country||'—', notes:wizard.newCustomer.notes||''});
   }
 
-  var status = wizard.paymentMethod==='Pay on Arrival' ? 'Confirmed' : 'Pending Payment';
-  var paymentStatus = wizard.paymentMethod==='Pay on Arrival' ? 'Pay on Arrival' : 'Payment Required';
+  var status, paymentStatus;
+  if (mode==='Draft'){
+    status = 'Draft';
+    paymentStatus = wizard.paymentMethod==='Pay on Arrival' ? 'Pay on Arrival' : 'Payment Required';
+  } else if (wizard.paymentMethod==='Pay on Arrival'){
+    status = 'Confirmed'; paymentStatus = 'Pay on Arrival';
+  } else {
+    status = 'Pending Payment'; paymentStatus = 'Payment Required';
+  }
 
   var activity = [{ts: PG.nowIso(), text: 'Reservation created via ' + wizard.source + ' by Hotel Admin.'}];
-  if (wizard.paymentMethod==='Pay on Arrival'){
-    activity.push({ts: PG.nowIso(), text: 'Payment method set to Pay on Arrival.'});
-    activity.push({ts: PG.nowIso(), text: 'Reservation confirmed.'});
-  } else {
-    activity.push({ts: PG.nowIso(), text: 'Payment method set to Payment Link. Awaiting link generation.'});
-  }
+  if (mode==='Draft') activity.push({ts: PG.nowIso(), text: 'Saved as Draft.'});
+  else if (wizard.paymentMethod==='Pay on Arrival') activity.push({ts: PG.nowIso(), text: 'Payment method set to Pay on Arrival. Reservation confirmed.'});
+  else activity.push({ts: PG.nowIso(), text: 'Payment method set to Payment Link. Awaiting link generation.'});
 
   var reservation = {
-    id: id,
-    customerId: customerId,
-    source: wizard.source,
-    createdAt: PG.nowIso(),
-    checkIn: wizard.checkIn,
-    checkOut: wizard.checkOut,
-    status: status,
-    paymentStatus: paymentStatus,
-    paymentMethod: wizard.paymentMethod,
-    rooms: wizard.rooms.map(function(r){ return {roomTypeId:r.roomTypeId, qty:r.qty}; }),
-    notes: wizard.notes,
-    activity: activity
+    id: id, customerId: customerId, source: wizard.source, createdAt: PG.nowIso(),
+    checkIn: wizard.checkIn, checkOut: wizard.checkOut, status: status, paymentStatus: paymentStatus, paymentMethod: wizard.paymentMethod,
+    rooms: wizard.items.map(function(it){ return {roomTypeId:it.roomTypeId, qty:it.qty}; }),
+    notes: wizard.notes, activity: activity
   };
   st.reservations.push(reservation);
   PG.setState(st);
-  PG.addAudit('Reservation Created', id + ' created via ' + wizard.source + ' — ' + reservationLines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '.');
-  PG.toast('Reservation ' + id + ' created successfully.', 'success');
+  PG.addAudit('Reservation Created', id + ' created via ' + wizard.source + (mode==='Draft' ? ' (Draft)' : '') + '.');
+  PG.toast('Reservation ' + id + (mode==='Draft' ? ' saved as Draft.' : ' created.'), 'success');
   setTimeout(function(){ location.href = 'reservation-detail.html?id=' + id; }, 500);
 }
 
