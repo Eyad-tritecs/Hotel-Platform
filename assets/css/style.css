@@ -317,4 +317,6 @@ html[dir="rtl"] table.dt td.num, html[dir="rtl"] table.dt th.num{text-align:left
   .pg-sidebar{position:fixed;left:-280px;transition:left .2s;z-index:50;}
   .pg-sidebar.open{left:0;}
   .grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}
+  html[dir="rtl"] .pg-sidebar{left:auto;right:-280px;transition:right .2s;}
+  html[dir="rtl"] .pg-sidebar.open{right:0;}
 }
