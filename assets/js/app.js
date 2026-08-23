@@ -420,6 +420,7 @@
     var html = '<header class="pg-header">';
     html += '<div class="pg-header-left"><div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
     html += '<div class="pg-header-right">';
+    html += '<a class="pg-header-btn" href="reservations-ar.html" title="Arabic (RTL) preview of the Reservations worklist">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
     html += '<a class="pg-header-btn" href="new-reservation.html">' + ICONS.plus + " New Reservation</a>";
     html += '<button class="pg-header-btn" id="pg-reset-btn" title="Reset all prototype data back to the seeded demo state">&#8635; Reset Demo Data</button>';
     html += '<div class="pg-user"><div class="avatar">HA</div><div><div class="u-name">Hotel Admin</div><div class="u-role">Palestine Grand Hotel</div></div></div>';
