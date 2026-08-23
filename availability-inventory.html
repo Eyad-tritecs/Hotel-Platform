@@ -60,6 +60,8 @@ html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"
 
 html += '<div class="card" id="detailCard" style="display:none;"><div class="card-header"><h3 id="detailTitle">Date Detail</h3></div><div class="card-body" id="detailBody"></div></div>';
 
+html += '<div class="card"><div class="card-header"><h3>Stop Sell &amp; Reopen Activity</h3><div class="desc">Most recent actions, with user, time, and reason</div></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Reason / Details</th></tr></thead><tbody id="activityBody"></tbody></table></div></div></div>';
+
 function legend(cls, label){
   return '<span style="display:flex;align-items:center;gap:6px;"><span class="av-box '+cls+'" style="padding:2px 8px;">&nbsp;</span>'+label+'</span>';
 }
@@ -126,35 +128,145 @@ function row(label, value){
   return '<div class="detail-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>';
 }
 
+function renderActivity(){
+  var entries = s.audit.filter(function(a){ return a.action==='Stop Sell Applied' || a.action==='Inventory Reopened'; }).slice(0,8);
+  var body = document.getElementById('activityBody');
+  if (!entries.length){ body.innerHTML = '<tr><td colspan="4"><div class="empty-state">No Stop Sell or Reopen activity yet.</div></td></tr>'; return; }
+  body.innerHTML = entries.map(function(a){
+    return '<tr><td class="text-sm">'+PG.fmtDateShort(a.ts.slice(0,10))+' &middot; '+a.ts.slice(11)+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.actor)+'</td>' +
+      '<td>'+(a.action==='Stop Sell Applied' ? '<span class="badge badge-red"><span class="badge-dot"></span>Stop Sell</span>' : '<span class="badge badge-green"><span class="badge-dot"></span>Reopen</span>')+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.details)+'</td></tr>';
+  }).join('');
+}
+
 renderGrid();
 renderDetail();
+renderActivity();
 
 document.getElementById('fromInput').addEventListener('change', function(){ fromDate = this.value; renderGrid(); });
 document.getElementById('toInput').addEventListener('change', function(){ toDate = this.value; renderGrid(); });
 document.getElementById('rtFilter').addEventListener('change', function(){ roomTypeFilter = this.value; selected=null; renderGrid(); renderDetail(); });
 document.getElementById('refreshBtn').addEventListener('click', function(){ renderGrid(); renderDetail(); PG.toast('Availability refreshed.', 'success'); });
 
-function applyStopSell(stop){
-  if (!selected) return;
-  var st = PG.getState();
-  var key = selected.roomTypeId + '|' + selected.date;
-  var rtName = st.roomTypes.find(function(r){return r.id===selected.roomTypeId;}).name;
-  if (stop){
-    st.inventoryOverrides[key] = {stopSell:true, reason:'Manual Stop Sell'};
-    PG.addAudit('Stop Sell Applied', rtName + ' set to Stop Sell on ' + PG.fmtDateShort(selected.date) + '.');
-    PG.toast(rtName + ' set to Stop Sell for ' + PG.fmtDateShort(selected.date), 'warn');
-  } else {
-    delete st.inventoryOverrides[key];
-    PG.addAudit('Inventory Reopened', rtName + ' reopened for sale on ' + PG.fmtDateShort(selected.date) + '.');
-    PG.toast(rtName + ' reopened for ' + PG.fmtDateShort(selected.date), 'success');
-  }
-  PG.setState(st);
-  s = PG.getState();
-  renderGrid();
-  renderDetail();
+// Stop Sell modal — Room Type + Date range + required Reason, with an explicit confirmation step.
+var STOP_REASONS = ['Temporary management hold','Maintenance block','Overbooking protection','Renovation','Other'];
+var stopModal = document.createElement('div');
+stopModal.className = 'pg-modal-overlay';
+stopModal.id = 'stopModal';
+var stopRtOptions = s.roomTypes.map(function(rt){return '<option value="'+rt.id+'">'+rt.name+'</option>';}).join('');
+var stopReasonOptions = STOP_REASONS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+stopModal.innerHTML = '<div class="pg-modal">' +
+  '<div class="pg-modal-header"><h3>Stop Sell</h3><button class="pg-modal-close" onclick="PG.closeModal(\'stopModal\')">&times;</button></div>' +
+  '<div class="pg-modal-body">' +
+    '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control" id="stop-rt">'+stopRtOptions+'</select></div>' +
+    '<div class="grid-2">' +
+      '<div class="form-group"><label class="form-label">From Date</label><input type="date" class="form-control" id="stop-from"></div>' +
+      '<div class="form-group"><label class="form-label">To Date</label><input type="date" class="form-control" id="stop-to"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="stop-reason">'+stopReasonOptions+'</select></div>' +
+    '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;" id="stop-confirm-msg"></div>' +
+  '</div>' +
+  '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'stopModal\')">Cancel</button><button class="btn btn-danger" id="stopSave">Stop Sell</button></div>' +
+'</div>';
+document.body.appendChild(stopModal);
+
+function refreshStopMsg(){
+  var rtName = s.roomTypes.find(function(r){return r.id===document.getElementById('stop-rt').value;}).name;
+  document.getElementById('stop-confirm-msg').textContent = 'Stop selling ' + rtName + ' for the selected dates?';
 }
-document.getElementById('stopSellBtn').addEventListener('click', function(){ applyStopSell(true); });
-document.getElementById('reopenBtn').addEventListener('click', function(){ applyStopSell(false); });
+document.getElementById('stop-rt').addEventListener('change', refreshStopMsg);
+document.getElementById('stop-from').addEventListener('change', refreshStopMsg);
+document.getElementById('stop-to').addEventListener('change', refreshStopMsg);
+
+document.getElementById('stopSellBtn').addEventListener('click', function(){
+  document.getElementById('stop-rt').value = selected ? selected.roomTypeId : s.roomTypes[0].id;
+  document.getElementById('stop-from').value = selected ? selected.date : fromDate;
+  document.getElementById('stop-to').value = selected ? selected.date : fromDate;
+  refreshStopMsg();
+  PG.openModal('stopModal');
+});
+
+document.getElementById('stopSave').addEventListener('click', function(){
+  var reason = document.getElementById('stop-reason').value;
+  if (!reason){ PG.toast('A reason is required to Stop Sell.', 'danger'); return; }
+  var rtId = document.getElementById('stop-rt').value;
+  var from = document.getElementById('stop-from').value;
+  var to = document.getElementById('stop-to').value;
+  if (!from || !to || to < from){ PG.toast('Please choose a valid date range.', 'danger'); return; }
+  var rtName = s.roomTypes.find(function(r){return r.id===rtId;}).name;
+  if (!confirm('Stop selling ' + rtName + ' for the selected dates?')) return;
+
+  var st = PG.getState();
+  var dates = PG.dateRange(from, PG.addDays(to,1));
+  dates.forEach(function(d){ st.inventoryOverrides[rtId+'|'+d] = {stopSell:true, reason:reason}; });
+  PG.setState(st);
+  PG.addAudit('Stop Sell Applied', rtName + ', ' + PG.fmtDateShort(from) + ' to ' + PG.fmtDateShort(to) + '. Reason: ' + reason);
+  PG.closeModal('stopModal');
+  PG.toast(rtName + ' set to Stop Sell for the selected dates.', 'warn');
+
+  s = PG.getState();
+  selected = {roomTypeId: rtId, date: from};
+  renderGrid(); renderDetail(); renderActivity();
+  dates.forEach(function(d){
+    var cell = document.querySelector('.av-cell[data-rt="'+rtId+'"][data-date="'+d+'"] .av-box');
+    if (cell) cell.classList.add('flash-highlight');
+  });
+});
+
+// Reopen modal — reachable only from a selected Stop Sell cell; requires a reason too.
+var reopenModal = document.createElement('div');
+reopenModal.className = 'pg-modal-overlay';
+reopenModal.id = 'reopenModal';
+reopenModal.innerHTML = '<div class="pg-modal">' +
+  '<div class="pg-modal-header"><h3>Reopen Inventory</h3><button class="pg-modal-close" onclick="PG.closeModal(\'reopenModal\')">&times;</button></div>' +
+  '<div class="pg-modal-body">' +
+    '<div class="grid-2">' +
+      '<div class="form-group"><label class="form-label">From Date</label><input type="date" class="form-control" id="reopen-from"></div>' +
+      '<div class="form-group"><label class="form-label">To Date</label><input type="date" class="form-control" id="reopen-to"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><input class="form-control" id="reopen-reason" placeholder="e.g. Maintenance complete, hold released"></div>' +
+    '<div class="help-note" id="reopen-confirm-msg"></div>' +
+  '</div>' +
+  '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'reopenModal\')">Cancel</button><button class="btn btn-primary" id="reopenSave">Reopen</button></div>' +
+'</div>';
+document.body.appendChild(reopenModal);
+
+document.getElementById('reopenBtn').addEventListener('click', function(){
+  if (!selected) return;
+  var rt = s.roomTypes.find(function(r){return r.id===selected.roomTypeId;});
+  document.getElementById('reopen-from').value = selected.date;
+  document.getElementById('reopen-to').value = selected.date;
+  document.getElementById('reopen-reason').value = '';
+  document.getElementById('reopen-confirm-msg').textContent = 'Reopen ' + rt.name + ' for the selected dates?';
+  PG.openModal('reopenModal');
+});
+
+document.getElementById('reopenSave').addEventListener('click', function(){
+  var reason = document.getElementById('reopen-reason').value.trim();
+  if (!reason){ PG.toast('A reason is required to Reopen.', 'danger'); return; }
+  var from = document.getElementById('reopen-from').value;
+  var to = document.getElementById('reopen-to').value;
+  if (!from || !to || to < from){ PG.toast('Please choose a valid date range.', 'danger'); return; }
+  var rtId = selected.roomTypeId;
+  var rtName = s.roomTypes.find(function(r){return r.id===rtId;}).name;
+  if (!confirm('Reopen ' + rtName + ' for the selected dates?')) return;
+
+  var st = PG.getState();
+  var dates = PG.dateRange(from, PG.addDays(to,1));
+  dates.forEach(function(d){ delete st.inventoryOverrides[rtId+'|'+d]; });
+  PG.setState(st);
+  PG.addAudit('Inventory Reopened', rtName + ', ' + PG.fmtDateShort(from) + ' to ' + PG.fmtDateShort(to) + '. Reason: ' + reason);
+  PG.closeModal('reopenModal');
+  PG.toast(rtName + ' reopened for the selected dates.', 'success');
+
+  s = PG.getState();
+  renderGrid(); renderDetail(); renderActivity();
+  dates.forEach(function(d){
+    var cell = document.querySelector('.av-cell[data-rt="'+rtId+'"][data-date="'+d+'"] .av-box');
+    if (cell) cell.classList.add('flash-highlight');
+  });
+});
 
 // Adjust Inventory drawer — deliberately distinct from a reservation form: no guest,
 // no dates-as-stay-nights framing, no room-number concept. Just quantity + reason.
