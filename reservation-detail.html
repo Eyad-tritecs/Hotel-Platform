@@ -270,23 +270,93 @@ function save(auditAction, auditDetails){
   setTimeout(function(){ location.reload(); }, 500);
 }
 
-function openCancelConfirm(){
-  if (!confirm('Cancel reservation ' + r.id + '? This will release all reserved rooms back into inventory' + (r.paymentStatus==='Paid' ? ' and mark the payment as Refund Pending.' : '.'))) return;
-  r.status = 'Cancelled';
-  var refundNote = '';
-  if (r.paymentStatus==='Paid'){
-    r.paymentStatus = 'Refund Pending';
-    refundNote = ' Payment marked Refund Pending.';
-  }
-  r.activity.push({ts: PG.nowIso(), text: 'Reservation cancelled by Hotel Admin. Inventory released.' + refundNote});
-  var st = PG.getState();
-  var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
-  st.reservations[idx] = r;
-  PG.setState(st);
-  PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '.' + refundNote);
-  PG.toast('Reservation ' + r.id + ' cancelled. Inventory restored.', 'warn');
-  setTimeout(function(){ location.reload(); }, 600);
+var CANCEL_REASONS = ['Guest requested cancellation','Change of plans','Duplicate booking','Hotel-initiated','Other'];
+function inventoryPreview(){
+  return r.rooms.map(function(room){
+    var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
+    var committedNow = PG.computeAvailability(s, room.roomTypeId, r.checkIn).available;
+    var afterCancel = committedNow + room.qty;
+    return {roomTypeId: room.roomTypeId, name: rt.name, qty: room.qty, committedNow: committedNow, afterCancel: afterCancel};
+  });
 }
+var lastPreview = null;
+function invRow(name, qty, before, after, highlight){
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--pg-gray-200);font-size:12.8px;">' +
+    '<span>'+qty+'× '+name+' committed</span>' +
+    '<span>Available: <strong>'+before+'</strong> &rarr; <strong style="'+(highlight?'color:#0bb463;':'')+'">'+after+'</strong></span>' +
+  '</div>';
+}
+
+if (r){
+  var cancelModal = document.createElement('div');
+  cancelModal.className = 'pg-modal-overlay';
+  cancelModal.id = 'cancelModal';
+  document.body.appendChild(cancelModal);
+}
+
+function renderCancelModal(stage){
+    var preview;
+    if (stage==='confirm'){
+      preview = inventoryPreview();
+      lastPreview = preview;
+    } else {
+      preview = lastPreview.map(function(p){
+        var freshAvail = PG.computeAvailability(s, p.roomTypeId, r.checkIn).available;
+        return {name: p.name, qty: p.qty, committedNow: p.committedNow, afterCancel: freshAvail};
+      });
+    }
+    var invHtml = preview.map(function(p){ return invRow(p.name, p.qty, p.committedNow, p.afterCancel, stage==='done'); }).join('');
+    if (stage==='confirm'){
+      cancelModal.innerHTML = '<div class="pg-modal">' +
+        '<div class="pg-modal-header"><h3>Cancel Reservation '+r.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'cancelModal\')">&times;</button></div>' +
+        '<div class="pg-modal-body">' +
+          '<div class="help-note" style="background:var(--pg-danger-light);border-color:#f6c6d3;color:#a8123a;margin-bottom:16px;">Cancelling this reservation will release all committed inventory for all room items.</div>' +
+          '<div class="form-label">Inventory Impact</div>' +
+          '<div style="margin-bottom:16px;">'+invHtml+'</div>' +
+          '<div class="form-group"><label class="form-label">Cancellation Reason <span class="opt">(required)</span></label><select class="form-control" id="cancel-reason">' +
+            CANCEL_REASONS.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('') +
+          '</select></div>' +
+          '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="cancel-notes" placeholder="Additional context for this cancellation"></textarea></div>' +
+        '</div>' +
+        '<div class="pg-modal-footer"><button class="btn btn-light" id="keepResBtn">Keep Reservation</button><button class="btn btn-danger" id="confirmCancelBtn">Confirm Cancellation</button></div>' +
+      '</div>';
+      document.getElementById('keepResBtn').addEventListener('click', function(){ PG.closeModal('cancelModal'); });
+      document.getElementById('confirmCancelBtn').addEventListener('click', doCancel);
+    } else {
+      cancelModal.innerHTML = '<div class="pg-modal">' +
+        '<div class="pg-modal-header"><h3>Cancel Reservation '+r.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'cancelModal\'); location.reload();">&times;</button></div>' +
+        '<div class="pg-modal-body">' +
+          '<div class="help-note" style="background:var(--pg-success-light);border-color:#b7ecd3;color:#0bb463;margin-bottom:16px;">&#10003; Reservation cancelled. Inventory has been restored.</div>' +
+          '<div class="form-label">Inventory Restored</div>' +
+          '<div>'+invHtml+'</div>' +
+        '</div>' +
+        '<div class="pg-modal-footer"><button class="btn btn-primary" id="closeCancelDone">Close</button></div>' +
+      '</div>';
+      document.getElementById('closeCancelDone').addEventListener('click', function(){ PG.closeModal('cancelModal'); location.reload(); });
+    }
+  }
+
+  function doCancel(){
+    var reason = document.getElementById('cancel-reason').value;
+    var notes = document.getElementById('cancel-notes').value.trim();
+    r.status = 'Cancelled';
+    var refundNote = '';
+    if (r.paymentStatus==='Paid'){
+      r.paymentStatus = 'Refund Pending';
+      refundNote = ' Payment marked Refund Pending.';
+    }
+    r.activity.push({ts: PG.nowIso(), text: 'Reservation cancelled by Hotel Admin. Reason: ' + reason + (notes ? ' (' + notes + ')' : '') + '. Inventory released.' + refundNote});
+    var st = PG.getState();
+    var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
+    st.reservations[idx] = r;
+    PG.setState(st);
+    PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '. Reason: ' + reason + '.' + refundNote);
+    PG.toast('Reservation cancelled. Inventory has been restored.', 'warn');
+    s = PG.getState();
+    renderCancelModal('done');
+}
+
+function openCancelConfirm(){ renderCancelModal('confirm'); PG.openModal('cancelModal'); }
 </script>
 </body>
 </html>
