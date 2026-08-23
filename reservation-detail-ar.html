@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تفاصيل الحجز — فندق فلسطين الكبير</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  body{font-family:"Tajawal","Inter",sans-serif;}
+</style>
+</head>
+<body>
+<div class="pg-shell">
+  <aside class="pg-sidebar">
+    <div class="pg-sidebar-brand"><div class="logo-badge">PG</div><div><div class="brand-text">فندق فلسطين الكبير</div><div class="brand-sub">منصة إدارة الفندق</div></div></div>
+    <div class="pg-sidebar-tenant"><div><div class="t-name">فندق فلسطين الكبير</div><div class="t-role">المستأجر التجريبي &middot; مدير الفندق</div></div><span class="chev">&#9662;</span></div>
+    <nav class="pg-nav">
+      <div class="pg-nav-section"><div class="pg-nav-section-title">إدارة الفندق</div>
+        <a class="pg-nav-item" href="hotel-profile.html"><span>الملف التعريفي للفندق</span></a>
+        <a class="pg-nav-item" href="room-types.html"><span>أنواع الغرف</span></a>
+        <a class="pg-nav-item" href="rates.html"><span>الأسعار</span></a>
+        <a class="pg-nav-item" href="availability-inventory.html"><span>التوفر والمخزون</span></a>
+      </div>
+      <div class="pg-nav-section"><div class="pg-nav-section-title">الحجوزات</div>
+        <a class="pg-nav-item active" href="reservation-detail-ar.html"><span>الحجوزات</span></a>
+        <a class="pg-nav-item" href="new-reservation.html"><span>حجز جديد</span></a>
+      </div>
+      <div class="pg-nav-section"><div class="pg-nav-section-title">المدفوعات</div>
+        <a class="pg-nav-item" href="payments.html"><span>المدفوعات</span></a>
+      </div>
+      <div class="pg-nav-section"><div class="pg-nav-section-title">الإعدادات</div>
+        <a class="pg-nav-item" href="hotel-policies.html"><span>سياسات الفندق</span></a>
+        <a class="pg-nav-item" href="taxes-fees.html"><span>الضرائب والرسوم</span></a>
+        <a class="pg-nav-item" href="payment-configuration.html"><span>إعدادات الدفع</span></a>
+      </div>
+    </nav>
+  </aside>
+  <div class="pg-main">
+    <header class="pg-header">
+      <div class="pg-header-left"><div class="pg-breadcrumb">الحجوزات <span>/</span> <b>تفاصيل الحجز</b></div></div>
+      <div class="pg-header-right">
+        <a class="pg-header-btn" href="index.html">English (LTR) &#8594;</a>
+        <div class="pg-user"><div class="avatar">هـف</div><div><div class="u-name">مدير الفندق</div><div class="u-role">فندق فلسطين الكبير</div></div></div>
+      </div>
+    </header>
+    <main class="pg-content" id="pg-page"></main>
+  </div>
+</div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = document.getElementById('pg-page');
+var s = PG.getState();
+var r = s.reservations.find(function(x){return x.id==='RES-10245';});
+var c = s.customers.find(function(x){return x.id===r.customerId;});
+
+var STATUS_AR = {'Draft':'مسودة','Pending Payment':'بانتظار الدفع','Confirmed':'مؤكد','Cancelled':'ملغى','Completed':'مكتمل','No Show':'لم يحضر'};
+var PAY_AR = {'Pay on Arrival':'الدفع عند الوصول','Payment Required':'الدفع مطلوب','Link Sent':'تم إرسال الرابط','Paid':'مدفوع','Failed':'فشل','Expired':'منتهي الصلاحية','Refund Pending':'بانتظار الاسترداد','Refunded':'تم الاسترداد'};
+var STATUS_BADGE_CLS = {'Draft':'badge-gray','Pending Payment':'badge-yellow','Confirmed':'badge-green','Cancelled':'badge-red','Completed':'badge-blue','No Show':'badge-red'};
+var PAY_BADGE_CLS = {'Pay on Arrival':'badge-blue','Payment Required':'badge-yellow','Link Sent':'badge-purple','Paid':'badge-green','Failed':'badge-red','Expired':'badge-gray','Refund Pending':'badge-yellow','Refunded':'badge-gray'};
+
+function badge(text, cls){ return '<span class="badge '+cls+'"><span class="badge-dot"></span>'+text+'</span>'; }
+function field(l,v){ return '<div class="form-group"><div class="form-label">'+l+'</div><div style="font-size:13px;font-weight:500;">'+v+'</div></div>'; }
+
+function roomNameAr(id){
+  return {std:'غرفة عادية', dlx:'غرفة ديلوكس', fam:'غرفة عائلية'}[id] || id;
+}
+
+var nights = PG.dateRange(r.checkIn, r.checkOut);
+var lines = r.rooms.map(function(room){
+  var subtotal = 0;
+  nights.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
+  return {name: roomNameAr(room.roomTypeId), qty: room.qty, nights: nights.length, subtotal: subtotal};
+});
+var total = lines.reduce(function(a,l){return a+l.subtotal;},0);
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>'+r.id+' <span style="font-size:14px;">'+badge(STATUS_AR[r.status], STATUS_BADGE_CLS[r.status])+'</span></h1>' +
+  '<div class="sub">تاريخ الإنشاء '+PG.fmtDate(r.createdAt.slice(0,10))+' عبر الهاتف</div></div>' +
+  '<div class="pg-actions"><button class="btn btn-danger-outline" disabled title="معطل في هذه الشاشة النموذجية">إلغاء الحجز</button></div></div>';
+
+html += '<div class="row"><div class="col" style="flex:2;">';
+
+html += '<div class="card"><div class="card-header"><h3>تفاصيل الإقامة</h3></div><div class="card-body"><div class="grid-4">' +
+  field('تاريخ الوصول', PG.fmtDate(r.checkIn)) + field('تاريخ المغادرة', PG.fmtDate(r.checkOut)) +
+  field('عدد الليالي', nights.length) + field('عدد الغرف', r.rooms.reduce(function(a,x){return a+x.qty;},0)) +
+'</div></div></div>';
+
+html += '<div class="card"><div class="card-header"><h3>الغرف والأسعار</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt">' +
+  '<thead><tr><th>نوع الغرفة</th><th class="center">الكمية</th><th class="center">الليالي</th><th class="num">المجموع الفرعي</th></tr></thead><tbody>' +
+  lines.map(function(l){ return '<tr><td>'+l.name+'</td><td class="center">'+l.qty+'</td><td class="center">'+l.nights+'</td><td class="num">'+PG.fmtMoney(l.subtotal)+'</td></tr>'; }).join('') +
+  '</tbody></table></div></div>' +
+  '<div class="card-footer" style="display:flex;justify-content:space-between;"><strong>الإجمالي</strong><strong>'+PG.fmtMoney(total)+'</strong></div>' +
+'</div>';
+
+html += '<div class="card"><div class="card-header"><h3>معلومات الضيف</h3></div><div class="card-body"><div class="grid-2">' +
+  field('الاسم', c.name) + field('الهاتف', c.phone) + field('البريد الإلكتروني', c.email) + field('الجنسية', 'فلسطيني') +
+'</div></div></div>';
+
+html += '</div>';
+
+html += '<div class="col">';
+html += '<div class="card"><div class="card-header"><h3>الدفع</h3></div><div class="card-body">' +
+  field('طريقة الدفع', r.paymentMethod==='Payment Link' ? 'رابط دفع' : 'الدفع عند الوصول') +
+  '<div class="form-group"><div class="form-label">الحالة</div>'+badge(PAY_AR[r.paymentStatus], PAY_BADGE_CLS[r.paymentStatus])+'</div>' +
+'</div></div>';
+
+html += '<div class="card"><div class="card-header"><h3>مصدر الحجز</h3></div><div class="card-body">' + field('المصدر', 'هاتف') + field('رقم الحجز', r.id) + '</div></div>';
+
+html += '<div class="help-note">هذه شاشة تمثيلية باللغة العربية (من اليمين إلى اليسار) توضح دعم المنصة للغة العربية. الشاشات الأخرى في هذا النموذج الأولي معروضة باللغة الإنجليزية.</div>';
+html += '</div></div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

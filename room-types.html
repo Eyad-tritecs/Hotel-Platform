@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Room Types — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("room-types", ["Hotel Management", "Room Types"]);
+var s = PG.getState();
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Room Types</h1><div class="sub">Configured room categories for Palestine Grand Hotel</div></div>' +
+  '<div class="pg-actions"><a class="btn btn-primary" href="room-type-form.html">+ Add Room Type</a></div></div>';
+
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th>Room Type</th><th class="num">Sellable Quantity</th><th>Occupancy</th><th>Bed Configuration</th><th class="num">Base Rate</th><th>Status</th><th></th>' +
+'</tr></thead><tbody>';
+
+s.roomTypes.forEach(function(rt){
+  html += '<tr>' +
+    '<td style="font-weight:600;">'+rt.name+' <span class="muted text-sm">('+rt.code+')</span></td>' +
+    '<td class="num">'+rt.sellable+'</td>' +
+    '<td>'+PG.occupancyLabel(rt)+'</td>' +
+    '<td>'+rt.bed+'</td>' +
+    '<td class="num">'+PG.fmtMoney(rt.baseRate)+' / night</td>' +
+    '<td>'+(rt.active ? '<span class="badge badge-green"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>')+'</td>' +
+    '<td><a class="btn btn-outline btn-sm" href="room-type-form.html?id='+rt.id+'&mode=view">View</a> <a class="btn btn-light btn-sm" href="room-type-form.html?id='+rt.id+'">Edit</a></td>' +
+  '</tr>';
+});
+
+html += '</tbody></table></div></div></div>';
+html += '<div class="pg-lightweight-note">Inventory is controlled at room-type level, per date. Individual physical room assignment is outside the Initial MVP.</div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

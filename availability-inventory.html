@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Availability &amp; Inventory — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .av-cell{padding:6px !important;text-align:center;min-width:76px;cursor:pointer;}
+  .av-box{border-radius:6px;padding:7px 4px;font-weight:700;font-size:12.5px;border:2px solid transparent;}
+  .av-box .sub{font-weight:500;font-size:10px;opacity:.85;display:block;}
+  .av-box.selected{border-color:var(--pg-gray-900);}
+  .av-box.flash-highlight{animation:pg-flash 1.6s ease-out 1;}
+  @keyframes pg-flash{0%{box-shadow:0 0 0 3px var(--pg-primary);}100%{box-shadow:0 0 0 0 rgba(27,132,255,0);}}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .toolbar .form-group{margin-bottom:0;}
+  .toolbar .form-label{font-size:11px;}
+  .toolbar select, .toolbar input{min-width:140px;}
+  .detail-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--pg-gray-200);font-size:13px;}
+  .detail-row:last-child{border-bottom:none;}
+  .detail-row .v{font-weight:700;}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("availability", ["Hotel Management", "Availability & Inventory"]);
+var s = PG.getState();
+
+var fromDate = PG.TODAY;
+var toDate = PG.addDays(PG.TODAY, 6);
+var roomTypeFilter = 'all';
+var selected = null; // {roomTypeId, date}
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Availability &amp; Inventory</h1><div class="sub">Live sellable inventory per room type and stay date</div></div></div>';
+
+html += '<div class="help-note" style="margin-bottom:18px;">Sellable inventory is managed by <b>Property + Room Type + Stay Date</b>. There is no physical room number assignment in this MVP — every number below is a count of sellable units.</div>';
+
+html += '<div class="card"><div class="card-body"><div class="toolbar">' +
+  '<div class="form-group"><label class="form-label">FROM</label><input type="date" class="form-control" id="fromInput" value="'+fromDate+'"></div>' +
+  '<div class="form-group"><label class="form-label">TO</label><input type="date" class="form-control" id="toInput" value="'+toDate+'"></div>' +
+  '<div class="form-group"><label class="form-label">ROOM TYPE</label><select class="form-control" id="rtFilter"><option value="all">All Room Types</option>' +
+    s.roomTypes.map(function(rt){return '<option value="'+rt.id+'">'+rt.name+'</option>';}).join('') +
+  '</select></div>' +
+  '<button class="btn btn-outline" id="refreshBtn">&#8635; Refresh</button>' +
+  '<button class="btn btn-light" id="adjustBtn">Adjust Inventory</button>' +
+  '<button class="btn btn-danger-outline" id="stopSellBtn" disabled>Stop Sell</button>' +
+  '<button class="btn btn-outline" id="reopenBtn" disabled>Reopen</button>' +
+'</div></div></div>';
+
+html += '<div class="row" style="margin-bottom:8px;"><div class="text-sm" style="display:flex;gap:18px;align-items:center;">' +
+  legend('avail-ok','Normal availability') + legend('avail-low','Low (&le;2)') + legend('avail-stop','Stop Sell / Sold out') +
+'</div></div>';
+
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt" id="gridTable"></table></div></div></div>';
+
+html += '<div class="card" id="detailCard" style="display:none;"><div class="card-header"><h3 id="detailTitle">Date Detail</h3></div><div class="card-body" id="detailBody"></div></div>';
+
+function legend(cls, label){
+  return '<span style="display:flex;align-items:center;gap:6px;"><span class="av-box '+cls+'" style="padding:2px 8px;">&nbsp;</span>'+label+'</span>';
+}
+
+page.innerHTML = html;
+
+function visibleRoomTypes(){
+  return roomTypeFilter === 'all' ? s.roomTypes : s.roomTypes.filter(function(rt){return rt.id===roomTypeFilter;});
+}
+
+function renderGrid(){
+  s = PG.getState();
+  var days = PG.dateRange(fromDate, PG.addDays(toDate, 1));
+  var table = document.getElementById('gridTable');
+  var thead = '<thead><tr><th style="min-width:120px;">Room Type</th>' + days.map(function(d){return '<th class="av-cell">'+PG.fmtDateShort(d)+'</th>';}).join('') + '</tr></thead>';
+  var tbody = '<tbody>' + visibleRoomTypes().map(function(rt){
+    var row = '<tr><td style="font-weight:600;">'+rt.name+'<div class="muted text-sm">Capacity '+rt.baseCapacity+'</div></td>';
+    days.forEach(function(d){
+      var a = PG.computeAvailability(s, rt.id, d);
+      var cls = a.stopSell ? 'avail-stop' : (a.available<=2 ? 'avail-low' : 'avail-ok');
+      var isSel = selected && selected.roomTypeId===rt.id && selected.date===d;
+      var label = a.stopSell ? 'STOP' : a.available;
+      row += '<td class="av-cell" data-rt="'+rt.id+'" data-date="'+d+'"><div class="av-box '+cls+(isSel?' selected':'')+'">'+label+'<span class="sub">'+a.booked+'/'+a.sellable+'</span></div></td>';
+    });
+    row += '</tr>';
+    return row;
+  }).join('') + '</tbody>';
+  table.innerHTML = thead + tbody;
+
+  table.querySelectorAll('.av-cell').forEach(function(td){
+    td.addEventListener('click', function(){
+      selected = {roomTypeId: td.dataset.rt, date: td.dataset.date};
+      renderGrid();
+      renderDetail();
+    });
+  });
+}
+
+function renderDetail(){
+  var card = document.getElementById('detailCard');
+  var stopBtn = document.getElementById('stopSellBtn');
+  var reopenBtn = document.getElementById('reopenBtn');
+  if (!selected){
+    card.style.display = 'none';
+    stopBtn.disabled = true; reopenBtn.disabled = true;
+    return;
+  }
+  card.style.display = 'block';
+  var rt = s.roomTypes.find(function(r){return r.id===selected.roomTypeId;});
+  var a = PG.computeAvailability(s, rt.id, selected.date);
+  var adjustments = rt.sellable - rt.baseCapacity;
+  document.getElementById('detailTitle').textContent = rt.name + ' — ' + PG.fmtDate(selected.date);
+  document.getElementById('detailBody').innerHTML =
+    row('Configured Capacity', rt.baseCapacity) +
+    row('Authorized Adjustments', (adjustments>0?'+':'')+adjustments) +
+    row('Committed Reservations', a.booked) +
+    row('Available Quantity', a.available) +
+    row('Stop Sell', a.stopSell ? '<span class="badge badge-red"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>');
+
+  stopBtn.disabled = a.stopSell;
+  reopenBtn.disabled = !a.stopSell;
+}
+function row(label, value){
+  return '<div class="detail-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>';
+}
+
+renderGrid();
+renderDetail();
+
+document.getElementById('fromInput').addEventListener('change', function(){ fromDate = this.value; renderGrid(); });
+document.getElementById('toInput').addEventListener('change', function(){ toDate = this.value; renderGrid(); });
+document.getElementById('rtFilter').addEventListener('change', function(){ roomTypeFilter = this.value; selected=null; renderGrid(); renderDetail(); });
+document.getElementById('refreshBtn').addEventListener('click', function(){ renderGrid(); renderDetail(); PG.toast('Availability refreshed.', 'success'); });
+
+function applyStopSell(stop){
+  if (!selected) return;
+  var st = PG.getState();
+  var key = selected.roomTypeId + '|' + selected.date;
+  var rtName = st.roomTypes.find(function(r){return r.id===selected.roomTypeId;}).name;
+  if (stop){
+    st.inventoryOverrides[key] = {stopSell:true, reason:'Manual Stop Sell'};
+    PG.addAudit('Stop Sell Applied', rtName + ' set to Stop Sell on ' + PG.fmtDateShort(selected.date) + '.');
+    PG.toast(rtName + ' set to Stop Sell for ' + PG.fmtDateShort(selected.date), 'warn');
+  } else {
+    delete st.inventoryOverrides[key];
+    PG.addAudit('Inventory Reopened', rtName + ' reopened for sale on ' + PG.fmtDateShort(selected.date) + '.');
+    PG.toast(rtName + ' reopened for ' + PG.fmtDateShort(selected.date), 'success');
+  }
+  PG.setState(st);
+  s = PG.getState();
+  renderGrid();
+  renderDetail();
+}
+document.getElementById('stopSellBtn').addEventListener('click', function(){ applyStopSell(true); });
+document.getElementById('reopenBtn').addEventListener('click', function(){ applyStopSell(false); });
+
+// Adjust Inventory drawer — deliberately distinct from a reservation form: no guest,
+// no dates-as-stay-nights framing, no room-number concept. Just quantity + reason.
+var REASONS = ['Maintenance block','Management allocation','Inventory correction','Temporary operational hold','Hotel decision','Other'];
+var modal = document.createElement('div');
+modal.className = 'pg-modal-overlay';
+modal.id = 'adjModal';
+var rtOptions = s.roomTypes.map(function(rt){return '<option value="'+rt.id+'">'+rt.name+'</option>';}).join('');
+var reasonOptions = REASONS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('');
+modal.innerHTML = '<div class="pg-modal" style="width:520px;">' +
+  '<div class="pg-modal-header"><h3>Adjust Inventory</h3><button class="pg-modal-close" onclick="PG.closeModal(\'adjModal\')">&times;</button></div>' +
+  '<div class="pg-modal-body">' +
+    '<div class="grid-2">' +
+      '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control" id="adj-rt">'+rtOptions+'</select></div>' +
+      '<div class="form-group"><label class="form-label">Current Sellable Quantity</label><input class="form-control" id="adj-current" disabled></div>' +
+      '<div class="form-group"><label class="form-label">From Date</label><input type="date" class="form-control" id="adj-from" value="'+fromDate+'"></div>' +
+      '<div class="form-group"><label class="form-label">To Date</label><input type="date" class="form-control" id="adj-to" value="'+fromDate+'"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Adjustment Type</label><select class="form-control" id="adj-type">' +
+      '<option value="increase">Increase Sellable Inventory</option>' +
+      '<option value="decrease">Decrease Sellable Inventory</option>' +
+      '<option value="block">Block Inventory</option>' +
+      '<option value="restore">Restore Inventory</option>' +
+    '</select></div>' +
+    '<div class="form-group" id="adj-qty-group"><label class="form-label">Quantity</label><input type="number" min="1" value="1" class="form-control" id="adj-qty"></div>' +
+    '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="adj-reason">'+reasonOptions+'</select></div>' +
+    '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="adj-notes" placeholder="Additional context for this adjustment"></textarea></div>' +
+    '<div class="help-note" style="background:var(--pg-warning-light);border-color:#f3d98a;color:#8a5a00;">This changes sellable room-type inventory for the selected dates. The action will be recorded in the audit log.</div>' +
+  '</div>' +
+  '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'adjModal\')">Cancel</button><button class="btn btn-primary" id="adjSave">Confirm Adjustment</button></div>' +
+'</div>';
+document.body.appendChild(modal);
+
+function refreshAdjCurrent(){
+  var st = PG.getState();
+  var rt = st.roomTypes.find(function(r){return r.id===document.getElementById('adj-rt').value;});
+  document.getElementById('adj-current').value = rt.sellable + ' rooms';
+}
+function refreshAdjTypeUI(){
+  var type = document.getElementById('adj-type').value;
+  document.getElementById('adj-qty-group').style.display = (type==='block' || type==='restore') ? 'none' : 'block';
+}
+document.getElementById('adj-rt').addEventListener('change', refreshAdjCurrent);
+document.getElementById('adj-type').addEventListener('change', refreshAdjTypeUI);
+
+document.getElementById('adjustBtn').addEventListener('click', function(){
+  document.getElementById('adj-from').value = fromDate;
+  document.getElementById('adj-to').value = fromDate;
+  refreshAdjCurrent();
+  refreshAdjTypeUI();
+  PG.openModal('adjModal');
+});
+
+document.getElementById('adjSave').addEventListener('click', function(){
+  var reason = document.getElementById('adj-reason').value;
+  if (!reason){ PG.toast('A reason is required for inventory adjustments.', 'danger'); return; }
+  var from = document.getElementById('adj-from').value;
+  var to = document.getElementById('adj-to').value;
+  if (!from || !to || to < from){ PG.toast('Please choose a valid date range.', 'danger'); return; }
+  var type = document.getElementById('adj-type').value;
+  var qty = parseInt(document.getElementById('adj-qty').value,10) || 0;
+  var notes = document.getElementById('adj-notes').value.trim();
+  var rtId = document.getElementById('adj-rt').value;
+  var dates = PG.dateRange(from, PG.addDays(to,1));
+
+  var st = PG.getState();
+  var rt = st.roomTypes.find(function(r){return r.id===rtId;});
+  var typeLabel = {increase:'Increase Sellable Inventory', decrease:'Decrease Sellable Inventory', block:'Block Inventory', restore:'Restore Inventory'}[type];
+
+  dates.forEach(function(d){
+    var key = rtId + '|' + d;
+    if (type==='increase') st.dateAdjustments[key] = (st.dateAdjustments[key]||0) + qty;
+    else if (type==='decrease') st.dateAdjustments[key] = (st.dateAdjustments[key]||0) - qty;
+    else if (type==='block') st.inventoryOverrides[key] = {stopSell:true, reason:reason};
+    else if (type==='restore') delete st.inventoryOverrides[key];
+  });
+  st.adjustments.push({ts:PG.nowIso(), roomTypeId:rtId, type:typeLabel, qty:qty, from:from, to:to, reason:reason, notes:notes});
+  PG.setState(st);
+  PG.addAudit('Inventory Adjusted', typeLabel + ' — ' + rt.name + ', ' + PG.fmtDateShort(from) + ' to ' + PG.fmtDateShort(to) + '. Reason: ' + reason + (notes ? ' (' + notes + ')' : ''));
+  PG.closeModal('adjModal');
+  PG.toast(typeLabel + ' applied to ' + rt.name + '.', 'success');
+
+  s = PG.getState();
+  renderGrid();
+  renderDetail();
+  dates.forEach(function(d){
+    var cell = document.querySelector('.av-cell[data-rt="'+rtId+'"][data-date="'+d+'"] .av-box');
+    if (cell) cell.classList.add('flash-highlight');
+  });
+});
+</script>
+</body>
+</html>

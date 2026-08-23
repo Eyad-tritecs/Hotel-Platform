@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Policies — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("policies", ["Settings", "Hotel Policies"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Hotel Policies</h1><div class="sub">Cancellation, check-in/out, and guest policy text shown to staff</div></div></div>';
+html += '<div class="pg-lightweight-note">Policy management reuses standard platform capabilities and is kept lightweight in this MVP prototype — content below is read-only sample data.</div>';
+
+var policies = [
+  {title:'Cancellation Policy', body:'Reservations may be cancelled by Hotel Admin staff at any time before check-in. Cancelling a reservation immediately releases its rooms back into available inventory. Paid reservations are marked Refund Pending upon cancellation.'},
+  {title:'Check-in / Check-out', body:'Standard check-in time is 14:00. Standard check-out time is 12:00. Early check-in and late check-out are handled manually by front-desk staff on a case-by-case basis.'},
+  {title:'Payment Policy', body:'Guests may pay on arrival at the hotel, or via a Payment Link sent by staff for pre-payment. Reservations paid via Payment Link are held as Pending Payment until payment is confirmed.'},
+  {title:'No-Show Policy', body:'Reservations not honored by the guest may be manually marked as No Show by Hotel Admin staff after the check-in date has passed.'},
+  {title:'Children & Extra Beds', body:'Room types define maximum occupancy inclusive of children. Family Room accommodates up to 2 adults and 2 children with a Queen + 2 Single bed configuration.'}
+];
+
+html += '<div class="card"><div class="card-body">';
+policies.forEach(function(p, i){
+  html += '<div style="padding:14px 0;'+(i>0?'border-top:1px solid var(--pg-gray-200);':'')+'"><h3 style="font-size:14px;margin-bottom:6px;">'+p.title+'</h3><div class="text-sm muted">'+p.body+'</div></div>';
+});
+html += '</div></div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

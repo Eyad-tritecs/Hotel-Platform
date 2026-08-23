@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Room Type — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var params = new URLSearchParams(location.search);
+var id = params.get('id');
+var readOnly = params.get('mode') === 'view';
+var page = PG.mount("room-types", ["Hotel Management", "Room Types", id ? (readOnly ? "View Room Type" : "Edit Room Type") : "Add Room Type"]);
+var s = PG.getState();
+var rt = id ? s.roomTypes.find(function(r){return r.id===id;}) : null;
+
+function f(fid, label, value, opts){
+  opts = opts || {};
+  var dis = readOnly ? 'disabled' : '';
+  return '<div class="form-group"><label class="form-label">'+label+(opts.optional?' <span class="opt">(optional)</span>':'')+'</label>' +
+    '<input class="form-control" id="'+fid+'" type="'+(opts.type||'text')+'" value="'+PG.esc(value)+'" '+dis+'></div>';
+}
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>'+(id ? (readOnly ? 'View Room Type' : 'Edit Room Type') : 'Add Room Type')+'</h1>' +
+  '<div class="sub">'+(rt ? rt.name : 'Create a new room type for Palestine Grand Hotel')+'</div></div>' +
+  '<div class="pg-actions"><a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a></div></div>';
+
+html += '<div class="help-note" style="margin-bottom:20px;">Inventory is controlled at room-type level. Individual physical room assignment is outside the Initial MVP — sellable quantity below represents how many rooms of this type can be sold per night, not specific room numbers.</div>';
+
+html += '<div class="card"><div class="card-body"><div class="grid-2">' +
+  f('f-name','Room Type Name', rt ? rt.name : '') +
+  f('f-code','Internal Code', rt ? rt.code : '') +
+  f('f-sellable','Sellable Quantity', rt ? rt.sellable : 1, {type:'number'}) +
+  f('f-adults','Max Adults', rt ? rt.maxAdults : 2, {type:'number'}) +
+  f('f-children','Max Children', rt ? rt.maxChildren : 0, {type:'number'}) +
+  f('f-bed','Bed Configuration', rt ? rt.bed : '') +
+'</div>' +
+'<div class="form-group"><label class="form-label">Essential Description</label><textarea class="form-control" id="f-desc" style="min-height:70px;" '+(readOnly?'disabled':'')+'>'+PG.esc(rt ? rt.desc : '')+'</textarea></div>' +
+'<div class="form-check"><input type="checkbox" id="f-active" '+((!rt || rt.active) ? 'checked' : '')+' '+(readOnly?'disabled':'')+'><label class="form-label" style="margin:0;" for="f-active">Active</label></div>' +
+'</div>' +
+(readOnly ? '<div class="card-footer"><a class="btn btn-primary" href="room-type-form.html?id='+id+'">Edit This Room Type</a></div>' :
+  '<div class="card-footer"><button class="btn btn-primary" id="saveBtn">Save</button></div>') +
+'</div>';
+
+page.innerHTML = html;
+
+if (!readOnly){
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    var st = PG.getState();
+    var name = document.getElementById('f-name').value.trim();
+    if (!name){ PG.toast('Room type name is required.', 'danger'); return; }
+    var data = {
+      name: name,
+      code: document.getElementById('f-code').value.trim() || name.slice(0,3).toUpperCase(),
+      sellable: parseInt(document.getElementById('f-sellable').value,10) || 0,
+      maxAdults: parseInt(document.getElementById('f-adults').value,10) || 1,
+      maxChildren: parseInt(document.getElementById('f-children').value,10) || 0,
+      bed: document.getElementById('f-bed').value,
+      desc: document.getElementById('f-desc').value,
+      active: document.getElementById('f-active').checked
+    };
+    if (rt){
+      Object.assign(rt, data);
+      PG.addAudit('Room Type Updated', rt.name + ' details updated.');
+      PG.toast('Room type updated.', 'success');
+    } else {
+      var newId = 'rt-' + Date.now();
+      var newRt = Object.assign({id:newId, baseRate:100, baseCapacity: data.sellable}, data);
+      st.roomTypes.push(newRt);
+      st.rates[newId] = {};
+      PG.dateRange(PG.addDays(PG.TODAY,-2), PG.addDays(PG.TODAY,30)).forEach(function(d){ st.rates[newId][d] = newRt.baseRate; });
+      PG.addAudit('Room Type Created', newRt.name + ' added.');
+      PG.toast('Room type created.', 'success');
+    }
+    PG.setState(st);
+    setTimeout(function(){ location.href = 'room-types.html'; }, 500);
+  });
+}
+</script>
+</body>
+</html>

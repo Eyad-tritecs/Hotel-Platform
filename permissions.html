@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Permissions — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("permissions", ["Administration", "Permissions"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Permissions</h1><div class="sub">Capabilities granted per role</div></div></div>';
+html += '<div class="pg-lightweight-note">Permission management reuses standard platform capabilities and is kept lightweight in this MVP prototype.</div>';
+
+var perms = ['Manage Hotel Profile','Manage Room Types & Rates','Manage Availability & Stop Sell','Create Reservations','Cancel Reservations','Process Payments','Manage Users & Roles','View Audit Log'];
+var roles = ['Platform Super Admin','Hotel Admin','Hotel Manager','Reservation Staff'];
+var matrix = {
+  'Manage Hotel Profile':[1,1,0,0],
+  'Manage Room Types & Rates':[1,1,1,0],
+  'Manage Availability & Stop Sell':[1,1,1,0],
+  'Create Reservations':[1,1,1,1],
+  'Cancel Reservations':[1,1,1,0],
+  'Process Payments':[1,1,1,1],
+  'Manage Users & Roles':[1,1,0,0],
+  'View Audit Log':[1,1,1,0]
+};
+
+var html2 = '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Capability</th>' + roles.map(function(r){return '<th class="center">'+r+'</th>';}).join('') + '</tr></thead><tbody>';
+perms.forEach(function(p){
+  html2 += '<tr><td style="font-weight:600;">'+p+'</td>' + matrix[p].map(function(v){ return '<td class="center">' + (v ? '<span style="color:#0bb463;font-weight:700;">&#10003;</span>' : '<span style="color:var(--pg-gray-400);">&mdash;</span>') + '</td>'; }).join('') + '</tr>';
+});
+html2 += '</tbody></table></div></div></div>';
+
+page.innerHTML = html + html2;
+</script>
+</body>
+</html>

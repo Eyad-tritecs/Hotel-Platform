@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Profile — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("hotel-profile", ["Hotel Management", "Hotel Profile"]);
+var s = PG.getState();
+var h = s.hotel;
+
+function field(id, label, value, type){
+  type = type || 'text';
+  return '<div class="form-group"><label class="form-label">'+label+'</label><input class="form-control" id="'+id+'" type="'+type+'" value="'+PG.esc(value)+'"></div>';
+}
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Hotel Profile</h1><div class="sub">Core configuration for this pilot tenant — Palestine Grand Hotel</div></div>' +
+  '<div class="pg-actions"><span class="badge badge-green"><span class="badge-dot"></span>'+h.status+'</span></div></div>';
+
+html += '<div class="row"><div class="col" style="flex:2;">';
+html += '<div class="card"><div class="card-header"><h3>General Information</h3></div><div class="card-body"><div class="grid-2">' +
+  field('f-name','Hotel Name', h.name) + field('f-code','Property Code', h.propertyCode) +
+  field('f-address','Address', h.address) + field('f-city','City', h.city) +
+  field('f-country','Country', h.country) + field('f-currency','Default Currency', h.currency) +
+  field('f-tz','Time Zone', h.timezone) + field('f-email','Contact Email', h.email, 'email') +
+  field('f-phone','Contact Phone', h.phone) +
+'</div></div></div>';
+
+html += '<div class="card"><div class="card-header"><h3>Check-in / Check-out</h3></div><div class="card-body"><div class="grid-2">' +
+  field('f-cin','Check-in Time', h.checkInTime, 'time') + field('f-cout','Check-out Time', h.checkOutTime, 'time') +
+'</div></div></div>';
+
+html += '<div class="card"><div class="card-header"><h3>Reservation Policy Summary</h3></div><div class="card-body">' +
+  '<textarea class="form-control" id="f-policy" style="min-height:90px;">'+PG.esc(h.policySummary)+'</textarea>' +
+'</div></div>';
+
+html += '<button class="btn btn-primary" id="saveBtn">Save Changes</button>';
+html += '</div>';
+
+html += '<div class="col"><div class="help-note">This prototype represents a single pilot hotel tenant on a multi-tenant platform. In production, Platform Super Admins provision new hotel tenants; Hotel Admins configure their own tenant here.</div></div>';
+html += '</div>';
+
+page.innerHTML = html;
+
+document.getElementById('saveBtn').addEventListener('click', function(){
+  var st = PG.getState();
+  var hh = st.hotel;
+  hh.name = document.getElementById('f-name').value;
+  hh.propertyCode = document.getElementById('f-code').value;
+  hh.address = document.getElementById('f-address').value;
+  hh.city = document.getElementById('f-city').value;
+  hh.country = document.getElementById('f-country').value;
+  hh.currency = document.getElementById('f-currency').value;
+  hh.timezone = document.getElementById('f-tz').value;
+  hh.email = document.getElementById('f-email').value;
+  hh.phone = document.getElementById('f-phone').value;
+  hh.checkInTime = document.getElementById('f-cin').value;
+  hh.checkOutTime = document.getElementById('f-cout').value;
+  hh.policySummary = document.getElementById('f-policy').value;
+  PG.setState(st);
+  PG.addAudit('Hotel Profile Updated', 'Hotel profile details were updated.');
+  PG.toast('Hotel profile saved.', 'success');
+});
+</script>
+</body>
+</html>

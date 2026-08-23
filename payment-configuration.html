@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Configuration — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("payment-config", ["Settings", "Payment Configuration"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Payment Configuration</h1><div class="sub">Manual payment methods enabled for this hotel</div></div></div>';
+html += '<div class="pg-lightweight-note">Payment configuration reuses standard platform capabilities and is kept lightweight in this MVP prototype. The two methods below are the only ones available when creating a reservation.</div>';
+
+html += '<div class="grid-2">';
+html += '<div class="card"><div class="card-body">' +
+  '<div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-size:15px;">Pay on Arrival</h3><span class="badge badge-green"><span class="badge-dot"></span>Enabled</span></div>' +
+  '<div class="text-sm muted" style="margin-top:8px;">Guest settles the full amount at the hotel front desk during check-in. Reservation is confirmed immediately upon creation.</div>' +
+'</div></div>';
+html += '<div class="card"><div class="card-body">' +
+  '<div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-size:15px;">Payment Link</h3><span class="badge badge-green"><span class="badge-dot"></span>Enabled</span></div>' +
+  '<div class="text-sm muted" style="margin-top:8px;">Staff generate a manual payment link and send it to the guest. Reservation stays Pending Payment until the link is paid, and expires or fails if not completed.</div>' +
+'</div></div>';
+html += '</div>';
+
+html += '<div class="card"><div class="card-header"><h3>Link Behavior</h3></div><div class="card-body"><div class="grid-2">' +
+  field('Currency','USD') + field('Default Link Expiry','24 hours') +
+  field('Sending Channel','SMS / WhatsApp (simulated)') + field('Gateway Integration','Not connected — MVP simulates status manually') +
+'</div></div></div>';
+
+function field(l,v){ return '<div class="form-group"><div class="form-label">'+l+'</div><div style="font-weight:500;font-size:13px;">'+v+'</div></div>'; }
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

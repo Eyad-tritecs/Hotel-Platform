@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rate Plan — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var id = new URLSearchParams(location.search).get('id');
+var page = PG.mount("rates", ["Hotel Management", "Rates", id ? "Edit Rate Plan" : "Add Rate Plan"]);
+var s = PG.getState();
+var rp = id ? s.ratePlans.find(function(r){return r.id===id;}) : null;
+var MEAL_PLANS = ["Room Only", "Breakfast Included"];
+
+var rtOptions = s.roomTypes.map(function(rt){
+  return '<option value="'+rt.id+'"'+(rp && rp.roomTypeId===rt.id ? ' selected':'')+'>'+rt.name+'</option>';
+}).join('');
+var mealOptions = MEAL_PLANS.map(function(m){
+  return '<option value="'+m+'"'+(rp && rp.mealPlan===m ? ' selected':'')+'>'+m+'</option>';
+}).join('');
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>'+(id ? 'Edit Rate Plan' : 'Add Rate Plan')+'</h1><div class="sub">'+(rp ? rp.name : 'Create a new rate plan')+'</div></div>' +
+  '<div class="pg-actions"><a class="btn btn-light" href="rates.html">&larr; Back to Rate Plans</a></div></div>';
+
+html += '<div class="card"><div class="card-body"><div class="grid-2">' +
+  '<div class="form-group"><label class="form-label">Rate Plan Name</label><input class="form-control" id="f-name" value="'+PG.esc(rp ? rp.name : '')+'"></div>' +
+  '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control" id="f-rt">'+rtOptions+'</select></div>' +
+  '<div class="form-group"><label class="form-label">Meal Plan</label><select class="form-control" id="f-meal">'+mealOptions+'</select></div>' +
+  '<div class="form-group"><label class="form-label">Currency</label><input class="form-control" id="f-currency" value="'+PG.esc(rp ? rp.currency : 'USD')+'"></div>' +
+  '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="f-start" value="'+(rp ? rp.startDate : PG.TODAY)+'"></div>' +
+  '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="f-end" value="'+(rp ? rp.endDate : PG.addDays(PG.TODAY,90))+'"></div>' +
+  '<div class="form-group"><label class="form-label">Price per Night</label><input type="number" min="0" class="form-control" id="f-price" value="'+(rp ? rp.price : 100)+'"></div>' +
+'</div>' +
+'<div class="form-check"><input type="checkbox" id="f-active" '+((!rp || rp.active) ? 'checked' : '')+'><label class="form-label" style="margin:0;" for="f-active">Active</label></div>' +
+'</div>' +
+'<div class="card-footer"><button class="btn btn-primary" id="saveBtn">Save</button></div></div>';
+
+page.innerHTML = html;
+
+document.getElementById('saveBtn').addEventListener('click', function(){
+  var name = document.getElementById('f-name').value.trim();
+  if (!name){ PG.toast('Rate plan name is required.', 'danger'); return; }
+  var data = {
+    name: name,
+    roomTypeId: document.getElementById('f-rt').value,
+    mealPlan: document.getElementById('f-meal').value,
+    currency: document.getElementById('f-currency').value || 'USD',
+    startDate: document.getElementById('f-start').value,
+    endDate: document.getElementById('f-end').value,
+    price: parseFloat(document.getElementById('f-price').value) || 0,
+    active: document.getElementById('f-active').checked
+  };
+  var st = PG.getState();
+  if (rp){
+    var target = st.ratePlans.find(function(r){return r.id===rp.id;});
+    Object.assign(target, data);
+    PG.addAudit('Rate Plan Updated', target.name + ' updated.');
+    PG.toast('Rate plan updated.', 'success');
+  } else {
+    var newPlan = Object.assign({id: 'rp-' + Date.now()}, data);
+    st.ratePlans.push(newPlan);
+    PG.addAudit('Rate Plan Created', newPlan.name + ' created.');
+    PG.toast('Rate plan created.', 'success');
+  }
+  PG.setState(st);
+  setTimeout(function(){ location.href = 'rates.html'; }, 500);
+});
+</script>
+</body>
+</html>

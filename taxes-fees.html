@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Taxes &amp; Fees — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("taxes", ["Settings", "Taxes & Fees"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Taxes &amp; Fees</h1><div class="sub">Configured charges applied to reservations at this hotel</div></div></div>';
+html += '<div class="pg-lightweight-note">Tax and fee configuration reuses standard platform capabilities and is kept lightweight in this MVP prototype. Rates shown below are sample values and are not applied to pricing calculations elsewhere in this prototype.</div>';
+
+var rows = [
+  {name:'VAT', type:'Percentage', value:'16%', appliesTo:'Room Rate', status:'Active'},
+  {name:'Municipality Tax', type:'Percentage', value:'5%', appliesTo:'Room Rate', status:'Active'},
+  {name:'Service Charge', type:'Percentage', value:'10%', appliesTo:'Room Rate', status:'Active'},
+  {name:'City Tourism Fee', type:'Fixed / Night', value:'$2.00', appliesTo:'Per Room / Night', status:'Inactive'}
+];
+
+var html2 = '<div class="card"><div class="card-header"><div><h3>Configured Charges</h3></div></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Name</th><th>Type</th><th>Value</th><th>Applies To</th><th>Status</th></tr></thead><tbody>';
+rows.forEach(function(r){
+  html2 += '<tr><td style="font-weight:600;">'+r.name+'</td><td>'+r.type+'</td><td>'+r.value+'</td><td>'+r.appliesTo+'</td><td>'+(r.status==='Active'?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>')+'</td></tr>';
+});
+html2 += '</tbody></table></div></div></div>';
+
+page.innerHTML = html + html2;
+</script>
+</body>
+</html>

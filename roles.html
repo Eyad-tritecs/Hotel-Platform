@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roles — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("roles", ["Administration", "Roles"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Roles</h1><div class="sub">Predefined roles available on the platform</div></div></div>';
+html += '<div class="pg-lightweight-note">Role management reuses standard platform capabilities and is kept lightweight in this MVP prototype.</div>';
+
+var roles = [
+  {name:'Platform Super Admin', desc:'Manages the platform across all hotel tenants, including onboarding new hotels.', users:1},
+  {name:'Hotel Admin', desc:'Full administrative access within a single hotel tenant — configuration, reservations, payments, users.', users:1},
+  {name:'Hotel Manager', desc:'Oversees daily operations: reservations, availability, and reporting for the hotel.', users:1},
+  {name:'Reservation Staff', desc:'Creates and manages reservations, and processes guest payments.', users:2}
+];
+
+html += '<div class="grid-2">';
+roles.forEach(function(r){
+  html += '<div class="card"><div class="card-body"><div style="display:flex;justify-content:space-between;align-items:center;"><h3 style="font-size:14.5px;">'+r.name+'</h3><span class="badge badge-blue">'+r.users+' user'+(r.users>1?'s':'')+'</span></div><div class="text-sm muted" style="margin-top:8px;">'+r.desc+'</div></div></div>';
+});
+html += '</div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

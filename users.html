@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("users", ["Administration", "Users"]);
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Users</h1><div class="sub">Staff accounts with access to Palestine Grand Hotel</div></div>' +
+  '<div class="pg-actions"><button class="btn btn-primary" id="inviteBtn">+ Invite User</button></div></div>';
+html += '<div class="pg-lightweight-note">User management reuses standard platform capabilities (invite, deactivate, reset access) and is kept lightweight in this MVP prototype.</div>';
+
+var users = [
+  {name:'Hotel Admin', email:'admin@palestinegrand.com', role:'Hotel Admin', status:'Active'},
+  {name:'Nadia Odeh', email:'nadia.odeh@palestinegrand.com', role:'Hotel Manager', status:'Active'},
+  {name:'Yousef Barghouti', email:'yousef.b@palestinegrand.com', role:'Reservation Staff', status:'Active'},
+  {name:'Rana Sabbah', email:'rana.sabbah@palestinegrand.com', role:'Reservation Staff', status:'Invited'},
+  {name:'Platform Super Admin', email:'superadmin@platform.com', role:'Platform Super Admin', status:'Active'}
+];
+
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody>';
+users.forEach(function(u){
+  html += '<tr><td style="font-weight:600;">'+u.name+'</td><td class="text-sm muted">'+u.email+'</td><td><span class="badge badge-blue">'+u.role+'</span></td><td>'+(u.status==='Active'?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-yellow"><span class="badge-dot"></span>Invited</span>')+'</td></tr>';
+});
+html += '</tbody></table></div></div></div>';
+
+page.innerHTML = html;
+document.getElementById('inviteBtn').addEventListener('click', function(){
+  PG.toast('User invitation flow reuses standard platform identity capabilities — not part of this MVP prototype.', 'warn');
+});
+</script>
+</body>
+</html>

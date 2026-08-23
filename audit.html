@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("audit", ["Administration", "Audit"]);
+var s = PG.getState();
+
+var ACTION_BADGE = {
+  'Reservation Created':'badge-blue','Reservation Cancelled':'badge-red','Payment Link Sent':'badge-purple',
+  'Payment Link Resent':'badge-purple','Payment Received':'badge-green','Payment Failed':'badge-red',
+  'Payment Link Expired':'badge-gray','Refund Completed':'badge-gray','Inventory Adjusted':'badge-yellow',
+  'Stop Sell Applied':'badge-red','Inventory Reopened':'badge-green','Rate Updated':'badge-blue','Room Type Updated':'badge-blue'
+};
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Audit Log</h1><div class="sub">Chronological record of administrative actions across this hotel tenant</div></div></div>';
+html += '<div class="pg-lightweight-note">This log reflects real actions performed in this prototype session — try creating or cancelling a reservation, then return here.</div>';
+
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th style="min-width:150px;">Timestamp</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody>';
+
+if (!s.audit.length){
+  html += '<tr><td colspan="4"><div class="empty-state">No activity recorded yet.</div></td></tr>';
+} else {
+  s.audit.forEach(function(a){
+    html += '<tr><td class="text-sm">'+PG.fmtDate(a.ts.slice(0,10),{month:'short',day:'numeric'})+' &middot; '+a.ts.slice(11)+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.actor)+'</td>' +
+      '<td><span class="badge '+(ACTION_BADGE[a.action]||'badge-gray')+'">'+a.action+'</span></td>' +
+      '<td class="text-sm">'+PG.esc(a.details)+'</td></tr>';
+  });
+}
+html += '</tbody></table></div></div></div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>

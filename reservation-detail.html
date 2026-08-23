@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reservation Detail — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .timeline{position:relative;padding-left:22px;}
+  .timeline::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--pg-gray-200);}
+  .t-item{position:relative;padding-bottom:18px;}
+  .t-item:last-child{padding-bottom:0;}
+  .t-item::before{content:"";position:absolute;left:-22px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--pg-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--pg-primary);}
+  .t-item .t-time{font-size:11px;color:var(--pg-gray-500);}
+  .t-item .t-text{font-size:12.8px;color:var(--pg-gray-800);margin-top:2px;}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("reservations", ["Reservations", "Reservation Detail"]);
+var s = PG.getState();
+var id = new URLSearchParams(location.search).get('id');
+var r = s.reservations.find(function(x){return x.id===id;});
+
+if (!r){
+  page.innerHTML = '<div class="empty-state"><div class="ic">&#10060;</div>Reservation "'+PG.esc(id||'')+'" was not found.<br><br><a class="btn btn-primary" href="reservations.html">Back to Reservations</a></div>';
+} else {
+  render();
+}
+
+function cust(){ return s.customers.find(function(c){return c.id===r.customerId;}); }
+function nights(){ return PG.dateRange(r.checkIn, r.checkOut); }
+function lines(){
+  var n = nights();
+  return r.rooms.map(function(room){
+    var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
+    var subtotal = 0;
+    n.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
+    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal};
+  });
+}
+function total(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
+
+function render(){
+  var c = cust();
+  var canCancel = r.status!=='Cancelled' && r.status!=='Completed';
+  var html = '';
+
+  html += '<div class="pg-page-head"><div><h1>'+r.id+' <span style="font-size:14px;">'+PG.statusBadge(r.status)+'</span></h1>' +
+    '<div class="sub">Created '+PG.fmtDate(r.createdAt.slice(0,10))+' via '+r.source+'</div></div>' +
+    '<div class="pg-actions">' +
+      (canCancel ? '<button class="btn btn-danger-outline" id="cancelBtn">Cancel Reservation</button>' : '') +
+      '<a class="btn btn-outline" href="availability-inventory.html">View Inventory</a>' +
+      '<a class="btn btn-light" href="reservations.html">Back to List</a>' +
+    '</div></div>';
+
+  html += '<div class="row"><div class="col" style="flex:2;">';
+
+  html += '<div class="card"><div class="card-header"><h3>Stay Details</h3></div><div class="card-body"><div class="grid-4">' +
+    field('Check-in', PG.fmtDate(r.checkIn)) + field('Check-out', PG.fmtDate(r.checkOut)) +
+    field('Nights', nights().length) + field('Rooms', r.rooms.reduce(function(a,x){return a+x.qty;},0)) +
+  '</div></div></div>';
+
+  html += '<div class="card"><div class="card-header"><h3>Room &amp; Pricing</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt">' +
+    '<thead><tr><th>Room Type</th><th class="center">Qty</th><th class="center">Nights</th><th class="num">Subtotal</th></tr></thead><tbody>' +
+    lines().map(function(l){ return '<tr><td>'+l.name+'</td><td class="center">'+l.qty+'</td><td class="center">'+l.nights+'</td><td class="num">'+PG.fmtMoney(l.subtotal)+'</td></tr>'; }).join('') +
+    '</tbody></table></div></div>' +
+    '<div class="card-footer" style="display:flex;justify-content:space-between;"><strong>Total</strong><strong>'+PG.fmtMoney(total())+'</strong></div>' +
+  '</div>';
+
+  html += '<div class="card"><div class="card-header"><h3>Guest Information</h3></div><div class="card-body"><div class="grid-2">' +
+    field('Name', c.name) + field('Phone', c.phone) + field('Email', c.email) + field('Nationality', c.nationality||'—') +
+  '</div>' + (r.notes ? '<div class="form-group" style="margin-top:6px;"><div class="form-label">Notes</div><div class="text-sm">'+PG.esc(r.notes)+'</div></div>' : '') + '</div></div>';
+
+  html += '<div class="card"><div class="card-header"><h3>Activity</h3></div><div class="card-body"><div class="timeline">' +
+    r.activity.slice().reverse().map(function(a){ return '<div class="t-item"><div class="t-time">'+PG.fmtDate(a.ts.slice(0,10),{month:'short',day:'numeric'})+' &middot; '+a.ts.slice(11)+'</div><div class="t-text">'+PG.esc(a.text)+'</div></div>'; }).join('') +
+  '</div></div></div>';
+
+  html += '</div>';
+
+  // Right column: payment panel
+  html += '<div class="col">';
+  html += '<div class="card"><div class="card-header"><h3>Payment</h3></div><div class="card-body">' +
+    field('Method', r.paymentMethod) +
+    '<div class="form-group"><div class="form-label">Status</div>'+PG.payBadge(r.paymentStatus)+'</div>' +
+    (r.paymentLinkSentAt ? field('Link Sent', PG.fmtDate(r.paymentLinkSentAt.slice(0,10)) + ' ' + r.paymentLinkSentAt.slice(11)) : '') +
+    (r.paymentPaidAt ? field('Paid At', PG.fmtDate(r.paymentPaidAt.slice(0,10)) + ' ' + r.paymentPaidAt.slice(11)) : '') +
+    '<div class="divider"></div>' +
+    '<div id="paymentActions" style="display:flex;flex-direction:column;gap:8px;"></div>' +
+  '</div></div>';
+
+  html += '<div class="card"><div class="card-header"><h3>Reservation Meta</h3></div><div class="card-body">' +
+    field('Source', r.source) + field('Reservation ID', r.id) + field('Status', PG.statusBadge(r.status)) +
+  '</div></div>';
+
+  html += '</div></div>';
+
+  page.innerHTML = html;
+  renderPaymentActions();
+
+  if (canCancel) document.getElementById('cancelBtn').addEventListener('click', openCancelConfirm);
+}
+
+function field(label, value){
+  return '<div class="form-group"><div class="form-label">'+label+'</div><div style="font-size:13px;font-weight:500;">'+value+'</div></div>';
+}
+
+function renderPaymentActions(){
+  var box = document.getElementById('paymentActions');
+  var html = '';
+  if (r.status==='Cancelled'){
+    if (r.paymentStatus==='Paid' || r.paymentStatus==='Refund Pending'){
+      if (r.paymentStatus==='Refund Pending'){
+        html += '<button class="btn btn-outline btn-block" id="markRefunded">Mark as Refunded</button>';
+      } else {
+        html += '<div class="text-sm muted">Payment already settled prior to cancellation.</div>';
+      }
+    } else {
+      html += '<div class="text-sm muted">No further payment action needed.</div>';
+    }
+  } else if (r.paymentMethod==='Payment Link'){
+    if (r.paymentStatus==='Payment Required'){
+      html += '<button class="btn btn-primary btn-block" id="sendLink">Generate &amp; Send Payment Link</button>';
+    } else if (r.paymentStatus==='Link Sent'){
+      html += '<div class="help-note" style="margin-bottom:4px;">Payment link sent to guest. Simulate the outcome below.</div>';
+      html += '<button class="btn btn-success btn-block" id="markPaid">Simulate: Payment Received</button>';
+      html += '<button class="btn btn-outline btn-block" id="markFailed">Simulate: Payment Failed</button>';
+      html += '<button class="btn btn-light btn-block" id="markExpired">Simulate: Link Expired</button>';
+      html += '<button class="btn btn-outline btn-block" id="resendLink">Resend Link</button>';
+    } else if (r.paymentStatus==='Failed' || r.paymentStatus==='Expired'){
+      html += '<div class="text-sm muted" style="margin-bottom:8px;">Payment '+r.paymentStatus.toLowerCase()+'. Generate a new link to retry.</div>';
+      html += '<button class="btn btn-primary btn-block" id="sendLink">Generate New Payment Link</button>';
+    } else if (r.paymentStatus==='Paid'){
+      html += '<div class="text-sm muted">Payment complete. No further action needed.</div>';
+    }
+  } else {
+    html += '<div class="text-sm muted">Guest will pay on arrival at check-in.</div>';
+  }
+  box.innerHTML = html;
+
+  var b;
+  if (b=document.getElementById('sendLink')) b.addEventListener('click', function(){ transition('Link Sent', 'Pending Payment', 'Payment link generated and sent to guest.'); r.paymentLinkSentAt = PG.nowIso(); save('Payment Link Sent', r.id + ' — payment link generated and sent.'); });
+  if (b=document.getElementById('resendLink')) b.addEventListener('click', function(){ r.paymentLinkSentAt = PG.nowIso(); r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest.'}); save('Payment Link Resent', r.id + ' — payment link resent.'); });
+  if (b=document.getElementById('markPaid')) b.addEventListener('click', function(){ r.paymentPaidAt = PG.nowIso(); transition('Paid', 'Confirmed', 'Payment received — status updated to Paid.'); save('Payment Received', 'Payment confirmed for ' + r.id + '.'); });
+  if (b=document.getElementById('markFailed')) b.addEventListener('click', function(){ transition('Failed', r.status, 'Payment attempt failed.'); save('Payment Failed', 'Payment attempt failed for ' + r.id + '.'); });
+  if (b=document.getElementById('markExpired')) b.addEventListener('click', function(){ transition('Expired', r.status, 'Payment link expired without payment.'); save('Payment Link Expired', 'Payment link expired for ' + r.id + '.'); });
+  if (b=document.getElementById('markRefunded')) b.addEventListener('click', function(){ transition('Refunded', r.status, 'Refund completed for cancelled reservation.'); save('Refund Completed', 'Refund completed for ' + r.id + '.'); });
+}
+
+function transition(paymentStatus, status, note){
+  r.paymentStatus = paymentStatus;
+  r.status = status;
+  r.activity.push({ts: PG.nowIso(), text: note});
+}
+function save(auditAction, auditDetails){
+  var st = PG.getState();
+  var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
+  st.reservations[idx] = r;
+  PG.setState(st);
+  PG.addAudit(auditAction, auditDetails);
+  PG.toast(auditDetails, 'success');
+  setTimeout(function(){ location.reload(); }, 500);
+}
+
+function openCancelConfirm(){
+  if (!confirm('Cancel reservation ' + r.id + '? This will release all reserved rooms back into inventory' + (r.paymentStatus==='Paid' ? ' and mark the payment as Refund Pending.' : '.'))) return;
+  r.status = 'Cancelled';
+  var refundNote = '';
+  if (r.paymentStatus==='Paid'){
+    r.paymentStatus = 'Refund Pending';
+    refundNote = ' Payment marked Refund Pending.';
+  }
+  r.activity.push({ts: PG.nowIso(), text: 'Reservation cancelled by Hotel Admin. Inventory released.' + refundNote});
+  var st = PG.getState();
+  var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
+  st.reservations[idx] = r;
+  PG.setState(st);
+  PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '.' + refundNote);
+  PG.toast('Reservation ' + r.id + ' cancelled. Inventory restored.', 'warn');
+  setTimeout(function(){ location.reload(); }, 600);
+}
+</script>
+</body>
+</html>

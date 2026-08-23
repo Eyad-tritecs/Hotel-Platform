@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payments — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("payments", ["Payments", "Payments"]);
+var s = PG.getState();
+
+function total(r){
+  var n = PG.dateRange(r.checkIn, r.checkOut);
+  var t = 0;
+  r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
+  return t;
+}
+
+var counts = {};
+['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'].forEach(function(k){counts[k]=0;});
+s.reservations.forEach(function(r){ counts[r.paymentStatus] = (counts[r.paymentStatus]||0)+1; });
+
+var paidTotal = s.reservations.filter(function(r){return r.paymentStatus==='Paid';}).reduce(function(a,r){return a+total(r);},0);
+var awaiting = s.reservations.filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';}).length;
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Payments</h1><div class="sub">Payment status across all reservations for Palestine Grand Hotel</div></div></div>';
+
+html += '<div class="grid-4">';
+html += '<div class="kpi"><div class="kpi-label">Collected Revenue</div><div class="kpi-value">'+PG.fmtMoney(paidTotal)+'</div><div class="kpi-note">Reservations marked Paid</div></div>';
+html += '<div class="kpi"><div class="kpi-label">Awaiting Payment</div><div class="kpi-value">'+awaiting+'</div><div class="kpi-note">Required or link sent</div></div>';
+html += '<div class="kpi"><div class="kpi-label">Pay on Arrival</div><div class="kpi-value">'+counts['Pay on Arrival']+'</div><div class="kpi-note">Will settle at check-in</div></div>';
+html += '<div class="kpi"><div class="kpi-label">Failed / Expired</div><div class="kpi-value">'+(counts['Failed']+counts['Expired'])+'</div><div class="kpi-note">Needs a new payment link</div></div>';
+html += '</div>';
+
+html += '<div class="card"><div class="card-header"><h3>All Payments</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th>Reservation</th><th>Guest</th><th>Method</th><th>Status</th><th>Reservation Status</th><th class="num">Amount</th><th></th>' +
+  '</tr></thead><tbody>';
+
+s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).forEach(function(r){
+  var c = s.customers.find(function(x){return x.id===r.customerId;});
+  html += '<tr>' +
+    '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
+    '<td>'+PG.esc(c.name)+'</td>' +
+    '<td class="text-sm">'+r.paymentMethod+'</td>' +
+    '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
+    '<td>'+PG.statusBadge(r.status)+'</td>' +
+    '<td class="num">'+PG.fmtMoney(total(r))+'</td>' +
+    '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">Manage</a></td>' +
+  '</tr>';
+});
+
+html += '</tbody></table></div></div></div>';
+
+html += '<div class="pg-lightweight-note">Payment collection in the MVP is limited to two manual methods: Pay on Arrival and Payment Link. Card-on-file, refund automation, and payment gateway reconciliation are out of scope for this pilot.</div>';
+
+page.innerHTML = html;
+</script>
+</body>
+</html>
