@@ -139,6 +139,8 @@ input,select,textarea{font-family:inherit;}
 .pg-header-left{display:flex;align-items:center;gap:14px;}
 .pg-breadcrumb{font-size:12.5px;color:var(--pg-gray-600);display:flex;align-items:center;gap:6px;}
 .pg-breadcrumb b{color:var(--pg-gray-900);font-weight:600;}
+.pg-breadcrumb a{color:var(--pg-gray-600);text-decoration:none;}
+.pg-breadcrumb a:hover{color:var(--pg-primary);text-decoration:underline;}
 .pg-header-right{display:flex;align-items:center;gap:16px;}
 .pg-header-btn{
   border:1px solid var(--pg-border);background:#fff;color:var(--pg-gray-700);
@@ -282,6 +284,26 @@ textarea.form-control{resize:vertical;min-height:70px;}
 .pg-modal-close{cursor:pointer;color:var(--pg-gray-500);font-size:18px;background:none;border:none;}
 .pg-modal-body{padding:22px;}
 .pg-modal-footer{padding:16px 22px;border-top:1px solid var(--pg-border);display:flex;justify-content:flex-end;gap:10px;}
+
+/* ===== Custom Select ===== */
+.pg-select{position:relative;}
+.pg-select select.pg-select-native{position:absolute;inset:0;opacity:0;pointer-events:none;}
+.pg-select-trigger{width:100%;min-height:36px;padding:8px 34px 8px 12px;border:1px solid var(--pg-border);border-radius:6px;font-size:13px;color:var(--pg-gray-800);background:#fff;cursor:pointer;position:relative;user-select:none;display:flex;align-items:center;box-sizing:border-box;}
+.pg-select-trigger::after{content:"";position:absolute;right:13px;top:44%;width:7px;height:7px;border-right:2px solid var(--pg-gray-500);border-bottom:2px solid var(--pg-gray-500);transform:translateY(-50%) rotate(45deg);pointer-events:none;}
+.pg-select.open .pg-select-trigger{border-color:var(--pg-primary);box-shadow:0 0 0 3px rgba(27,132,255,.12);}
+.pg-select.disabled .pg-select-trigger{background:var(--pg-gray-100);color:var(--pg-gray-500);cursor:not-allowed;}
+.pg-select-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);max-height:260px;overflow-y:auto;z-index:60;display:none;padding:4px;}
+.pg-select-menu.show{display:block;}
+.pg-select-option{padding:8px 10px;font-size:12.8px;border-radius:5px;cursor:pointer;color:var(--pg-gray-800);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.pg-select-option:hover{background:var(--pg-gray-100);}
+.pg-select-option.selected{background:var(--pg-primary-light);color:var(--pg-primary);font-weight:600;}
+.pg-select-option .del{color:var(--pg-gray-400);font-weight:700;padding:0 4px;border-radius:4px;flex-shrink:0;}
+.pg-select-option .del:hover{color:var(--pg-danger);background:var(--pg-danger-light);}
+.pg-select-add{padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--pg-primary);cursor:pointer;border-top:1px solid var(--pg-gray-200);margin-top:4px;border-radius:5px;}
+.pg-select-add:hover{background:var(--pg-primary-light);}
+.pg-select-add-form{display:flex;gap:6px;padding:6px 4px;}
+.pg-select-add-form input{flex:1;padding:6px 8px;border:1px solid var(--pg-border);border-radius:5px;font-size:12.5px;}
+.pg-select-add-form button{padding:6px 10px;border-radius:5px;border:none;background:var(--pg-primary);color:#fff;font-size:12px;font-weight:600;cursor:pointer;}
 
 /* ===== Drawer ===== */
 /* Side panel for form-heavy actions (e.g. Adjust Inventory) — same open/close mechanics as

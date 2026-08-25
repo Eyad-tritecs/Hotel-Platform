@@ -15,10 +15,16 @@
 var page = PG.mount("hotel-profile", ["Hotel Management", "Hotel Profile"]);
 var s = PG.getState();
 var h = s.hotel;
+var R = PG.REF;
 
 function field(id, label, value, type){
   type = type || 'text';
   return '<div class="form-group"><label class="form-label">'+label+'</label><input class="form-control" id="'+id+'" type="'+type+'" value="'+PG.esc(value)+'"></div>';
+}
+function selectField(id, label, options, current){
+  return '<div class="form-group"><label class="form-label">'+label+'</label><select class="form-control" id="'+id+'">' +
+    options.map(function(o){ return '<option value="'+o+'"'+(o===current?' selected':'')+'>'+o+'</option>'; }).join('') +
+  '</select></div>';
 }
 
 var html = '';
@@ -28,11 +34,18 @@ html += '<div class="pg-page-head"><div><h1>Hotel Profile</h1><div class="sub">C
 html += '<div class="row"><div class="col" style="flex:2;">';
 html += '<div class="card"><div class="card-header"><h3>General Information</h3></div><div class="card-body"><div class="grid-2">' +
   field('f-name','Hotel Name', h.name) + field('f-code','Property Code', h.propertyCode) +
-  field('f-address','Address', h.address) + field('f-city','City', h.city) +
-  field('f-country','Country', h.country) + field('f-currency','Default Currency', h.currency) +
-  field('f-tz','Time Zone', h.timezone) + field('f-email','Contact Email', h.email, 'email') +
-  field('f-phone','Contact Phone', h.phone) +
-'</div></div></div>';
+  field('f-address','Address', h.address) +
+  selectField('f-country','Country', R.countries, h.country) +
+  selectField('f-city','City', R.citiesByCountry[h.country] || [h.city], h.city) +
+  selectField('f-currency','Default Currency', R.currencies, h.currency) +
+  selectField('f-tz','Time Zone', R.timezones, h.timezone) +
+  field('f-email','Contact Email', h.email, 'email') +
+'</div>' +
+'<div class="form-group"><label class="form-label">Contact Phone</label><div style="display:flex;gap:8px;">' +
+  '<div style="width:110px;"><select class="form-control" id="f-phone-code">' + R.phoneCodes.map(function(c){return '<option value="'+c+'"'+(c===h.phoneCode?' selected':'')+'>'+c+'</option>';}).join('') + '</select></div>' +
+  '<input class="form-control" id="f-phone" value="'+PG.esc(h.phone)+'" style="flex:1;">' +
+'</div></div>' +
+'</div></div>';
 
 html += '<div class="card"><div class="card-header"><h3>Check-in / Check-out</h3></div><div class="card-body"><div class="grid-2">' +
   field('f-cin','Check-in Time', h.checkInTime, 'time') + field('f-cout','Check-out Time', h.checkOutTime, 'time') +
@@ -49,6 +62,14 @@ html += '<div class="col"><div class="help-note">This prototype represents a sin
 html += '</div>';
 
 page.innerHTML = html;
+PG.enhanceSelects(page);
+
+document.getElementById('f-country').addEventListener('change', function(){
+  var cities = R.citiesByCountry[this.value] || [];
+  var citySel = document.getElementById('f-city');
+  citySel.innerHTML = cities.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('');
+  citySel.dispatchEvent(new Event('change'));
+});
 
 document.getElementById('saveBtn').addEventListener('click', function(){
   var st = PG.getState();
@@ -61,6 +82,7 @@ document.getElementById('saveBtn').addEventListener('click', function(){
   hh.currency = document.getElementById('f-currency').value;
   hh.timezone = document.getElementById('f-tz').value;
   hh.email = document.getElementById('f-email').value;
+  hh.phoneCode = document.getElementById('f-phone-code').value;
   hh.phone = document.getElementById('f-phone').value;
   hh.checkInTime = document.getElementById('f-cin').value;
   hh.checkOutTime = document.getElementById('f-cout').value;

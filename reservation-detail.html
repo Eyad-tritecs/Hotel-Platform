@@ -171,7 +171,7 @@ function renderPaymentActions(){
       html += '<div class="form-group"><div class="form-label">Payment Link</div>' +
         '<div style="display:flex;gap:6px;"><input class="form-control" id="linkUrlBox" value="'+r.paymentLinkUrl+'" readonly style="font-size:12px;">' +
         '<button class="btn btn-outline btn-sm" id="copyLinkBtn" title="Copy Link">Copy</button></div></div>';
-      html += '<div style="display:flex;gap:8px;"><button class="btn btn-outline btn-sm" style="flex:1;" id="sendLinkBtn">Send</button><button class="btn btn-outline btn-sm" style="flex:1;" id="resendLinkBtn">Resend</button></div>';
+      html += '<button class="btn btn-outline btn-block" id="resendLinkBtn">Resend</button>';
       html += '<div class="divider"></div>';
       html += '<div class="help-note" style="margin-bottom:4px;">Prototype actions — simulate the guest\'s payment outcome.</div>';
       html += '<button class="btn btn-success btn-block" id="markPaid">Simulate Payment Success</button>';
@@ -180,11 +180,9 @@ function renderPaymentActions(){
     } else if (r.paymentStatus==='Expired'){
       html += '<div class="help-note help-note-danger" style="margin-bottom:10px;">The payment link has expired.</div>';
       html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Regenerate Payment Link</button>';
-      html += '<button class="btn btn-outline btn-block" id="quickResendBtn">Resend</button>';
     } else if (r.paymentStatus==='Failed'){
       html += '<div class="help-note help-note-danger" style="margin-bottom:10px;">The payment attempt failed. The reservation remains pending according to hotel policy.</div>';
       html += '<button class="btn btn-primary btn-block" id="genLinkBtn">Generate New Link</button>';
-      html += '<button class="btn btn-outline btn-block" id="quickResendBtn">Resend Link</button>';
     } else if (r.paymentStatus==='Paid'){
       html += '<div class="text-sm muted">Payment complete. No further action needed.</div>';
     }
@@ -247,6 +245,7 @@ if (r && r.paymentMethod==='Payment Link'){
     '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'genLinkModal\')">Cancel</button><button class="btn btn-primary" id="genLinkSave">Generate Link</button></div>' +
   '</div>';
   document.body.appendChild(linkModal);
+  PG.enhanceSelects(linkModal);
 
   document.getElementById('genLinkSave').addEventListener('click', function(){
     var hours = parseInt(document.getElementById('link-expiry').value, 10);
@@ -337,6 +336,7 @@ function renderCancelModal(stage){
       '</div>';
       document.getElementById('keepResBtn').addEventListener('click', function(){ PG.closeModal('cancelModal'); });
       document.getElementById('confirmCancelBtn').addEventListener('click', doCancel);
+      PG.enhanceSelects(cancelModal);
     } else {
       cancelModal.innerHTML = '<div class="pg-modal">' +
         '<div class="pg-modal-header"><h3>Cancel Reservation '+r.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'cancelModal\'); location.reload();">&times;</button></div>' +

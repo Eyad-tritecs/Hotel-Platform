@@ -29,7 +29,10 @@ function f(fid, label, value, opts){
 var html = '';
 html += '<div class="pg-page-head"><div><h1>'+(id ? (readOnly ? 'View Room Type' : 'Edit Room Type') : 'Add Room Type')+'</h1>' +
   '<div class="sub">'+(rt ? rt.name : 'Create a new room type for Palestine Grand Hotel')+'</div></div>' +
-  '<div class="pg-actions"><a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a></div></div>';
+  '<div class="pg-actions">' +
+    (rt && !readOnly ? '<button class="btn btn-danger-outline" id="deleteBtn">Delete Room Type</button>' : '') +
+    '<a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a>' +
+  '</div></div>';
 
 html += '<div class="help-note" style="margin-bottom:20px;">Inventory is controlled at room-type level. Individual physical room assignment is outside the Initial MVP — sellable quantity below represents how many rooms of this type can be sold per night, not specific room numbers.</div>';
 
@@ -39,7 +42,7 @@ html += '<div class="card"><div class="card-body"><div class="grid-2">' +
   f('f-sellable','Sellable Quantity', rt ? rt.sellable : 1, {type:'number'}) +
   f('f-adults','Max Adults', rt ? rt.maxAdults : 2, {type:'number'}) +
   f('f-children','Max Children', rt ? rt.maxChildren : 0, {type:'number'}) +
-  f('f-bed','Bed Configuration', rt ? rt.bed : '') +
+  '<div class="form-group"><label class="form-label">Bed Configuration</label><div id="bed-select"></div></div>' +
 '</div>' +
 '<div class="form-group"><label class="form-label">Essential Description</label><textarea class="form-control" id="f-desc" style="min-height:70px;" '+(readOnly?'disabled':'')+'>'+PG.esc(rt ? rt.desc : '')+'</textarea></div>' +
 '<div class="form-check"><input type="checkbox" id="f-active" '+((!rt || rt.active) ? 'checked' : '')+' '+(readOnly?'disabled':'')+'><label class="form-label" style="margin:0;" for="f-active">Active</label></div>' +
@@ -49,6 +52,33 @@ html += '<div class="card"><div class="card-body"><div class="grid-2">' +
 '</div>';
 
 page.innerHTML = html;
+
+var bedValue = rt ? rt.bed : s.bedConfigs[0];
+if (readOnly){
+  document.getElementById('bed-select').textContent = bedValue;
+} else {
+  PG.renderManagedSelect(document.getElementById('bed-select'), {
+    value: bedValue,
+    getList: function(){ return PG.getState().bedConfigs; },
+    setList: function(list){ var st = PG.getState(); st.bedConfigs = list; PG.setState(st); },
+    onChange: function(v){ bedValue = v; },
+    placeholder: 'e.g. 2 Queen Beds'
+  });
+}
+
+if (rt && !readOnly){
+  document.getElementById('deleteBtn').addEventListener('click', function(){
+    if (!confirm('Delete "'+rt.name+'"? This cannot be undone and will remove its rates and rate plans.')) return;
+    var st = PG.getState();
+    st.roomTypes = st.roomTypes.filter(function(r){ return r.id!==rt.id; });
+    delete st.rates[rt.id];
+    st.ratePlans = st.ratePlans.filter(function(p){ return p.roomTypeId!==rt.id; });
+    PG.setState(st);
+    PG.addAudit('Room Type Deleted', rt.name + ' was deleted.');
+    PG.toast('Room type deleted.', 'warn');
+    setTimeout(function(){ location.href = 'room-types.html'; }, 500);
+  });
+}
 
 if (!readOnly){
   document.getElementById('saveBtn').addEventListener('click', function(){
@@ -61,7 +91,7 @@ if (!readOnly){
       sellable: parseInt(document.getElementById('f-sellable').value,10) || 0,
       maxAdults: parseInt(document.getElementById('f-adults').value,10) || 1,
       maxChildren: parseInt(document.getElementById('f-children').value,10) || 0,
-      bed: document.getElementById('f-bed').value,
+      bed: bedValue,
       desc: document.getElementById('f-desc').value,
       active: document.getElementById('f-active').checked
     };

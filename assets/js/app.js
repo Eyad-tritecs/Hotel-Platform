@@ -7,6 +7,24 @@
   var STORAGE_KEY = "pg_hotel_admin_state_v1";
   var TODAY = "2026-08-23"; // fixed "today" for reproducible demo data
 
+  var REF = {
+    countries: ["Palestine", "Jordan", "Israel", "Egypt", "Lebanon", "United Arab Emirates", "Saudi Arabia", "United States", "United Kingdom"],
+    citiesByCountry: {
+      "Palestine": ["Bethlehem", "Ramallah", "Jerusalem", "Nablus", "Hebron", "Gaza"],
+      "Jordan": ["Amman", "Petra", "Aqaba"],
+      "Israel": ["Tel Aviv", "Jerusalem", "Haifa"],
+      "Egypt": ["Cairo", "Alexandria", "Sharm El Sheikh"],
+      "Lebanon": ["Beirut"],
+      "United Arab Emirates": ["Dubai", "Abu Dhabi"],
+      "Saudi Arabia": ["Riyadh", "Jeddah", "Mecca"],
+      "United States": ["New York", "Los Angeles"],
+      "United Kingdom": ["London", "Manchester"]
+    },
+    currencies: ["USD", "EUR", "ILS", "JOD", "GBP", "AED", "SAR", "EGP"],
+    timezones: ["GMT+2 (Asia/Hebron)", "GMT+2 (Asia/Jerusalem)", "GMT+3 (Asia/Amman)", "GMT+1 (Europe/London)", "GMT+0 (UTC)", "GMT+4 (Asia/Dubai)"],
+    phoneCodes: ["+970", "+972", "+962", "+20", "+961", "+971", "+966", "+1", "+44"]
+  };
+
   /* ---------------------------------------------------------------- */
   /* Date helpers                                                      */
   /* ---------------------------------------------------------------- */
@@ -175,7 +193,8 @@
         city: "Bethlehem",
         country: "Palestine",
         address: "Manger Street 12, Bethlehem, Palestine",
-        phone: "+970 2 274 1000",
+        phoneCode: "+970",
+        phone: "2 274 1000",
         email: "reservations@palestinegrand.com",
         checkInTime: "14:00",
         checkOutTime: "12:00",
@@ -186,6 +205,8 @@
       },
       roomTypes: roomTypes,
       rates: rates,
+      bedConfigs: ["1 Queen Bed", "1 King Bed", "1 Queen + 2 Single Beds", "2 Single Beds", "2 Double Beds"],
+      mealPlans: ["Room Only", "Breakfast Included", "Half Board", "Full Board"],
       inventoryOverrides: {}, // key "roomTypeId|date" -> {stopSell:true, reason}
       dateAdjustments: {}, // key "roomTypeId|date" -> cumulative sellable-quantity delta for that date
       adjustments: [], // manual sellable-quantity adjustments
@@ -413,9 +434,19 @@
     return html;
   }
 
+  var CRUMB_LINKS = {
+    "Dashboard": "index.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
+    "Rates": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
+    "New Reservation": "new-reservation.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
+    "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
+    "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Users": "users.html",
+    "Roles": "roles.html", "Permissions": "permissions.html", "Audit": "audit.html"
+  };
   function renderHeader(crumbs, activeKey) {
     var crumbHtml = crumbs.map(function (c, i) {
-      return i === crumbs.length - 1 ? "<b>" + esc(c) + "</b>" : esc(c);
+      if (i === crumbs.length - 1) return "<b>" + esc(c) + "</b>";
+      var href = CRUMB_LINKS[c];
+      return href ? '<a href="' + href + '">' + esc(c) + "</a>" : esc(c);
     }).join(' <span>/</span> ');
     var html = '<header class="pg-header">';
     html += '<div class="pg-header-left"><div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
@@ -455,6 +486,156 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Custom Select — progressively enhances native <select class="form-control">   */
+  /* elements into a styled dropdown. The native <select> stays in the DOM         */
+  /* (hidden) so existing code that reads .value / listens for "change" keeps      */
+  /* working untouched — enhancement is purely visual.                            */
+  /* ---------------------------------------------------------------- */
+  function enhanceSelects(root) {
+    (root || document).querySelectorAll("select.form-control").forEach(function (sel) {
+      if (sel.closest(".pg-select")) return; // already enhanced
+      var wrap = document.createElement("div");
+      wrap.className = "pg-select" + (sel.disabled ? " disabled" : "");
+      sel.parentNode.insertBefore(wrap, sel);
+      wrap.appendChild(sel);
+      sel.classList.add("pg-select-native");
+      var trigger = document.createElement("div");
+      trigger.className = "pg-select-trigger";
+      var menu = document.createElement("div");
+      menu.className = "pg-select-menu";
+      wrap.appendChild(trigger);
+      wrap.appendChild(menu);
+
+      function renderOptions() {
+        menu.innerHTML = "";
+        Array.prototype.forEach.call(sel.options, function (opt, i) {
+          var row = document.createElement("div");
+          row.className = "pg-select-option" + (i === sel.selectedIndex ? " selected" : "");
+          row.textContent = opt.textContent;
+          row.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            sel.selectedIndex = i;
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+            closeMenu();
+          });
+          menu.appendChild(row);
+        });
+      }
+      function syncTrigger() {
+        var opt = sel.options[sel.selectedIndex];
+        trigger.textContent = opt ? opt.textContent : "";
+      }
+      function openMenu() {
+        if (sel.disabled) return;
+        document.querySelectorAll(".pg-select.open").forEach(function (w) { if (w !== wrap) { w.classList.remove("open"); w.querySelector(".pg-select-menu").classList.remove("show"); } });
+        renderOptions();
+        menu.classList.add("show");
+        wrap.classList.add("open");
+      }
+      function closeMenu() {
+        menu.classList.remove("show");
+        wrap.classList.remove("open");
+      }
+      trigger.addEventListener("click", function () {
+        wrap.classList.contains("open") ? closeMenu() : openMenu();
+      });
+      sel.addEventListener("change", syncTrigger);
+      document.addEventListener("click", function (e) {
+        if (!wrap.contains(e.target)) closeMenu();
+      });
+      syncTrigger();
+    });
+  }
+
+  /* Managed-list dropdown: a select-style control backed by an editable list of
+     strings (e.g. Bed Configurations, Meal Plans) with inline "+ Add New" and a
+     delete (x) per option. Renders into `container`; calls onChange(value) when
+     the selection changes, and persists list add/remove via getList/setList. */
+  function renderManagedSelect(container, opts) {
+    var current = opts.value;
+    var wrap = document.createElement("div");
+    wrap.className = "pg-select";
+    var trigger = document.createElement("div");
+    trigger.className = "pg-select-trigger";
+    var menu = document.createElement("div");
+    menu.className = "pg-select-menu";
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    container.innerHTML = "";
+    container.appendChild(wrap);
+
+    function syncTrigger() { trigger.textContent = current || "Select…"; }
+    function renderMenu() {
+      menu.innerHTML = "";
+      opts.getList().forEach(function (item) {
+        var row = document.createElement("div");
+        row.className = "pg-select-option" + (item === current ? " selected" : "");
+        var label = document.createElement("span");
+        label.textContent = item;
+        row.appendChild(label);
+        var del = document.createElement("span");
+        del.className = "del";
+        del.textContent = "×";
+        del.title = "Remove this option";
+        del.addEventListener("mousedown", function (e) {
+          e.preventDefault(); e.stopPropagation();
+          if (opts.getList().length <= 1) { toast("At least one option must remain.", "danger"); return; }
+          if (!confirm('Remove "' + item + '" from this list?')) return;
+          var list = opts.getList().filter(function (x) { return x !== item; });
+          opts.setList(list);
+          if (current === item) { current = list[0]; opts.onChange(current); syncTrigger(); }
+          renderMenu();
+        });
+        row.appendChild(del);
+        row.addEventListener("mousedown", function (e) {
+          if (e.target === del) return;
+          e.preventDefault();
+          current = item;
+          syncTrigger();
+          opts.onChange(current);
+          closeMenu();
+        });
+        menu.appendChild(row);
+      });
+      var addRow = document.createElement("div");
+      addRow.className = "pg-select-add";
+      addRow.textContent = "+ Add New…";
+      addRow.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        var formRow = document.createElement("div");
+        formRow.className = "pg-select-add-form";
+        formRow.innerHTML = '<input type="text" placeholder="' + (opts.placeholder || "New option") + '"><button type="button">Add</button>';
+        addRow.replaceWith(formRow);
+        var input = formRow.querySelector("input");
+        input.focus();
+        function commit() {
+          var v = input.value.trim();
+          if (!v) return;
+          var list = opts.getList();
+          if (list.indexOf(v) === -1) { list.push(v); opts.setList(list); }
+          current = v;
+          syncTrigger();
+          opts.onChange(current);
+          renderMenu();
+        }
+        formRow.querySelector("button").addEventListener("mousedown", function (e) { e.preventDefault(); commit(); });
+        input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+      });
+      menu.appendChild(addRow);
+    }
+    function openMenu() {
+      document.querySelectorAll(".pg-select.open").forEach(function (w) { if (w !== wrap) { w.classList.remove("open"); w.querySelector(".pg-select-menu").classList.remove("show"); } });
+      renderMenu();
+      menu.classList.add("show");
+      wrap.classList.add("open");
+    }
+    function closeMenu() { menu.classList.remove("show"); wrap.classList.remove("open"); }
+    trigger.addEventListener("click", function () { wrap.classList.contains("open") ? closeMenu() : openMenu(); });
+    document.addEventListener("click", function (e) { if (!wrap.contains(e.target)) closeMenu(); });
+    syncTrigger();
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Public API                                                         */
   /* ---------------------------------------------------------------- */
   global.PG = {
@@ -485,6 +666,9 @@
     toast: toast,
     mount: mount,
     openModal: openModal,
-    closeModal: closeModal
+    closeModal: closeModal,
+    enhanceSelects: enhanceSelects,
+    renderManagedSelect: renderManagedSelect,
+    REF: REF
   };
 })(window);

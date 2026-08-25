@@ -67,6 +67,7 @@ function legend(cls, label){
 }
 
 page.innerHTML = html;
+PG.enhanceSelects(page);
 
 function visibleRoomTypes(){
   return roomTypeFilter === 'all' ? s.roomTypes : s.roomTypes.filter(function(rt){return rt.id===roomTypeFilter;});
@@ -170,6 +171,7 @@ stopModal.innerHTML = '<div class="pg-modal">' +
   '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'stopModal\')">Cancel</button><button class="btn btn-danger" id="stopSave">Stop Sell</button></div>' +
 '</div>';
 document.body.appendChild(stopModal);
+PG.enhanceSelects(stopModal);
 
 function refreshStopMsg(){
   var rtName = s.roomTypes.find(function(r){return r.id===document.getElementById('stop-rt').value;}).name;
@@ -299,6 +301,7 @@ modal.innerHTML = '<div class="pg-drawer">' +
   '<div class="pg-drawer-footer"><button class="btn btn-light" onclick="PG.closeModal(\'adjModal\')">Cancel</button><button class="btn btn-primary" id="adjSave">Confirm Adjustment</button></div>' +
 '</div>';
 document.body.appendChild(modal);
+PG.enhanceSelects(modal);
 
 function refreshAdjCurrent(){
   var st = PG.getState();
