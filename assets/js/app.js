@@ -382,7 +382,13 @@
   /* ---------------------------------------------------------------- */
   /* Sidebar / Header shell                                             */
   /* ---------------------------------------------------------------- */
+  var CURRENT_ROLE = "Hotel Admin"; // this prototype's persona; "Platform Super Admin" would also see Hotels
+
   var NAV = [
+    { section: "Overview", items: [
+      { key: "dashboard", label: "Dashboard", href: "index.html", icon: "grid" },
+      { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" }
+    ]},
     { section: "Hotel Management", items: [
       { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
       { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
@@ -392,10 +398,15 @@
     { section: "Reservations", items: [
       { key: "reservations", label: "Reservations", href: "reservations.html", icon: "list" },
       { key: "new-reservation", label: "New Reservation", href: "new-reservation.html", icon: "plus" },
-      { key: "guided-journey", label: "Guided Journey", href: "demo-journey.html", icon: "play" }
+      { key: "guests", label: "Guests", href: "guests.html", icon: "user" }
     ]},
     { section: "Payments", items: [
       { key: "payments", label: "Payments", href: "payments.html", icon: "card" }
+    ]},
+    { section: "Reports", items: [
+      { key: "reservation-reports", label: "Reservation Reports", href: "reservation-reports.html", icon: "chart" },
+      { key: "inventory-reports", label: "Inventory Reports", href: "inventory-reports.html", icon: "chart" },
+      { key: "payment-reports", label: "Payment Reports", href: "payment-reports.html", icon: "chart" }
     ]},
     { section: "Settings", items: [
       { key: "policies", label: "Hotel Policies", href: "hotel-policies.html", icon: "shield" },
@@ -403,6 +414,7 @@
       { key: "payment-config", label: "Payment Configuration", href: "payment-configuration.html", icon: "settings" }
     ]},
     { section: "Administration", items: [
+      { key: "hotels", label: "Hotels", href: "hotels.html", icon: "building", superAdminOnly: true },
       { key: "users", label: "Users", href: "users.html", icon: "user" },
       { key: "roles", label: "Roles", href: "roles.html", icon: "layers" },
       { key: "permissions", label: "Permissions", href: "permissions.html", icon: "lock" },
@@ -412,6 +424,8 @@
 
   var ICONS = {
     building: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v16"/><path d="M14 21v-6h6v6"/><path d="M8 7h.01M11 7h.01M8 10h.01M11 10h.01M8 13h.01M11 13h.01"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/><path d="M2 20h20"/></svg>',
     bed: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/><path d="M3 18v2M21 18v2M3 12V8a1 1 0 0 1 1-1h6v5"/></svg>',
     tag: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.6 12 21.2 2.8 12 11.4 3.4H20a1 1 0 0 1 1 1v8.2Z"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/></svg>',
     calendar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
@@ -434,8 +448,10 @@
     html += '<div class="pg-sidebar-tenant"><div><div class="t-name">Palestine Grand Hotel</div><div class="t-role">Pilot Tenant &middot; Hotel Admin</div></div><span class="chev">&#9662;</span></div>';
     html += '<nav class="pg-nav">';
     NAV.forEach(function (sec) {
+      var visibleItems = sec.items.filter(function (it) { return !it.superAdminOnly || CURRENT_ROLE === "Platform Super Admin"; });
+      if (!visibleItems.length) return;
       html += '<div class="pg-nav-section"><div class="pg-nav-section-title">' + sec.section + "</div>";
-      sec.items.forEach(function (it) {
+      visibleItems.forEach(function (it) {
         html += '<a class="pg-nav-item' + (it.key === activeKey ? " active" : "") + '" href="' + it.href + '"><span class="ic">' + ICONS[it.icon] + '</span><span>' + it.label + "</span></a>";
       });
       html += "</div>";
@@ -447,9 +463,9 @@
   var CRUMB_LINKS = {
     "Dashboard": "index.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
     "Rates": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
-    "New Reservation": "new-reservation.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
-    "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
-    "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Users": "users.html",
+    "New Reservation": "new-reservation.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
+    "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
+    "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Hotels": "hotels.html", "Users": "users.html",
     "Roles": "roles.html", "Permissions": "permissions.html", "Audit": "audit.html"
   };
   function renderHeader(crumbs, activeKey) {
@@ -461,7 +477,9 @@
       return href ? '<a href="' + href + '">' + esc(c) + "</a>" : esc(c);
     }).join(' <span>/</span> ');
     var html = '<header class="pg-header">';
-    html += '<div class="pg-header-left"><div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
+    html += '<div class="pg-header-left">';
+    html += '<div class="pg-property-ctx" title="Current property — this pilot has a single hotel, so no switcher is shown">' + ICONS.building + '<span>Palestine Grand Hotel</span></div>';
+    html += '<div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
     html += '<div class="pg-header-right">';
     if (activeKey === "reservations") {
       html += '<a class="pg-header-btn" href="reservations-ar.html" title="Switch this screen to Arabic (RTL)">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';

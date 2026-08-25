@@ -39,28 +39,48 @@ html += '<div class="kpi"><div class="kpi-label">Pay on Arrival</div><div class=
 html += '<div class="kpi"><div class="kpi-label">Failed / Expired</div><div class="kpi-value">'+(counts['Failed']+counts['Expired'])+'</div><div class="kpi-note">Needs a new payment link</div></div>';
 html += '</div>';
 
-html += '<div class="card"><div class="card-header"><h3>All Payments</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+html += '<div class="card"><div class="card-header"><div><h3>All Payments</h3></div>' +
+  '<select class="form-control" id="payStatusFilter" style="max-width:220px;"><option value="All">All Statuses</option>' +
+    ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'].map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('') +
+  '</select>' +
+'</div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
   '<th>Reservation</th><th>Guest</th><th>Method</th><th>Status</th><th>Reservation Status</th><th class="num">Amount</th><th></th>' +
-  '</tr></thead><tbody>';
-
-s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).forEach(function(r){
-  var c = s.customers.find(function(x){return x.id===r.customerId;});
-  html += '<tr>' +
-    '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
-    '<td>'+PG.esc(c.name)+'</td>' +
-    '<td class="text-sm">'+r.paymentMethod+'</td>' +
-    '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
-    '<td>'+PG.statusBadge(r.status)+'</td>' +
-    '<td class="num">'+PG.fmtMoney(total(r))+'</td>' +
-    '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">Manage</a></td>' +
-  '</tr>';
-});
-
-html += '</tbody></table></div></div></div>';
+  '</tr></thead><tbody id="payBody"></tbody></table></div></div></div>';
 
 html += '<div class="pg-lightweight-note">Payment collection in the MVP is limited to two manual methods: Pay on Arrival and Payment Link. Card-on-file, refund automation, and payment gateway reconciliation are out of scope for this pilot.</div>';
 
 page.innerHTML = html;
+PG.enhanceSelects(page);
+
+function renderPayRows(){
+  var f = document.getElementById('payStatusFilter').value;
+  var rows = s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).filter(function(r){
+    if (f==='All') return true;
+    if (f==='Payment Required') return r.paymentStatus==='Payment Required' || r.paymentStatus==='Link Sent'; // "outstanding" grouping
+    return r.paymentStatus===f;
+  });
+  document.getElementById('payBody').innerHTML = rows.map(function(r){
+    var c = s.customers.find(function(x){return x.id===r.customerId;});
+    return '<tr>' +
+      '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
+      '<td>'+PG.esc(c.name)+'</td>' +
+      '<td class="text-sm">'+r.paymentMethod+'</td>' +
+      '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
+      '<td>'+PG.statusBadge(r.status)+'</td>' +
+      '<td class="num">'+PG.fmtMoney(total(r))+'</td>' +
+      '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">Manage</a></td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="7"><div class="empty-state">No payments match this filter.</div></td></tr>';
+}
+document.getElementById('payStatusFilter').addEventListener('change', renderPayRows);
+
+// Deep link, e.g. payments.html?status=Payment%20Required (also matches Link Sent — "outstanding")
+var qp = new URLSearchParams(location.search);
+if (qp.get('status')){
+  document.getElementById('payStatusFilter').value = qp.get('status');
+  document.getElementById('payStatusFilter').dispatchEvent(new Event('change'));
+}
+renderPayRows();
 </script>
 </body>
 </html>

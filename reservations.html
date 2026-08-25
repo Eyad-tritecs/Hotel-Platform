@@ -61,6 +61,16 @@ html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"
 page.innerHTML = html;
 PG.enhanceSelects(page);
 
+// Pre-filter from a deep link, e.g. reservations.html?arrival=2026-08-23&payStatus=Payment%20Required
+(function applyUrlFilters(){
+  var qp = new URLSearchParams(location.search);
+  if (qp.get('arrival')) document.getElementById('arrivalFilter').value = qp.get('arrival');
+  if (qp.get('departure')) document.getElementById('departureFilter').value = qp.get('departure');
+  if (qp.get('status')) { document.getElementById('statusFilter').value = qp.get('status'); document.getElementById('statusFilter').dispatchEvent(new Event('change')); }
+  if (qp.get('payStatus')) { document.getElementById('payFilter').value = qp.get('payStatus'); document.getElementById('payFilter').dispatchEvent(new Event('change')); }
+  if (qp.get('source')) { document.getElementById('sourceFilter').value = qp.get('source'); document.getElementById('sourceFilter').dispatchEvent(new Event('change')); }
+})();
+
 function render(){
   var q = document.getElementById('searchBox').value.trim().toLowerCase();
   var statusF = document.getElementById('statusFilter').value;

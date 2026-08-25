@@ -3,92 +3,222 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — Palestine Grand Hotel Admin</title>
+<title>Overview — Palestine Grand Hotel Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .sum-card{background:#fff;border:1px solid var(--pg-border);border-radius:var(--pg-radius);padding:16px 18px;box-shadow:var(--pg-shadow);cursor:pointer;transition:border-color .12s;}
+  .sum-card:hover{border-color:var(--pg-primary);}
+  .sum-card.static{cursor:default;}
+  .sum-card.static:hover{border-color:var(--pg-border);}
+  .sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:20px;}
+  @media (max-width:1300px){.sum-grid{grid-template-columns:repeat(3,1fr);}}
+  .alert-card{display:flex;gap:12px;padding:14px 16px;border:1px solid var(--pg-border);border-radius:8px;margin-bottom:10px;background:#fff;}
+  .alert-card.sev-danger{border-left:4px solid var(--pg-danger);}
+  .alert-card.sev-warning{border-left:4px solid var(--pg-warning);}
+  .alert-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+  .alert-icon.sev-danger{background:var(--pg-danger-light);color:var(--pg-danger);}
+  .alert-icon.sev-warning{background:var(--pg-warning-light);color:#a56a00;}
+  .alert-body{flex:1;}
+  .alert-title{font-weight:700;font-size:13px;color:var(--pg-gray-900);}
+  .alert-desc{font-size:12.3px;color:var(--pg-gray-600);margin-top:2px;}
+  .alert-actions{display:flex;gap:8px;margin-top:10px;}
+  .occ-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;}
+  .occ-day{border:1px solid var(--pg-border);border-radius:8px;padding:10px 8px;text-align:center;}
+  .occ-day .d{font-size:11px;color:var(--pg-gray-500);font-weight:600;}
+  .occ-day .pct{font-size:17px;font-weight:800;margin:4px 0 2px;}
+  .occ-day .rooms{font-size:11px;color:var(--pg-gray-600);}
+  .occ-day .flag{font-size:10px;font-weight:700;border-radius:20px;padding:2px 6px;display:inline-block;margin-top:5px;}
+  .quick-ops{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  @media (max-width:1000px){.quick-ops{grid-template-columns:repeat(2,1fr);}}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("dashboard", ["Dashboard"]);
+var page = PG.mount("dashboard", ["Overview", "Dashboard"]);
 var s = PG.getState();
+var T = PG.TODAY;
 
-function kpis() {
-  var active = s.reservations.filter(function(r){return r.status!=="Cancelled";});
-  var pendingPay = s.reservations.filter(function(r){return r.paymentStatus==="Link Sent" || r.paymentStatus==="Payment Required";});
-  var totalRoomsSellable = s.roomTypes.reduce(function(a,r){return a+r.sellable;},0);
-  var bookedToday = s.roomTypes.reduce(function(a,rt){return a + PG.bookedCount(s, rt.id, PG.TODAY);},0);
-  var occPct = Math.round((bookedToday/totalRoomsSellable)*100);
-  var revenue = active.filter(function(r){return r.paymentStatus==="Paid";}).reduce(function(sum,r){
-    return sum + reservationTotal(r);
-  },0);
-  return {active: active.length, pendingPay: pendingPay.length, occPct: occPct, revenue: revenue, bookedToday: bookedToday, totalRoomsSellable: totalRoomsSellable};
+function cust(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
+function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
+function reservationTotal(r){
+  var n = PG.dateRange(r.checkIn, r.checkOut), t=0;
+  r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
+  return t;
 }
+function active(list){ return list.filter(function(r){return r.status!=='Cancelled';}); }
 
-function reservationTotal(r) {
-  var nights = PG.dateRange(r.checkIn, r.checkOut);
-  var total = 0;
-  r.rooms.forEach(function(room){
-    nights.forEach(function(d){ total += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
+var arrivalsToday = active(s.reservations).filter(function(r){return r.checkIn===T;});
+var arrivalsPendingPay = arrivalsToday.filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';});
+var departuresToday = active(s.reservations).filter(function(r){return r.checkOut===T;});
+var activeStays = active(s.reservations).filter(function(r){return r.checkIn<=T && r.checkOut>T;});
+var totalSellableTonight = s.roomTypes.reduce(function(a,rt){return a+PG.computeAvailability(s,rt.id,T).sellable;},0);
+var bookedTonight = s.roomTypes.reduce(function(a,rt){return a+PG.bookedCount(s,rt.id,T);},0);
+var occPct = totalSellableTonight ? Math.round(bookedTonight/totalSellableTonight*100) : 0;
+var availByType = s.roomTypes.map(function(rt){return {rt:rt, a:PG.computeAvailability(s,rt.id,T)};});
+var availableTonight = availByType.reduce(function(a,x){return a+x.a.available;},0);
+var typesWithAvail = availByType.filter(function(x){return x.a.available>0;}).length;
+var pendingPayList = active(s.reservations).filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';});
+var pendingPayAmount = pendingPayList.reduce(function(a,r){return a+reservationTotal(r);},0);
+
+// ---- Attention Required (real, computed) ----
+var alerts = [];
+var nowMs = new Date(PG.nowIso()+':00').getTime();
+active(s.reservations).forEach(function(r){
+  if (r.paymentStatus==='Link Sent' && r.paymentLinkExpiresAt){
+    var expMs = new Date(r.paymentLinkExpiresAt+':00').getTime();
+    var hoursLeft = (expMs-nowMs)/3600000;
+    if (hoursLeft>0 && hoursLeft<=6){
+      var mins = Math.round(hoursLeft*60);
+      alerts.push({sev:'danger', icon:'&#9200;', title:'Payment Link Expiring', desc: r.id+' — '+cust(r).name+' — expires in '+(mins>=60?Math.round(mins/60)+'h':mins+'m'),
+        primary:{label:'View Payment', href:'reservation-detail.html?id='+r.id}, dismissable:false});
+    }
+  }
+  if (r.paymentStatus==='Failed'){
+    alerts.push({sev:'danger', icon:'&#9888;', title:'Failed Payment Needs Follow-up', desc: r.id+' — '+cust(r).name+' — payment attempt failed',
+      primary:{label:'View Reservation', href:'reservation-detail.html?id='+r.id}, dismissable:false});
+  }
+});
+PG.dateRange(T, PG.addDays(T,7)).forEach(function(d){
+  s.roomTypes.forEach(function(rt){
+    var a = PG.computeAvailability(s, rt.id, d);
+    if (a.stopSell){
+      alerts.push({sev:'warning', icon:'&#128683;', title:'Room Type Under Stop Sell', desc: rt.name+' — '+PG.fmtDateShort(d)+' — sales are blocked',
+        primary:{label:'View Inventory', href:'availability-inventory.html'}, dismissable:true, dedupeKey:'stop-'+rt.id});
+    } else if (a.available>0 && a.available<=2){
+      alerts.push({sev:'warning', icon:'&#9888;', title:'Low Availability', desc: rt.name+' — '+PG.fmtDateShort(d)+' — '+a.available+' room'+(a.available===1?'':'s')+' remaining',
+        primary:{label:'View Inventory', href:'availability-inventory.html'}, dismissable:true, dedupeKey:'low-'+rt.id});
+    }
   });
-  return total;
-}
-
-var k = kpis();
+});
+// Keep alerts readable — one low/stop-sell alert per room type, not one per date.
+var seenKeys = {};
+alerts = alerts.filter(function(a){ if(!a.dedupeKey) return true; if(seenKeys[a.dedupeKey]) return false; seenKeys[a.dedupeKey]=true; return true; });
+s.reservations.filter(function(r){return r.status==='Draft';}).forEach(function(r){
+  var ageH = (nowMs - new Date(r.createdAt+':00').getTime())/3600000;
+  if (ageH>24){
+    alerts.push({sev:'warning', icon:'&#128221;', title:'Stale Draft Reservation', desc: r.id+' — '+cust(r).name+' — not updated for over 24 hours',
+      primary:{label:'Open Draft', href:'reservation-detail.html?id='+r.id}, dismissable:false});
+  }
+});
 
 var html = '';
-html += '<div class="pg-page-head"><div><h1>Welcome back, Hotel Admin</h1><div class="sub">Palestine Grand Hotel &middot; Bethlehem, Palestine &middot; ' + PG.fmtDate(PG.TODAY) + '</div></div>' +
-  '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a><a class="btn btn-outline" href="reservations.html">View Reservations</a></div></div>';
+// Header
+html += '<div class="pg-page-head"><div><h1>Overview</h1><div class="sub">Palestine Grand Hotel &middot; Business date '+PG.fmtDate(T)+' &middot; Last refreshed <span id="refreshedAt"></span></div></div>' +
+  '<div class="pg-actions">' +
+    '<button class="btn btn-outline" id="refreshBtn">&#8635; Refresh</button>' +
+    '<a class="btn btn-outline" href="availability-inventory.html">Search Availability</a>' +
+    '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
+  '</div></div>';
 
-html += '<div class="card" style="background:linear-gradient(135deg,var(--pg-primary-light),#fff);border-color:#cfe6ff;"><div class="card-body" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">' +
-  '<div><h3 style="font-size:15px;margin-bottom:4px;">New here? Take the Guided Journey</h3><div class="muted text-sm">A clickable, step-by-step walkthrough of one real booking &mdash; from WhatsApp request to payment to cancellation.</div></div>' +
-  '<a class="btn btn-primary" href="demo-journey.html">Start Guided Journey &rarr;</a>' +
-'</div></div>';
+// Summary cards
+function sumCard(id, label, value, note, href){
+  return '<div class="sum-card'+(href?'':' static')+'" '+(href?'onclick="location.href=\''+href+'\'"':'')+'><div class="kpi-label">'+label+'</div><div class="kpi-value" style="font-size:22px;">'+value+'</div><div class="kpi-note">'+note+'</div></div>';
+}
+html += '<div class="sum-grid">' +
+  sumCard('a1','Arrivals Today', arrivalsToday.length, arrivalsPendingPay.length+' pending payment', 'reservations.html?arrival='+T) +
+  sumCard('a2','Departures Today', departuresToday.length, 'From reservation departure dates', null) +
+  sumCard('a3','Active Stays', activeStays.length, 'Stay dates include today', null) +
+  sumCard('a4','Occupancy Tonight', occPct+'%', bookedTonight+' of '+totalSellableTonight+' rooms committed', null) +
+  sumCard('a5','Pending Payments', pendingPayList.length, PG.fmtMoney(pendingPayAmount)+' outstanding', 'payments.html?status=Payment Required') +
+  sumCard('a6','Available Tonight', availableTonight+' rooms', 'Across '+typesWithAvail+' room type'+(typesWithAvail===1?'':'s'), 'availability-inventory.html') +
+'</div>';
 
-html += '<div class="grid-4">';
-html += '<div class="kpi"><div class="kpi-label">Active Reservations</div><div class="kpi-value">' + k.active + '</div><div class="kpi-note">Excludes cancelled</div></div>';
-html += '<div class="kpi"><div class="kpi-label">Today\'s Occupancy</div><div class="kpi-value">' + k.occPct + '%</div><div class="kpi-note">' + k.bookedToday + ' of ' + k.totalRoomsSellable + ' rooms booked</div></div>';
-html += '<div class="kpi"><div class="kpi-label">Awaiting Payment</div><div class="kpi-value">' + k.pendingPay + '</div><div class="kpi-note">Link sent or payment required</div></div>';
-html += '<div class="kpi"><div class="kpi-label">Confirmed Revenue</div><div class="kpi-value">' + PG.fmtMoney(k.revenue) + '</div><div class="kpi-note">From paid reservations</div></div>';
-html += '</div>';
+// Attention Required
+html += '<div class="card"><div class="card-header"><h3>Attention Required</h3><div class="desc">'+alerts.length+' item'+(alerts.length===1?'':'s')+' need action</div></div><div class="card-body" id="alertsBody"></div></div>';
 
-html += '<div class="row">';
-html += '<div class="col" style="flex:2;">';
-html += '<div class="card"><div class="card-header"><div><h3>Recent Reservations</h3><div class="desc">Latest bookings across all sources</div></div><a class="btn btn-outline btn-sm" href="reservations.html">View all</a></div>';
-html += '<div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Reservation</th><th>Guest</th><th>Dates</th><th>Status</th><th>Payment</th></tr></thead><tbody>';
-s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).slice(0,6).forEach(function(r){
-  var cust = s.customers.find(function(c){return c.id===r.customerId;});
+// Today's Arrivals
+html += '<div class="card"><div class="card-header"><h3>Today\'s Arrivals</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th>Reservation</th><th>Guest</th><th>Arrival</th><th>Rooms</th><th>Source</th><th>Reservation Status</th><th>Payment Status</th><th class="num">Total</th><th></th>' +
+  '</tr></thead><tbody>';
+if (!arrivalsToday.length){
+  html += '<tr><td colspan="9"><div class="empty-state">No arrivals scheduled for today.</div></td></tr>';
+} else {
+  arrivalsToday.forEach(function(r){
+    html += '<tr>' +
+      '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
+      '<td>'+PG.esc(cust(r).name)+'</td><td>'+PG.fmtDateShort(r.checkIn)+'</td><td>'+roomCount(r)+'</td><td class="text-sm">'+r.source+'</td>' +
+      '<td>'+PG.statusBadge(r.status)+'</td><td>'+PG.payBadge(r.paymentStatus)+'</td><td class="num">'+PG.fmtMoney(reservationTotal(r))+'</td>' +
+      '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">View</a></td>' +
+    '</tr>';
+  });
+}
+html += '</tbody></table></div></div></div>';
+
+// Upcoming Occupancy
+html += '<div class="card"><div class="card-header"><h3>Upcoming Occupancy</h3><div class="desc">Next 7 nights, all room types combined</div></div><div class="card-body"><div class="occ-grid">';
+PG.dateRange(T, PG.addDays(T,7)).forEach(function(d){
+  var cap=0, booked=0, anyStop=false, anyLow=false;
+  s.roomTypes.forEach(function(rt){
+    var a = PG.computeAvailability(s, rt.id, d);
+    cap += a.sellable; booked += a.booked;
+    if (a.stopSell) anyStop = true;
+    else if (a.available<=2) anyLow = true;
+  });
+  var pct = cap ? Math.round(booked/cap*100) : 0;
+  var avail = cap-booked;
+  html += '<div class="occ-day"><div class="d">'+PG.fmtDateShort(d)+'</div><div class="pct">'+pct+'%</div><div class="rooms">'+avail+' avail.</div>' +
+    (anyStop ? '<div class="flag" style="background:var(--pg-danger-light);color:var(--pg-danger);">Stop Sell</div>' : (anyLow ? '<div class="flag" style="background:var(--pg-warning-light);color:#a56a00;">Low</div>' : '')) +
+  '</div>';
+});
+html += '</div></div></div>';
+
+// Recent Reservations
+html += '<div class="card"><div class="card-header"><h3>Recent Reservations</h3><a class="btn btn-outline btn-sm" href="reservations.html">View all</a></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th>Reservation</th><th>Guest</th><th>Stay Dates</th><th>Rooms</th><th>Status</th><th>Payment</th><th>Created</th>' +
+  '</tr></thead><tbody>';
+s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).slice(0,5).forEach(function(r){
   html += '<tr onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">' +
-    '<td class="row-link">'+r.id+'</td><td>'+PG.esc(cust.name)+'</td>' +
-    '<td>'+PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut)+'</td>' +
-    '<td>'+PG.statusBadge(r.status)+'</td><td>'+PG.payBadge(r.paymentStatus)+'</td></tr>';
+    '<td class="row-link">'+r.id+'</td><td>'+PG.esc(cust(r).name)+'</td>' +
+    '<td>'+PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut)+'</td><td>'+roomCount(r)+'</td>' +
+    '<td>'+PG.statusBadge(r.status)+'</td><td>'+PG.payBadge(r.paymentStatus)+'</td>' +
+    '<td class="text-sm">'+PG.fmtDate(r.createdAt.slice(0,10),{month:'short',day:'numeric'})+' '+r.createdAt.slice(11)+'</td>' +
+  '</tr>';
 });
 html += '</tbody></table></div></div></div>';
-html += '</div>';
 
-html += '<div class="col">';
-html += '<div class="card"><div class="card-header"><h3>Room Type Snapshot</h3></div><div class="card-body">';
-s.roomTypes.forEach(function(rt){
-  var a = PG.computeAvailability(s, rt.id, PG.TODAY);
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--pg-gray-200);">' +
-    '<div><div style="font-weight:600;font-size:13px;">'+rt.name+'</div><div class="muted text-sm">'+PG.fmtMoney(rt.baseRate)+' / night</div></div>' +
-    '<div class="avail-cell ' + (a.available===0?'avail-stop':(a.available<=2?'avail-low':'avail-ok')) + '" style="min-width:70px;">'+a.available+' avail.</div></div>';
-});
-html += '<a class="btn btn-outline btn-block" style="margin-top:14px;" href="availability-inventory.html">Manage Availability</a>';
-html += '</div></div>';
-
-html += '<div class="card"><div class="card-header"><h3>Quick Links</h3></div><div class="card-body" style="display:flex;flex-direction:column;gap:8px;">' +
-  '<a class="btn btn-light btn-block" href="hotel-profile.html">Hotel Profile</a>' +
-  '<a class="btn btn-light btn-block" href="rates.html">Rates</a>' +
-  '<a class="btn btn-light btn-block" href="payments.html">Payments</a>' +
-  '<a class="btn btn-light btn-block" href="audit.html">Audit Log</a>' +
-  '<a class="btn btn-light btn-block" href="reservations-ar.html">Arabic (RTL) Preview</a>' +
-  '</div></div>';
-html += '</div></div>';
+// Quick Operations
+html += '<div class="card"><div class="card-header"><h3>Quick Operations</h3></div><div class="card-body"><div class="quick-ops">' +
+  '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
+  '<a class="btn btn-light" href="availability-inventory.html">Search Availability</a>' +
+  '<a class="btn btn-light" href="operations-calendar.html">Open Operations Calendar</a>' +
+  '<a class="btn btn-light" href="availability-inventory.html">Adjust Inventory</a>' +
+  '<a class="btn btn-light" href="availability-inventory.html">Stop Sell</a>' +
+  '<a class="btn btn-light" href="payments.html?status=Payment Required">View Pending Payments</a>' +
+  '<a class="btn btn-light" href="reservations.html?arrival='+T+'">View Today\'s Arrivals</a>' +
+  '<a class="btn btn-light" href="demo-journey.html">Guided Journey Demo</a>' +
+'</div></div></div>';
 
 page.innerHTML = html;
+
+function renderAlerts(){
+  var box = document.getElementById('alertsBody');
+  if (!alerts.length){ box.innerHTML = '<div class="empty-state"><div class="ic">&#10003;</div>Nothing needs attention right now.</div>'; return; }
+  box.innerHTML = alerts.map(function(a, i){
+    return '<div class="alert-card sev-'+a.sev+'" data-i="'+i+'">' +
+      '<div class="alert-icon sev-'+a.sev+'">'+a.icon+'</div>' +
+      '<div class="alert-body"><div class="alert-title">'+a.title+'</div><div class="alert-desc">'+a.desc+'</div>' +
+        '<div class="alert-actions"><a class="btn btn-outline btn-sm" href="'+a.primary.href+'">'+a.primary.label+'</a>' +
+        (a.dismissable ? '<button class="btn btn-light btn-sm dismiss-alert" data-i="'+i+'">Dismiss</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  box.querySelectorAll('.dismiss-alert').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      alerts.splice(+btn.dataset.i, 1);
+      renderAlerts();
+    });
+  });
+}
+renderAlerts();
+
+function stampRefreshed(){ document.getElementById('refreshedAt').textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+stampRefreshed();
+document.getElementById('refreshBtn').addEventListener('click', function(){ stampRefreshed(); PG.toast('Dashboard refreshed.', 'success'); });
 </script>
 </body>
 </html>
