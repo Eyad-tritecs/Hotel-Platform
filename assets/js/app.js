@@ -8,11 +8,10 @@
   var TODAY = "2026-08-23"; // fixed "today" for reproducible demo data
 
   var REF = {
-    countries: ["Palestine", "Jordan", "Israel", "Egypt", "Lebanon", "United Arab Emirates", "Saudi Arabia", "United States", "United Kingdom"],
+    countries: ["Palestine", "Jordan", "Egypt", "Lebanon", "United Arab Emirates", "Saudi Arabia", "United States", "United Kingdom"],
     citiesByCountry: {
       "Palestine": ["Bethlehem", "Ramallah", "Jerusalem", "Nablus", "Hebron", "Gaza"],
       "Jordan": ["Amman", "Petra", "Aqaba"],
-      "Israel": ["Tel Aviv", "Jerusalem", "Haifa"],
       "Egypt": ["Cairo", "Alexandria", "Sharm El Sheikh"],
       "Lebanon": ["Beirut"],
       "United Arab Emirates": ["Dubai", "Abu Dhabi"],
@@ -20,9 +19,9 @@
       "United States": ["New York", "Los Angeles"],
       "United Kingdom": ["London", "Manchester"]
     },
-    currencies: ["USD", "EUR", "ILS", "JOD", "GBP", "AED", "SAR", "EGP"],
-    timezones: ["GMT+2 (Asia/Hebron)", "GMT+2 (Asia/Jerusalem)", "GMT+3 (Asia/Amman)", "GMT+1 (Europe/London)", "GMT+0 (UTC)", "GMT+4 (Asia/Dubai)"],
-    phoneCodes: ["+970", "+972", "+962", "+20", "+961", "+971", "+966", "+1", "+44"]
+    currencies: ["USD", "EUR", "JOD", "GBP", "AED", "SAR", "EGP"],
+    timezones: ["GMT+2 (Asia/Hebron)", "GMT+3 (Asia/Amman)", "GMT+1 (Europe/London)", "GMT+0 (UTC)", "GMT+4 (Asia/Dubai)"],
+    phoneCodes: ["+970", "+962", "+20", "+961", "+971", "+966", "+1", "+44"]
   };
 
   /* ---------------------------------------------------------------- */
@@ -238,7 +237,18 @@
       return seed;
     }
     try {
-      return JSON.parse(raw);
+      var parsed = JSON.parse(raw);
+      // Migration: browsers with state saved before a field was introduced (e.g.
+      // bedConfigs, mealPlans, dateAdjustments) would otherwise crash every page
+      // that reads it. Backfill any missing top-level keys from a fresh seed
+      // without touching the user's existing reservations/edits.
+      var fresh = buildSeed();
+      var migrated = false;
+      Object.keys(fresh).forEach(function (k) {
+        if (!(k in parsed)) { parsed[k] = fresh[k]; migrated = true; }
+      });
+      if (migrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      return parsed;
     } catch (e) {
       var seed2 = buildSeed();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seed2));
@@ -444,7 +454,9 @@
   };
   function renderHeader(crumbs, activeKey) {
     var crumbHtml = crumbs.map(function (c, i) {
-      if (i === crumbs.length - 1) return "<b>" + esc(c) + "</b>";
+      var isFirst = i === 0, isLast = i === crumbs.length - 1;
+      if (isLast) return "<b>" + esc(c) + "</b>";
+      if (isFirst) return esc(c); // section label — never a link
       var href = CRUMB_LINKS[c];
       return href ? '<a href="' + href + '">' + esc(c) + "</a>" : esc(c);
     }).join(' <span>/</span> ');

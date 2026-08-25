@@ -32,7 +32,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("reservations", ["Reservations", "Reservation Detail"]);
+var page = PG.mount("reservations", ["Reservations", "Reservations", "Reservation Detail"]);
 var s = PG.getState();
 var id = new URLSearchParams(location.search).get('id');
 var r = s.reservations.find(function(x){return x.id===id;});
