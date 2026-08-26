@@ -265,6 +265,11 @@ function init() {
   }).join('');
   setTimeout(renderTable, 220);
 
+  // Deep-link support, e.g. physical-rooms.html?room=std-101 — opens straight to that
+  // room's Details drawer (used by Operations Calendar's "View Room" quick action).
+  var deepLinkRoomId = new URLSearchParams(location.search).get('room');
+  if (deepLinkRoomId) setTimeout(function () { if (roomById(deepLinkRoomId)) openDetailsDrawer(deepLinkRoomId); }, 260);
+
   /* ================================================================ */
   /* Add / Edit drawer                                                  */
   /* ================================================================ */

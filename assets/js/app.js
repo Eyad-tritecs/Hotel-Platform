@@ -101,7 +101,8 @@
     var customers = [
       { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian", notes: "" },
       { id: "cus-2", name: "Sara Ali", phone: "+970 56 234 5678", email: "sara.ali@example.com", nationality: "Palestinian", notes: "Prefers high floor." },
-      { id: "cus-3", name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian", notes: "" }
+      { id: "cus-3", name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian", notes: "" },
+      { id: "cus-4", name: "Layla Nasser", phone: "+970 59 876 5432", email: "layla.nasser@example.com", nationality: "Palestinian", notes: "" }
     ];
 
     var reservations = [
@@ -179,6 +180,28 @@
           { ts: addDays(TODAY, -1) + "T08:08", text: "Payment Link sent via Email." },
           { ts: TODAY + "T08:07", text: "Payment link expired without payment." }
         ]
+      },
+      {
+        // Deliberately unassigned: no roomAssignment exists for this item, demonstrating
+        // the Operations Calendar's Unassigned Reservations lane (and its "arriving
+        // tomorrow" urgency) with zero extra setup.
+        id: "RES-10248",
+        customerId: "cus-4",
+        source: "Phone",
+        createdAt: TODAY + "T09:30",
+        checkIn: addDays(TODAY, 1),
+        checkOut: addDays(TODAY, 3),
+        status: "Pending Payment",
+        paymentStatus: "Payment Required",
+        paymentMethod: "Pay on Arrival",
+        rooms: [{ id: "RES-10248-itm-1", roomTypeId: "std", qty: 1, adults: 2, children: 0 }],
+        taxAmount: 0,
+        feeAmount: 0,
+        notes: "",
+        activity: [
+          { ts: TODAY + "T09:30", text: "Reservation created via Phone by Hotel Admin." },
+          { ts: TODAY + "T09:31", text: "No physical room assigned at booking time — added to the Unassigned queue." }
+        ]
       }
     ];
 
@@ -231,9 +254,9 @@
     // conflict — it overlaps asn-5's tentative hold on the same room — left in as a
     // realistic example of the kind of clash a future room-assignment UI must surface.
     var roomBlocks = [
-      { id: "blk-1", propertyId: PROPERTY_ID, physicalRoomId: "std-204", startDate: addDays(TODAY, -2), endDate: addDays(TODAY, 3), type: "Maintenance", reason: "Plumbing leak repair", notes: "Awaiting plumber parts.", createdAt: addDays(TODAY, -2) + "T09:00", createdBy: "Hotel Admin" },
-      { id: "blk-2", propertyId: PROPERTY_ID, physicalRoomId: "dlx-306", startDate: TODAY, endDate: addDays(TODAY, 45), type: "Maintenance", reason: "HVAC replacement", notes: "Extended out-of-service window.", createdAt: TODAY + "T08:30", createdBy: "Hotel Admin" },
-      { id: "blk-3", propertyId: PROPERTY_ID, physicalRoomId: "fam-402", startDate: addDays(TODAY, 1), endDate: addDays(TODAY, 3), type: "Maintenance", reason: "Deep cleaning scheduled", notes: "Conflicts with the tentative hold for RES-10247 on the same room — needs manual resolution.", createdAt: addDays(TODAY, -1) + "T07:50", createdBy: "Hotel Admin" }
+      { id: "blk-1", propertyId: PROPERTY_ID, physicalRoomId: "std-204", startDate: addDays(TODAY, -2), endDate: addDays(TODAY, 3), type: "Out of Order", reason: "Plumbing leak repair", notes: "Awaiting plumber parts.", createdAt: addDays(TODAY, -2) + "T09:00", createdBy: "Hotel Admin" },
+      { id: "blk-2", propertyId: PROPERTY_ID, physicalRoomId: "dlx-306", startDate: TODAY, endDate: addDays(TODAY, 45), type: "Out of Service", reason: "HVAC replacement", notes: "Extended out-of-service window.", createdAt: TODAY + "T08:30", createdBy: "Hotel Admin" },
+      { id: "blk-3", propertyId: PROPERTY_ID, physicalRoomId: "fam-402", startDate: addDays(TODAY, 1), endDate: addDays(TODAY, 3), type: "Management Hold", reason: "Deep cleaning scheduled", notes: "Conflicts with the tentative hold for RES-10247 on the same room — needs manual resolution.", createdAt: addDays(TODAY, -1) + "T07:50", createdBy: "Hotel Admin" }
     ];
 
     return {
@@ -268,7 +291,7 @@
       adjustments: [], // manual sellable-quantity adjustments
       customers: customers,
       reservations: reservations,
-      nextResId: 10248,
+      nextResId: 10249,
       ratePlans: [
         { id: "rp1", name: "Flexible Room Only", roomTypeId: "std", mealPlan: "Room Only", startDate: TODAY, endDate: addDays(TODAY, 90), price: 100, currency: "USD", active: true },
         { id: "rp2", name: "Flexible + Breakfast", roomTypeId: "dlx", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 120, currency: "USD", active: true },
@@ -278,7 +301,8 @@
         { ts: TODAY + "T08:05", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10247 created via Travel Agency." },
         { ts: TODAY + "T08:07", actor: "Hotel Admin", action: "Payment Link Sent", details: "Payment link sent for RES-10247." },
         { ts: TODAY + "T09:14", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10245 created via Phone." },
-        { ts: TODAY + "T11:40", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10246 created via WhatsApp." }
+        { ts: TODAY + "T11:40", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10246 created via WhatsApp." },
+        { ts: TODAY + "T09:30", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10248 created via Phone. No physical room assigned." }
       ]
     };
   }

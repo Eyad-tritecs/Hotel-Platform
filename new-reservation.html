@@ -113,7 +113,8 @@ var PAGE_SIZE = custState.pageSize;
 
 // Guided demo pre-fill — launched from the Guided Journey page for the Ahmad Khalil / WhatsApp scenario.
 var demoTaxOverride = null;
-if (new URLSearchParams(location.search).get('demo') === 'ahmad-whatsapp'){
+var entryParams = new URLSearchParams(location.search);
+if (entryParams.get('demo') === 'ahmad-whatsapp'){
   wizard.source = 'WhatsApp';
   wizard.customerMode = 'existing';
   wizard.customerId = 'cus-1';
@@ -125,8 +126,26 @@ if (new URLSearchParams(location.search).get('demo') === 'ahmad-whatsapp'){
   ];
   wizard.paymentMethod = 'Payment Link';
   demoTaxOverride = 50;
+} else if (entryParams.get('rt')){
+  // Entry from Operations Calendar: clicking an empty room/date cell — prefill room type,
+  // date, and (if still eligible when this page loads) the exact room that was clicked.
+  var prefRt = entryParams.get('rt');
+  var prefDate = entryParams.get('date');
+  if (prefDate){ wizard.checkIn = prefDate; wizard.checkOut = PG.addDays(prefDate, 1); }
+  wizard.items = [Object.assign({roomTypeId:prefRt, ratePlanId: ratePlansFor(prefRt)[0].id, qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor(prefRt,1))];
 }
 recomputeAssignments();
+if (entryParams.get('room') && wizard.items[0] && wizard.items[0].assignedRoomIds.indexOf(entryParams.get('room'))===-1){
+  // The clicked room wasn't the engine's top pick (or has since become ineligible) —
+  // ask it to keep that exact room if it's still eligible, falling back otherwise.
+  var forcedResult = PG.autoAssignRoomsForItem(s, {
+    roomTypeId: wizard.items[0].roomTypeId, checkIn: wizard.checkIn, checkOut: wizard.checkOut, qty: 1,
+    requireAccessibility: [], bedConfiguration: null, requireConnecting: false,
+    keepRoomIds: [entryParams.get('room')], excludeRoomIds: []
+  });
+  wizard.items[0].assignedRoomIds = forcedResult.assignedRoomIds;
+  wizard.items[0].assignmentShortfall = forcedResult.shortfall;
+}
 var currentStep = 1;
 
 var html = '';

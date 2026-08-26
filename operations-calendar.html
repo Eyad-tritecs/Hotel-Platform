@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operations Calendar — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .opc-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .opc-toolbar-left, .opc-toolbar-right{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .opc-toolbar input[type="date"]{width:150px;}
+  .opc-search{width:230px;}
+  .opc-legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:11.5px;color:var(--pg-gray-600);margin-bottom:12px;}
+  .opc-legend-item{display:flex;align-items:center;gap:6px;white-space:nowrap;}
+  .opc-legend-swatch{width:16px;height:11px;border-radius:3px;flex-shrink:0;}
+  .opc-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+  .opc-chip{display:inline-flex;align-items:center;gap:6px;background:var(--pg-primary-light);color:var(--pg-primary);border-radius:20px;padding:5px 10px 5px 12px;font-size:12px;font-weight:600;}
+  .opc-chip button{background:none;border:none;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0;}
+
+  .opc-wrap{position:relative;overflow:auto;border:1px solid var(--pg-border);border-radius:var(--pg-radius);background:#fff;height:calc(100vh - 400px);min-height:440px;}
+  .opc-grid{position:relative;}
+  .opc-header-row{position:sticky;top:0;z-index:20;display:flex;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);}
+  .opc-corner{position:sticky;left:0;z-index:21;width:210px;min-width:210px;background:var(--pg-gray-100);border-right:1px solid var(--pg-border);display:flex;align-items:center;padding:0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-600);}
+  .opc-date-cell{width:90px;min-width:90px;padding:8px 4px;text-align:center;font-size:11.5px;font-weight:600;color:var(--pg-gray-700);border-right:1px solid var(--pg-gray-200);}
+  .opc-date-cell .dow{font-size:10px;color:var(--pg-gray-500);text-transform:uppercase;}
+  .opc-date-cell.today{background:var(--pg-primary-light);color:var(--pg-primary);}
+  .opc-date-cell.weekend{background:#fbfbfd;}
+
+  .opc-group-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);position:sticky;left:0;width:fit-content;min-width:100%;font-size:12.5px;box-sizing:border-box;}
+  .opc-group-header.unassigned-header{background:var(--pg-danger-light);}
+  .opc-collapse-btn{background:none;border:none;cursor:pointer;font-size:11px;color:var(--pg-gray-600);width:16px;flex-shrink:0;}
+
+  .opc-row{display:flex;border-bottom:1px solid var(--pg-gray-200);}
+  .opc-room-info{position:sticky;left:0;z-index:10;width:210px;min-width:210px;background:#fff;border-right:1px solid var(--pg-border);padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;box-sizing:border-box;}
+  .opc-row:hover .opc-room-info{background:var(--pg-gray-100);}
+  .opc-room-num{font-weight:700;font-size:12.8px;color:var(--pg-gray-900);}
+  .opc-room-meta{font-size:11px;color:var(--pg-gray-500);}
+  .opc-quickadd{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:1px solid var(--pg-border);background:#fff;color:var(--pg-primary);font-weight:700;cursor:pointer;line-height:1;display:none;}
+  .opc-room-info{position:sticky;}
+  .opc-row{position:relative;}
+  .opc-row:hover .opc-quickadd, .opc-row:focus-within .opc-quickadd{display:block;}
+
+  .opc-track{position:relative;height:52px;flex-shrink:0;}
+  .opc-cell{position:absolute;top:0;bottom:0;border-right:1px solid var(--pg-gray-200);cursor:pointer;}
+  .opc-cell:hover{background:var(--pg-primary-light);}
+  .opc-cell.today{background:rgba(27,132,255,.05);}
+  .opc-cell.weekend{background:#fbfbfd;}
+
+  .opc-bar{position:absolute;top:8px;height:36px;border-radius:6px;padding:0 8px;display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;overflow:hidden;white-space:nowrap;cursor:pointer;text-align:left;}
+  .opc-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .opc-ic{flex-shrink:0;font-size:11px;}
+  .opc-bar:focus-visible{outline:3px solid var(--pg-primary);outline-offset:1px;}
+  .opc-bar.dim{opacity:.28;}
+  .opc-bar.match{box-shadow:0 0 0 2px var(--pg-primary);}
+
+  .opc-bar.res.st-draft{background:var(--pg-gray-200);border:1.5px dashed var(--pg-gray-500);color:var(--pg-gray-800);}
+  .opc-bar.res.st-pending-payment{background:var(--pg-warning-light);border:1.5px dashed #c99400;color:#8a5a00;}
+  .opc-bar.res.st-confirmed{background:var(--pg-success-light);border:1.5px solid #0bb463;color:#0a7d45;}
+  .opc-bar.res.st-completed{background:var(--pg-primary-light);border:1.5px solid var(--pg-primary);color:var(--pg-primary-dark);}
+  .opc-bar.res.st-no-show{background:var(--pg-danger-light);border:1.5px solid var(--pg-danger);color:var(--pg-danger);}
+
+  .opc-bar.block{color:var(--pg-gray-800);background-image:repeating-linear-gradient(45deg, rgba(0,0,0,.05) 0 6px, transparent 6px 12px);}
+  .opc-bar.block.blk-out-of-order{background-color:var(--pg-danger-light);border:1.5px solid var(--pg-danger);color:var(--pg-danger);}
+  .opc-bar.block.blk-out-of-service{background-color:var(--pg-gray-300);border:1.5px dashed var(--pg-gray-600);}
+  .opc-bar.block.blk-management-hold{background-color:var(--pg-warning-light);border:1.5px dashed #c99400;color:#8a5a00;}
+  .opc-bar.block.blk-other{background-color:var(--pg-gray-200);border:1.5px dotted var(--pg-gray-500);}
+
+  .opc-bar.conflict{outline:2.5px solid var(--pg-danger);outline-offset:1px;background-image:repeating-linear-gradient(45deg, rgba(248,40,90,.18) 0 6px, transparent 6px 12px);}
+  .opc-ic.conflict-ic{color:var(--pg-danger);}
+
+  .unassigned-row .opc-room-info{background:var(--pg-danger-light);}
+  .unassigned-row .opc-bar{background:var(--pg-danger-light);border:1.5px dashed var(--pg-danger);color:var(--pg-danger);}
+
+  .opc-skeleton-row{height:52px;border-bottom:1px solid var(--pg-gray-200);}
+  .opc-skeleton-bar{height:14px;margin:19px 14px;border-radius:4px;background:linear-gradient(90deg,var(--pg-gray-200) 25%,var(--pg-gray-100) 37%,var(--pg-gray-200) 63%);background-size:400% 100%;animation:pg-skel-opc 1.4s ease infinite;}
+  @keyframes pg-skel-opc{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+
+  .opc-empty-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:5;}
+
+  .opc-drawer-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--pg-gray-200);font-size:13px;}
+  .opc-drawer-row:last-child{border-bottom:none;}
+  .opc-drawer-row .v{font-weight:700;text-align:right;}
+  .opc-drawer-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-500);margin:18px 0 8px;}
+  .opc-drawer-section-title:first-child{margin-top:0;}
+  .opc-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+  @media (max-width:900px){ .opc-wrap{height:calc(100vh - 460px);} }
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("operations-calendar", ["Hotel Management", "Operations Calendar"]);
+var s = PG.getState();
+// Same dead-code-today role gate as physical-rooms.html — CURRENT_ROLE is hardcoded.
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+
+var CELL_W = 90, ROOM_COL_W = 210;
+var BLOCK_TYPES = ['Out of Order', 'Out of Service', 'Management Hold', 'Other'];
+var RES_STATUSES = ['Draft','Pending Payment','Confirmed','Completed','No Show'];
+var PAY_STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
+var ROOM_STATUSES = ['Available','Reserved','Held','Out of Order','Out of Service','Inactive'];
+var CANCEL_REASONS = ['Guest requested cancellation','Change of plans','Duplicate booking','Hotel-initiated','Other'];
+var UNASSIGN_REASONS = ['Guest requested different room','Operational issue with assigned room','Reassigning to balance occupancy','Correcting an assignment error','Other'];
+
+function init(){
+  var viewDays = 14;
+  var startDate = PG.TODAY;
+  var collapsed = {};
+  var searchQuery = '';
+  var filters = { building:'all', floor:'all', roomStatus:'all', resStatus:'all', payStatus:'all', assign:'all', arrDep:'all' };
+
+  function distinct(arr){ var out=[]; arr.forEach(function(v){ if(v!=null && v!=='' && out.indexOf(v)===-1) out.push(v); }); return out; }
+  function rt(id){ return s.roomTypes.find(function(r){return r.id===id;}); }
+  function rtName(id){ var r=rt(id); return r?r.name:id; }
+  function custOf(res){ return s.customers.find(function(c){return c.id===res.customerId;}); }
+
+  var html = '';
+  html += '<div class="pg-page-head"><div><h1>Operations Calendar</h1><div class="sub">Daily room control — every physical room, every night, across the property</div></div>' +
+    '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a></div></div>';
+
+  html += '<div class="card"><div class="card-body">' +
+    '<div class="opc-toolbar">' +
+      '<div class="opc-toolbar-left">' +
+        '<button class="btn btn-outline btn-sm" id="prevBtn" aria-label="Previous period">&larr; Prev</button>' +
+        '<button class="btn btn-outline btn-sm" id="todayBtn">Today</button>' +
+        '<button class="btn btn-outline btn-sm" id="nextBtn" aria-label="Next period">Next &rarr;</button>' +
+        '<input type="date" class="form-control" id="datePicker" aria-label="Jump to date" value="'+startDate+'">' +
+        '<div class="pill-toggle" id="viewPill"><button type="button" data-v="7">7 Days</button><button type="button" data-v="14" class="active">14 Days</button><button type="button" data-v="30">30 Days</button></div>' +
+      '</div>' +
+      '<div class="opc-toolbar-right">' +
+        '<input class="form-control opc-search" id="opcSearch" placeholder="Search guest, RES#, phone, room…" aria-label="Search calendar">' +
+        '<button class="btn btn-outline btn-sm" id="filtersBtn">Filters</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="opc-legend" id="opcLegend"></div>' +
+    '<div class="opc-chips" id="opcChips"></div>' +
+    '<div class="opc-wrap" id="opcWrap"><div class="opc-grid" id="opcGrid"></div></div>' +
+  '</div></div>';
+
+  page.innerHTML = html;
+  PG.enhanceSelects(page);
+
+  renderLegend();
+  document.getElementById('opcGrid').innerHTML = skeletonHtml();
+  setTimeout(renderGrid, 220);
+
+  /* ---- Toolbar wiring ---- */
+  document.getElementById('prevBtn').addEventListener('click', function(){ startDate = PG.addDays(startDate, -viewDays); syncDatePicker(); renderGrid(); });
+  document.getElementById('nextBtn').addEventListener('click', function(){ startDate = PG.addDays(startDate, viewDays); syncDatePicker(); renderGrid(); });
+  document.getElementById('todayBtn').addEventListener('click', function(){ startDate = PG.TODAY; syncDatePicker(); renderGrid(); });
+  document.getElementById('datePicker').addEventListener('change', function(){ if(this.value){ startDate = this.value; renderGrid(); } });
+  document.getElementById('viewPill').addEventListener('click', function(e){
+    var btn = e.target.closest('button'); if(!btn) return;
+    document.querySelectorAll('#viewPill button').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active'); viewDays = parseInt(btn.dataset.v,10); renderGrid();
+  });
+  function syncDatePicker(){ document.getElementById('datePicker').value = startDate; }
+  document.getElementById('opcSearch').addEventListener('input', function(){ searchQuery = this.value.trim().toLowerCase(); renderGrid(); });
+  document.getElementById('filtersBtn').addEventListener('click', openFiltersDrawer);
+
+  function renderLegend(){
+    function item(swatchStyle, label){ return '<div class="opc-legend-item"><span class="opc-legend-swatch" style="'+swatchStyle+'"></span>'+label+'</div>'; }
+    document.getElementById('opcLegend').innerHTML =
+      item('background:var(--pg-success-light);border:1.5px solid #0bb463;', 'Confirmed') +
+      item('background:var(--pg-warning-light);border:1.5px dashed #c99400;', 'Pending Payment / Draft') +
+      item('background:var(--pg-primary-light);border:1.5px solid var(--pg-primary);', 'Completed') +
+      item('background:var(--pg-danger-light);border:1.5px solid var(--pg-danger);', 'Out of Order') +
+      item('background:var(--pg-gray-300);border:1.5px dashed var(--pg-gray-600);', 'Out of Service / Hold') +
+      item('background:var(--pg-danger-light);border:2.5px solid var(--pg-danger);background-image:repeating-linear-gradient(45deg, rgba(248,40,90,.25) 0 5px, transparent 5px 10px);', 'Conflict — needs resolution') +
+      item('background:var(--pg-danger-light);border:1.5px dashed var(--pg-danger);', 'Unassigned reservation');
+  }
+
+  /* ================================================================ */
+  /* Filters drawer                                                     */
+  /* ================================================================ */
+  var filtersDrawer = document.createElement('div');
+  filtersDrawer.className = 'pg-drawer-overlay';
+  filtersDrawer.id = 'filtersDrawer';
+  document.body.appendChild(filtersDrawer);
+  var buildingOpts = distinct(s.physicalRooms.map(function(r){return r.building;})).sort();
+  var floorOpts = distinct(s.physicalRooms.map(function(r){return r.floor;})).sort(function(a,b){return a-b;});
+  function optionList(id, label, options, current, labelFn){
+    return '<div class="form-group"><label class="form-label">'+label+'</label><select class="form-control" id="'+id+'"><option value="all">All</option>' +
+      options.map(function(o){ var v=typeof o==='object'?o.v:o; var l=labelFn?labelFn(o):o; return '<option value="'+v+'"'+(String(current)===String(v)?' selected':'')+'>'+l+'</option>'; }).join('') +
+    '</select></div>';
+  }
+  filtersDrawer.innerHTML = '<div class="pg-drawer">' +
+    '<div class="pg-drawer-header"><h3>Filters</h3><button class="pg-modal-close" onclick="PG.closeModal(\'filtersDrawer\')">&times;</button></div>' +
+    '<div class="pg-drawer-body">' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">From</label><input type="date" class="form-control" id="f-from"></div>' +
+        '<div class="form-group"><label class="form-label">To</label><input type="date" class="form-control" id="f-to"></div>' +
+      '</div>' +
+      optionList('f-roomtype', 'Room Type', s.roomTypes.map(function(r){return {v:r.id};}), 'all', function(o){return rtName(o.v);}) +
+      optionList('f-building', 'Building', buildingOpts, 'all') +
+      optionList('f-floor', 'Floor', floorOpts.map(function(f){return {v:f};}), 'all', function(o){return 'Floor '+o.v;}) +
+      optionList('f-roomstatus', 'Room Status', ROOM_STATUSES, 'all') +
+      optionList('f-resstatus', 'Reservation Status', RES_STATUSES, 'all') +
+      optionList('f-paystatus', 'Payment Status', PAY_STATUSES, 'all') +
+      '<div class="form-group"><label class="form-label">Assigned / Unassigned</label><select class="form-control" id="f-assign"><option value="all">All Reservations</option><option value="assigned">Assigned Only</option><option value="unassigned">Unassigned Only</option></select></div>' +
+      '<div class="form-group"><label class="form-label">Arrivals / Departures</label><select class="form-control" id="f-arrdep"><option value="all">All</option><option value="arrivals">Arrivals in view</option><option value="departures">Departures in view</option></select></div>' +
+    '</div>' +
+    '<div class="pg-drawer-footer"><button class="btn btn-light" id="f-clear">Clear All</button><button class="btn btn-primary" id="f-apply">Apply Filters</button></div>' +
+  '</div>';
+  PG.enhanceSelects(filtersDrawer);
+  function openFiltersDrawer(){
+    document.getElementById('f-roomtype').value = filters.roomType || 'all'; document.getElementById('f-roomtype').dispatchEvent(new Event('change'));
+    document.getElementById('f-building').value = filters.building; document.getElementById('f-building').dispatchEvent(new Event('change'));
+    document.getElementById('f-floor').value = filters.floor; document.getElementById('f-floor').dispatchEvent(new Event('change'));
+    document.getElementById('f-roomstatus').value = filters.roomStatus; document.getElementById('f-roomstatus').dispatchEvent(new Event('change'));
+    document.getElementById('f-resstatus').value = filters.resStatus; document.getElementById('f-resstatus').dispatchEvent(new Event('change'));
+    document.getElementById('f-paystatus').value = filters.payStatus; document.getElementById('f-paystatus').dispatchEvent(new Event('change'));
+    document.getElementById('f-assign').value = filters.assign;
+    document.getElementById('f-arrdep').value = filters.arrDep;
+    document.getElementById('f-from').value = filters.from || '';
+    document.getElementById('f-to').value = filters.to || '';
+    PG.openModal('filtersDrawer');
+  }
+  document.getElementById('f-clear').addEventListener('click', function(){
+    filters = { building:'all', floor:'all', roomStatus:'all', resStatus:'all', payStatus:'all', assign:'all', arrDep:'all' };
+    PG.closeModal('filtersDrawer'); renderChips(); renderGrid();
+  });
+  document.getElementById('f-apply').addEventListener('click', function(){
+    filters.roomType = document.getElementById('f-roomtype').value;
+    filters.building = document.getElementById('f-building').value;
+    filters.floor = document.getElementById('f-floor').value;
+    filters.roomStatus = document.getElementById('f-roomstatus').value;
+    filters.resStatus = document.getElementById('f-resstatus').value;
+    filters.payStatus = document.getElementById('f-paystatus').value;
+    filters.assign = document.getElementById('f-assign').value;
+    filters.arrDep = document.getElementById('f-arrdep').value;
+    var from = document.getElementById('f-from').value, to = document.getElementById('f-to').value;
+    if (from && to && to>from){ filters.from=from; filters.to=to; startDate=from; viewDays=Math.max(1, PG.nightsBetween(from,to)); document.querySelectorAll('#viewPill button').forEach(function(b){b.classList.remove('active');}); syncDatePicker(); }
+    else { filters.from=null; filters.to=null; }
+    PG.closeModal('filtersDrawer'); renderChips(); renderGrid();
+  });
+
+  function renderChips(){
+    var chips = [];
+    function chip(key, label){ chips.push('<span class="opc-chip">'+label+'<button data-clear="'+key+'" aria-label="Remove filter">&times;</button></span>'); }
+    if (filters.from && filters.to) chip('date', PG.fmtDateShort(filters.from)+' – '+PG.fmtDateShort(filters.to));
+    if (filters.roomType && filters.roomType!=='all') chip('roomType', 'Room Type: '+rtName(filters.roomType));
+    if (filters.building && filters.building!=='all') chip('building', 'Building: '+filters.building);
+    if (filters.floor && filters.floor!=='all') chip('floor', 'Floor: '+filters.floor);
+    if (filters.roomStatus!=='all') chip('roomStatus', 'Room Status: '+filters.roomStatus);
+    if (filters.resStatus!=='all') chip('resStatus', 'Reservation: '+filters.resStatus);
+    if (filters.payStatus!=='all') chip('payStatus', 'Payment: '+filters.payStatus);
+    if (filters.assign!=='all') chip('assign', filters.assign==='assigned'?'Assigned Only':'Unassigned Only');
+    if (filters.arrDep!=='all') chip('arrDep', filters.arrDep==='arrivals'?'Arrivals in view':'Departures in view');
+    var box = document.getElementById('opcChips');
+    if (!chips.length){ box.innerHTML=''; return; }
+    box.innerHTML = chips.join('') + '<button class="btn btn-outline btn-sm" id="chipsClearAll">Clear All</button>';
+    box.querySelectorAll('[data-clear]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var k = btn.dataset.clear;
+        if (k==='date'){ filters.from=null; filters.to=null; } else { filters[k]='all'; }
+        renderChips(); renderGrid();
+      });
+    });
+    var clearAll = document.getElementById('chipsClearAll');
+    if (clearAll) clearAll.addEventListener('click', function(){ filters = { building:'all', floor:'all', roomStatus:'all', resStatus:'all', payStatus:'all', assign:'all', arrDep:'all' }; renderChips(); renderGrid(); });
+  }
+
+  /* ================================================================ */
+  /* Grid rendering                                                     */
+  /* ================================================================ */
+  function skeletonHtml(){
+    return [0,1,2,3,4].map(function(){ return '<div class="opc-skeleton-row"><div class="opc-skeleton-bar" style="width:160px;"></div></div>'; }).join('');
+  }
+  function dateWindow(){ return PG.dateRange(startDate, PG.addDays(startDate, viewDays)); }
+
+  function visibleRooms(st){
+    return st.physicalRooms.filter(function(r){
+      if (filters.roomType && filters.roomType!=='all' && r.roomTypeId!==filters.roomType) return false;
+      if (filters.building!=='all' && r.building!==filters.building) return false;
+      if (filters.floor!=='all' && String(r.floor)!==filters.floor) return false;
+      if (filters.roomStatus!=='all' && PG.roomStatusOn(st, r.id, PG.TODAY)!==filters.roomStatus) return false;
+      return true;
+    });
+  }
+  function barsForRoom(st, roomId){
+    var out = [];
+    st.roomAssignments.filter(function(a){return a.physicalRoomId===roomId && a.assignmentStatus!=='Cancelled';}).forEach(function(a){
+      var res = st.reservations.find(function(r){return r.id===a.reservationId;});
+      if (!res) return;
+      out.push({kind:'reservation', assignment:a, reservation:res, start:a.arrivalDate, end:a.departureDate});
+    });
+    st.roomBlocks.filter(function(b){return b.physicalRoomId===roomId;}).forEach(function(b){
+      out.push({kind:'block', block:b, start:b.startDate, end:b.endDate});
+    });
+    out.forEach(function(bar){ bar.conflict=false; });
+    for (var i=0;i<out.length;i++){
+      for (var j=i+1;j<out.length;j++){
+        if (out[i].start < out[j].end && out[j].start < out[i].end){ out[i].conflict=true; out[j].conflict=true; }
+      }
+    }
+    return out;
+  }
+  function barMatchesSearch(bar, room){
+    if (!searchQuery) return null;
+    var hay = [];
+    if (bar.kind==='reservation'){
+      var res=bar.reservation, cust=custOf(res);
+      hay = [res.id, cust?cust.name:'', cust?cust.phone:''];
+    }
+    if (room) hay = hay.concat([room.roomNumber, rtName(room.roomTypeId)]);
+    return hay.some(function(v){ return (v||'').toLowerCase().indexOf(searchQuery)>-1; });
+  }
+  function barPassesFilters(bar, viewStart, viewEndExclusive){
+    if (bar.kind==='block') return true;
+    var res = bar.reservation;
+    if (filters.resStatus!=='all' && res.status!==filters.resStatus) return false;
+    if (filters.payStatus!=='all' && res.paymentStatus!==filters.payStatus) return false;
+    if (filters.assign==='unassigned') return false;
+    if (filters.arrDep==='arrivals' && !(res.checkIn>=viewStart && res.checkIn<viewEndExclusive)) return false;
+    if (filters.arrDep==='departures' && !(res.checkOut>=viewStart && res.checkOut<viewEndExclusive)) return false;
+    return true;
+  }
+
+  function renderBarHtml(bar, room, dates){
+    var viewStart = dates[0], viewEndExclusive = PG.addDays(dates[dates.length-1], 1);
+    if (bar.start >= viewEndExclusive || bar.end <= viewStart) return '';
+    var clipStart = bar.start < viewStart, clipEnd = bar.end > viewEndExclusive;
+    var effStart = clipStart ? viewStart : bar.start, effEnd = clipEnd ? viewEndExclusive : bar.end;
+    var startIdx = PG.nightsBetween(viewStart, effStart), endIdx = PG.nightsBetween(viewStart, effEnd);
+    var left = startIdx*CELL_W + 3, width = Math.max(10, (endIdx-startIdx)*CELL_W - 6);
+    var radiusStyle = (clipStart?'border-top-left-radius:0;border-bottom-left-radius:0;':'') + (clipEnd?'border-top-right-radius:0;border-bottom-right-radius:0;':'');
+
+    if (bar.kind==='block'){
+      var typeClass = 'blk-'+bar.block.type.toLowerCase().replace(/\s+/g,'-');
+      var label = bar.block.type + (room?' — Room '+room.roomNumber:'');
+      return '<button type="button" class="opc-bar block '+typeClass+(bar.conflict?' conflict':'')+'" style="left:'+left+'px;width:'+width+'px;'+radiusStyle+'" ' +
+        'data-kind="block" data-block="'+bar.block.id+'" tabindex="0" aria-label="'+PG.esc(label)+', '+PG.fmtDateShort(bar.block.startDate)+' to '+PG.fmtDateShort(PG.addDays(bar.block.endDate,-1))+(bar.conflict?', conflicts with another item':'')+'">' +
+        (clipStart?'&laquo; ':'') + '<span class="opc-bar-label">'+PG.esc(bar.block.type)+'</span>' +
+        (bar.conflict?'<span class="opc-ic conflict-ic" title="Conflict">&#9888;</span>':'') + (clipEnd?' &raquo;':'') +
+      '</button>';
+    }
+
+    var res = bar.reservation, cust = custOf(res);
+    var statusClass = 'st-'+res.status.toLowerCase().replace(/\s+/g,'-');
+    var payException = ['Failed','Expired','Refund Pending'].indexOf(res.paymentStatus)>-1;
+    var multiRoom = res.rooms.reduce(function(a,x){return a+x.qty;},0) > 1;
+    var matches = barMatchesSearch(bar, room);
+    var label = (cust?cust.name:'Guest') + ' — ' + res.status;
+    return '<button type="button" class="opc-bar res '+statusClass+(bar.conflict?' conflict':'')+(matches===true?' match':'')+(matches===false?' dim':'')+'" style="left:'+left+'px;width:'+width+'px;'+radiusStyle+'" ' +
+      'data-kind="reservation" data-assignment="'+bar.assignment.id+'" data-res="'+res.id+'" data-item="'+bar.assignment.reservationItemId+'" tabindex="0" ' +
+      'aria-label="'+PG.esc(label)+', '+PG.fmtDateShort(res.checkIn)+' to '+PG.fmtDateShort(res.checkOut)+(payException?', payment exception':'')+(bar.conflict?', conflicts with another item':'')+'" title="'+PG.esc(res.id)+'">' +
+      (clipStart?'&laquo; ':'') + '<span class="opc-bar-label">'+PG.esc(cust?cust.name:'Guest')+'</span>' +
+      (payException?'<span class="opc-ic" title="Payment exception">&#9888;</span>':'') +
+      (multiRoom?'<span class="opc-ic" title="Multi-room reservation">&#9776;</span>':'') +
+      (res.notes?'<span class="opc-ic" title="Has notes">&#128172;</span>':'') +
+      (bar.conflict?'<span class="opc-ic conflict-ic" title="Conflict — overlapping assignment">&#9888;</span>':'') +
+      (clipEnd?' &raquo;':'') +
+    '</button>';
+  }
+
+  function unassignedReasonFor(st, itemId){
+    var cancelled = st.roomAssignments.filter(function(a){return a.reservationItemId===itemId && a.assignmentStatus==='Cancelled';});
+    if (cancelled.length) return cancelled[cancelled.length-1].changeReason || 'Room unassigned';
+    return 'No physical room assigned at booking time';
+  }
+  function unassignedUnits(st){
+    var out = [];
+    st.reservations.filter(function(r){return r.status!=='Cancelled' && r.status!=='Completed';}).forEach(function(r){
+      r.rooms.forEach(function(item){
+        var assignedCount = st.roomAssignments.filter(function(a){return a.reservationItemId===item.id && a.assignmentStatus!=='Cancelled';}).length;
+        var missing = item.qty - assignedCount;
+        for (var i=0;i<missing;i++) out.push({reservation:r, item:item, reason: unassignedReasonFor(st, item.id)});
+      });
+    });
+    return out.sort(function(a,b){ return a.reservation.checkIn < b.reservation.checkIn ? -1 : 1; });
+  }
+  function urgencySeverity(checkIn){
+    var days = PG.nightsBetween(PG.TODAY, checkIn);
+    if (days<=1) return 'danger';
+    if (days<=3) return 'warning';
+    return 'neutral';
+  }
+
+  function renderGrid(){
+    var st = PG.getState();
+    s = st;
+    var dates = dateWindow();
+    var wrap = document.getElementById('opcGrid');
+
+    if (!st.physicalRooms.length){
+      wrap.innerHTML = '<div class="empty-state"><div class="ic">&#127976;</div>No physical rooms exist for this property yet.<br><br><a class="btn btn-primary" href="physical-rooms.html">Go to Physical Rooms</a></div>';
+      return;
+    }
+
+    var headerHtml = '<div class="opc-header-row"><div class="opc-corner">Room</div>' +
+      dates.map(function(d){
+        var isToday = d===PG.TODAY, isWeekend = [4,5].indexOf(PG.dayOfWeek(d))>-1;
+        return '<div class="opc-date-cell'+(isToday?' today':'')+(isWeekend?' weekend':'')+'"><div class="dow">'+PG.weekdayOf(d)+'</div>'+PG.fmtDateShort(d)+'</div>';
+      }).join('') + '</div>';
+
+    var bodyHtml = '';
+
+    if (filters.assign!=='assigned'){
+      var units = unassignedUnits(st);
+      if (units.length){
+        var urgentCount = units.filter(function(u){ return urgencySeverity(u.reservation.checkIn)!=='neutral'; }).length;
+        bodyHtml += '<div class="opc-group-header unassigned-header"><strong>&#9888; Unassigned Reservations</strong><span class="muted text-sm">'+units.length+' unit'+(units.length===1?'':'s')+' &middot; '+urgentCount+' arriving soon</span></div>';
+        bodyHtml += units.map(function(u){ return renderUnassignedRow(u, dates); }).join('');
+      }
+    }
+
+    var rooms = visibleRooms(st);
+    if (!rooms.length){
+      bodyHtml += '<div class="empty-state"><div class="ic">&#128269;</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="opcClearInline">Clear Filters</button></div>';
+    } else {
+      st.roomTypes.forEach(function(typeDef){
+        var typeRooms = rooms.filter(function(r){return r.roomTypeId===typeDef.id;}).sort(function(a,b){
+          var na=parseInt(a.roomNumber,10), nb=parseInt(b.roomNumber,10);
+          if (!isNaN(na) && !isNaN(nb) && na!==nb) return na-nb;
+          return a.roomNumber<b.roomNumber?-1:1;
+        });
+        if (!typeRooms.length) return;
+        var isCollapsed = !!collapsed[typeDef.id];
+        bodyHtml += '<div class="opc-group-header" data-group="'+typeDef.id+'">' +
+          '<button type="button" class="opc-collapse-btn" data-toggle-group="'+typeDef.id+'" aria-expanded="'+(!isCollapsed)+'">'+(isCollapsed?'&#9656;':'&#9662;')+'</button>' +
+          '<strong>'+PG.esc(typeDef.name)+'</strong><span class="muted text-sm">'+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span></div>';
+        if (!isCollapsed) bodyHtml += typeRooms.map(function(room){ return renderRoomRow(st, room, dates); }).join('');
+      });
+    }
+
+    wrap.innerHTML = headerHtml + bodyHtml;
+    wrap.querySelectorAll('[data-toggle-group]').forEach(function(btn){
+      btn.addEventListener('click', function(){ var g=btn.dataset.toggleGroup; collapsed[g]=!collapsed[g]; renderGrid(); });
+    });
+    var clearInline = document.getElementById('opcClearInline');
+    if (clearInline) clearInline.addEventListener('click', function(){ document.getElementById('f-clear').click(); });
+    wireGridInteractions(wrap);
+
+    if (searchQuery){
+      var firstMatch = wrap.querySelector('.opc-bar.match');
+      if (firstMatch) firstMatch.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
+    }
+  }
+
+  function renderRoomRow(st, room, dates){
+    var bars = barsForRoom(st, room.id);
+    var visibleBars = bars.filter(function(b){ return barPassesFilters(b, dates[0], PG.addDays(dates[dates.length-1],1)); });
+    var barsHtml = visibleBars.map(function(b){ return renderBarHtml(b, room, dates); }).join('');
+    var cellsHtml = dates.map(function(d,i){
+      var isToday=d===PG.TODAY, isWeekend=[4,5].indexOf(PG.dayOfWeek(d))>-1;
+      return '<div class="opc-cell'+(isToday?' today':'')+(isWeekend?' weekend':'')+'" style="left:'+(i*CELL_W)+'px;width:'+CELL_W+'px;" data-empty-room="'+room.id+'" data-empty-rt="'+room.roomTypeId+'" data-empty-date="'+d+'"></div>';
+    }).join('');
+    return '<div class="opc-row" data-room-row="'+room.id+'">' +
+      '<div class="opc-room-info"><div class="opc-room-num">Room '+PG.esc(room.roomNumber)+'</div>' +
+      '<div class="opc-room-meta">'+PG.esc(rtName(room.roomTypeId))+' &middot; Fl '+room.floor+'</div>' +
+      PG.roomStatusBadge(PG.roomStatusOn(st, room.id, PG.TODAY)) +
+      (CAN_MANAGE?'<button type="button" class="opc-quickadd" data-quickadd-room="'+room.id+'" data-quickadd-rt="'+room.roomTypeId+'" title="New reservation for Room '+PG.esc(room.roomNumber)+'" aria-label="New reservation for Room '+PG.esc(room.roomNumber)+'">+</button>':'') +
+      '</div>' +
+      '<div class="opc-track" style="width:'+(dates.length*CELL_W)+'px;">'+cellsHtml+barsHtml+'</div>' +
+    '</div>';
+  }
+
+  function renderUnassignedRow(u, dates){
+    var cust = custOf(u.reservation);
+    var sev = urgencySeverity(u.reservation.checkIn);
+    var sevBadge = sev==='danger' ? '<span class="badge badge-red"><span class="badge-dot"></span>Arriving Soon</span>' :
+      sev==='warning' ? '<span class="badge badge-yellow"><span class="badge-dot"></span>Upcoming</span>' :
+      '<span class="badge badge-gray"><span class="badge-dot"></span>Later</span>';
+    var pseudoBar = {kind:'reservation', assignment:{id:'unassigned-'+u.item.id, reservationItemId:u.item.id}, reservation:u.reservation, start:u.reservation.checkIn, end:u.reservation.checkOut, conflict:false};
+    var barHtml = renderBarHtml(pseudoBar, null, dates).replace('class="opc-bar res', 'class="opc-bar res unassigned-bar');
+    return '<div class="opc-row unassigned-row" data-unassigned-item="'+u.item.id+'">' +
+      '<div class="opc-room-info"><div class="opc-room-num">'+PG.esc(cust?cust.name:'Guest')+'</div>' +
+      '<div class="opc-room-meta">'+PG.esc(rtName(u.item.roomTypeId))+'</div>' + sevBadge +
+      (CAN_MANAGE?'<button type="button" class="btn btn-primary btn-sm" style="margin-top:4px;" data-assign-item="'+u.item.id+'" data-assign-res="'+u.reservation.id+'" data-assign-rt="'+u.item.roomTypeId+'">Assign Room</button>':'') +
+      '</div>' +
+      '<div class="opc-track" style="width:'+(dates.length*CELL_W)+'px;">'+barHtml+'</div>' +
+    '</div>';
+  }
+
+  function wireGridInteractions(root){
+    root.querySelectorAll('.opc-bar[data-kind="reservation"]').forEach(function(el){
+      el.addEventListener('click', function(){ openReservationDrawer(el.dataset.res, el.dataset.item, el.dataset.assignment.indexOf('unassigned-')===0?null:el.dataset.assignment); });
+      el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
+    });
+    root.querySelectorAll('.opc-bar[data-kind="block"]').forEach(function(el){
+      el.addEventListener('click', function(){ openBlockDrawer(el.dataset.block); });
+      el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
+    });
+    root.querySelectorAll('[data-empty-room]').forEach(function(el){
+      el.addEventListener('click', function(){
+        if (!CAN_MANAGE) return;
+        location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.emptyRt) + '&room=' + encodeURIComponent(el.dataset.emptyRoom) + '&date=' + encodeURIComponent(el.dataset.emptyDate);
+      });
+    });
+    root.querySelectorAll('[data-quickadd-room]').forEach(function(el){
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.quickaddRt) + '&room=' + encodeURIComponent(el.dataset.quickaddRoom) + '&date=' + encodeURIComponent(dateWindow()[0]);
+      });
+    });
+    root.querySelectorAll('[data-assign-item]').forEach(function(el){
+      el.addEventListener('click', function(e){ e.stopPropagation(); openReservationDrawer(el.dataset.assignRes, el.dataset.assignItem, null); });
+    });
+  }
+
+  /* ================================================================ */
+  /* Reservation drawer                                                 */
+  /* ================================================================ */
+  var resDrawer = document.createElement('div');
+  resDrawer.className = 'pg-drawer-overlay';
+  resDrawer.id = 'resDrawer';
+  document.body.appendChild(resDrawer);
+
+  function drow(label, value){ return '<div class="opc-drawer-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>'; }
+
+  function openReservationDrawer(resId, itemId, assignmentId){
+    var st = PG.getState();
+    var res = st.reservations.find(function(r){return r.id===resId;});
+    if (!res) return;
+    var item = res.rooms.find(function(x){return x.id===itemId;}) || res.rooms[0];
+    var cust = custOf(res);
+    var assignment = assignmentId ? st.roomAssignments.find(function(a){return a.id===assignmentId;}) : null;
+    var room = assignment ? st.physicalRooms.find(function(p){return p.id===assignment.physicalRoomId;}) : null;
+    var nights = PG.nightsBetween(res.checkIn, res.checkOut);
+    var guests = res.rooms.reduce(function(a,x){return a+x.adults+(x.children||0);},0);
+    var total = 0;
+    PG.dateRange(res.checkIn, res.checkOut).forEach(function(d){ res.rooms.forEach(function(x){ total += PG.rateFor(st, x.roomTypeId, d) * x.qty; }); });
+    total += (res.taxAmount||0) + (res.feeAmount||0);
+    var needsAttention = room ? !PG.roomEligibleForStay(st, room, res.checkIn, res.checkOut, assignment.id) : false;
+    var conflictBars = room ? barsForRoomLocal(st, room.id).filter(function(b){ return b.conflict && ((b.assignment&&b.assignment.id===assignment.id) || false); }) : [];
+
+    var body = '';
+    body += '<div class="opc-drawer-section-title">Guest</div>';
+    body += drow('Name', PG.esc(cust.name)) + drow('Phone', PG.esc(cust.phone)) + drow('Email', PG.esc(cust.email));
+    body += '<div class="opc-drawer-section-title">Reservation</div>';
+    body += drow('Reservation #', '<a href="reservation-detail.html?id='+res.id+'">'+res.id+'</a>') +
+      drow('Status', PG.statusBadge(res.status)) + drow('Payment', PG.payBadge(res.paymentStatus)) +
+      drow('Arrival', PG.fmtDate(res.checkIn)) + drow('Departure', PG.fmtDate(res.checkOut)) +
+      drow('Nights', nights) + drow('Guests', guests);
+    body += '<div class="opc-drawer-section-title">Room</div>';
+    body += drow('Room Type', PG.esc(rtName(item.roomTypeId)));
+    if (room){
+      body += drow('Assigned Room', 'Room ' + PG.esc(room.roomNumber) + ' &middot; Floor ' + room.floor);
+      if (needsAttention) body += '<div class="help-note help-note-danger" style="margin-top:8px;">&#9888; This room is no longer eligible for these dates (blocked or reassigned elsewhere). Choose a replacement.</div>';
+    } else {
+      body += '<div class="help-note help-note-danger" style="margin-top:8px;">No physical room assigned to this unit. It appears in the Unassigned Reservations lane.</div>';
+    }
+    body += '<div class="opc-drawer-section-title">Payment</div>';
+    body += drow('Method', res.paymentMethod||'—') + drow('Total', PG.fmtMoney(total));
+    body += '<div class="opc-drawer-section-title">Notes &amp; Flags</div>';
+    body += drow('Internal Notes', res.notes ? '1 note' : 'None') +
+      drow('Flags', [ ['Failed','Expired','Refund Pending'].indexOf(res.paymentStatus)>-1 ? 'Payment Exception' : null, res.rooms.reduce(function(a,x){return a+x.qty;},0)>1?'Multi-Room':null ].filter(Boolean).join(', ') || 'None');
+    body += '<div class="opc-drawer-section-title">Recent Activity</div>';
+    body += '<div class="timeline" style="padding-left:18px;">' + res.activity.slice().reverse().slice(0,4).map(function(a){
+      return '<div style="padding-bottom:10px;font-size:12.5px;"><div class="muted text-sm">'+PG.fmtDateShort(a.ts.slice(0,10))+' &middot; '+a.ts.slice(11)+'</div><div>'+PG.esc(a.text)+'</div></div>';
+    }).join('') + '</div>';
+    body += '<div id="opc-inline-cancel"></div>';
+
+    var qa = '<div class="opc-qa-grid">' +
+      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Open Reservation</a>' +
+      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Edit Reservation</a>' +
+      (room && CAN_MANAGE ? '<button class="btn btn-outline btn-sm" id="opc-change-room">Change Room</button>' : '') +
+      (room && CAN_MANAGE ? '<button class="btn btn-danger-outline btn-sm" id="opc-unassign-room">Unassign Room</button>' : '') +
+      (!room && CAN_MANAGE ? '<button class="btn btn-primary btn-sm" id="opc-assign-room" style="grid-column:span 2;">Assign Room</button>' : '') +
+      '<button class="btn btn-outline btn-sm" id="opc-send-confirm">Send Confirmation</button>' +
+      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Open Payment</a>' +
+      (res.status!=='Cancelled' && res.status!=='Completed' ? '<button class="btn btn-danger-outline btn-sm" id="opc-cancel-res" style="grid-column:span 2;">Cancel Reservation</button>' : '') +
+    '</div>';
+
+    resDrawer.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><h3>'+res.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'resDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-body">'+body+'</div>' +
+      '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;">'+qa+'</div>' +
+    '</div>';
+
+    var chg = document.getElementById('opc-change-room'); if (chg) chg.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, assignmentId); });
+    var unassignBtn = document.getElementById('opc-unassign-room'); if (unassignBtn) unassignBtn.addEventListener('click', function(){ openUnassignModal(assignmentId, resId); });
+    var assignBtn = document.getElementById('opc-assign-room'); if (assignBtn) assignBtn.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, null); });
+    var sendBtn = document.getElementById('opc-send-confirm'); if (sendBtn) sendBtn.addEventListener('click', function(){ PG.toast('Sending confirmations is outside this MVP prototype.', 'warn'); });
+    var cancelBtn = document.getElementById('opc-cancel-res');
+    if (cancelBtn) cancelBtn.addEventListener('click', function(){ showInlineCancel(res); });
+
+    PG.openModal('resDrawer');
+  }
+
+  function showInlineCancel(res){
+    var box = document.getElementById('opc-inline-cancel');
+    box.innerHTML = '<div class="opc-drawer-section-title">Cancel Reservation</div>' +
+      '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="opc-cancel-reason">' + CANCEL_REASONS.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('') + '</select></div>' +
+      '<div style="display:flex;gap:8px;"><button class="btn btn-light btn-sm" id="opc-keep-res">Keep Reservation</button><button class="btn btn-danger btn-sm" id="opc-confirm-cancel">Confirm Cancellation</button></div>';
+    PG.enhanceSelects(box);
+    document.getElementById('opc-keep-res').addEventListener('click', function(){ box.innerHTML=''; });
+    document.getElementById('opc-confirm-cancel').addEventListener('click', function(){
+      var reason = document.getElementById('opc-cancel-reason').value;
+      try {
+        var st = PG.getState();
+        var idx = st.reservations.findIndex(function(x){return x.id===res.id;});
+        var r2 = st.reservations[idx];
+        r2.status = 'Cancelled';
+        if (r2.paymentStatus==='Paid') r2.paymentStatus = 'Refund Pending';
+        r2.activity.push({ts:PG.nowIso(), text:'Reservation cancelled by Hotel Admin. Reason: '+reason+'. Inventory released.'});
+        st.roomAssignments.forEach(function(a){ if (a.reservationId===res.id && a.assignmentStatus!=='Cancelled') a.assignmentStatus='Cancelled'; });
+        PG.setState(st);
+        PG.addAudit('Reservation Cancelled', res.id + ' cancelled from Operations Calendar. Reason: ' + reason + '.');
+        PG.toast('Reservation cancelled. Rooms released.', 'warn');
+        PG.closeModal('resDrawer');
+        renderGrid();
+      } catch (e) {
+        PG.toast('Failed to save changes. Please try again.', 'danger');
+      }
+    });
+  }
+
+  function barsForRoomLocal(st, roomId){ return barsForRoom(st, roomId); }
+
+  /* ================================================================ */
+  /* Change Room / Assign Room / Unassign Room                          */
+  /* ================================================================ */
+  function otherAssignedRoomIds(resId, excludeItemId){
+    var st = PG.getState();
+    var ids = [];
+    st.reservations.find(function(r){return r.id===resId;}).rooms.forEach(function(item){
+      if (item.id===excludeItemId) return;
+      st.roomAssignments.filter(function(a){return a.reservationItemId===item.id && a.assignmentStatus!=='Cancelled';}).forEach(function(a){ ids.push(a.physicalRoomId); });
+    });
+    return ids;
+  }
+  function openChangeRoomFor(resId, itemId, assignmentId){
+    var st = PG.getState();
+    var res = st.reservations.find(function(r){return r.id===resId;});
+    var item = res.rooms.find(function(x){return x.id===itemId;});
+    var a = assignmentId ? st.roomAssignments.find(function(x){return x.id===assignmentId;}) : null;
+    var cust = custOf(res);
+    PG.renderChangeRoomDrawer({
+      roomTypeId: item.roomTypeId, checkIn: res.checkIn, checkOut: res.checkOut,
+      preferences: {}, currentRoomId: a ? a.physicalRoomId : null,
+      excludeRoomIds: otherAssignedRoomIds(resId, itemId), excludeAssignmentId: a ? a.id : null,
+      title: a ? 'Change Room' : 'Assign Room',
+      summaryLabel: res.id + ' &middot; ' + (cust?cust.name:'Guest'),
+      summarySub: PG.fmtDateShort(res.checkIn) + ' – ' + PG.fmtDateShort(res.checkOut),
+      onConfirm: function(newRoomId){
+        try {
+          var st2 = PG.getState();
+          var newRoom = st2.physicalRooms.find(function(p){return p.id===newRoomId;});
+          var idx = st2.reservations.findIndex(function(r){return r.id===resId;});
+          var r2 = st2.reservations[idx];
+          if (a){
+            var oldRoom = st2.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+            var rec = st2.roomAssignments.find(function(x){return x.id===a.id;});
+            rec.physicalRoomId = newRoomId; rec.assignedAt = PG.nowIso(); rec.assignedBy = 'Hotel Admin';
+            r2.activity.push({ts:PG.nowIso(), text:'Room changed from '+(oldRoom?oldRoom.roomNumber:'—')+' to '+newRoom.roomNumber+' via Operations Calendar.'});
+            PG.addAudit('Room Assignment Changed', resId+' — room changed from '+(oldRoom?oldRoom.roomNumber:'—')+' to '+newRoom.roomNumber+'.');
+          } else {
+            var assignmentStatus = r2.status==='Confirmed' ? 'Assigned' : 'Held';
+            st2.roomAssignments.push({id:'asn-'+Date.now(), propertyId: st2.hotel.propertyCode, reservationId: resId, reservationItemId: itemId,
+              physicalRoomId: newRoomId, arrivalDate: r2.checkIn, departureDate: r2.checkOut, assignmentStatus: assignmentStatus,
+              assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: ''});
+            r2.activity.push({ts:PG.nowIso(), text:'Room '+newRoom.roomNumber+' assigned via Operations Calendar.'});
+            PG.addAudit('Room Assigned', resId+' — room '+newRoom.roomNumber+' assigned.');
+          }
+          PG.setState(st2);
+          PG.toast('Room '+newRoom.roomNumber+' '+(a?'assigned.':'assigned.'), 'success');
+          renderGrid();
+        } catch (e) {
+          PG.toast('Failed to save changes. Please try again.', 'danger');
+        }
+      }
+    });
+  }
+
+  var unassignModal = document.createElement('div');
+  unassignModal.className = 'pg-modal-overlay';
+  unassignModal.id = 'opcUnassignModal';
+  document.body.appendChild(unassignModal);
+  function openUnassignModal(assignmentId, resId){
+    var st = PG.getState();
+    var a = st.roomAssignments.find(function(x){return x.id===assignmentId;});
+    var room = st.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+    unassignModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Unassign Room</h3><button class="pg-modal-close" onclick="PG.closeModal(\'opcUnassignModal\')">&times;</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="help-note help-note-warning" style="margin-bottom:14px;">Unassigning Room '+PG.esc(room.roomNumber)+' will leave this reservation unit without a physical room. It will appear in the Unassigned queue until another room is assigned.</div>' +
+        '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="opc-unassign-reason">'+UNASSIGN_REASONS.map(function(r){return '<option value="'+r+'">'+r+'</option>';}).join('')+'</select></div>' +
+        '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="opc-unassign-notes"></textarea></div>' +
+      '</div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'opcUnassignModal\')">Cancel</button><button class="btn btn-danger" id="opc-unassign-confirm">Unassign Room</button></div>' +
+    '</div>';
+    PG.enhanceSelects(unassignModal);
+    document.getElementById('opc-unassign-confirm').addEventListener('click', function(){
+      try {
+        var reason = document.getElementById('opc-unassign-reason').value;
+        var notes = document.getElementById('opc-unassign-notes').value.trim();
+        var st2 = PG.getState();
+        var rec = st2.roomAssignments.find(function(x){return x.id===assignmentId;});
+        rec.assignmentStatus = 'Cancelled';
+        rec.changeReason = reason + (notes ? ' — ' + notes : '');
+        var idx = st2.reservations.findIndex(function(r){return r.id===resId;});
+        st2.reservations[idx].activity.push({ts:PG.nowIso(), text:'Room '+room.roomNumber+' unassigned via Operations Calendar. Reason: '+reason+'.'});
+        PG.setState(st2);
+        PG.addAudit('Room Unassigned', resId+' — room '+room.roomNumber+' unassigned. Reason: '+reason+'.');
+        PG.toast('Room '+room.roomNumber+' unassigned.', 'warn');
+        PG.closeModal('opcUnassignModal');
+        PG.closeModal('resDrawer');
+        renderGrid();
+      } catch (e) {
+        PG.toast('Failed to save changes. Please try again.', 'danger');
+      }
+    });
+    PG.openModal('opcUnassignModal');
+  }
+
+  /* ================================================================ */
+  /* Room Block drawer + Edit Block modal                               */
+  /* ================================================================ */
+  var blockDrawer = document.createElement('div');
+  blockDrawer.className = 'pg-drawer-overlay';
+  blockDrawer.id = 'blockDrawer';
+  document.body.appendChild(blockDrawer);
+
+  function openBlockDrawer(blockId){
+    var st = PG.getState();
+    var blk = st.roomBlocks.find(function(b){return b.id===blockId;});
+    if (!blk) return;
+    var room = st.physicalRooms.find(function(p){return p.id===blk.physicalRoomId;});
+    var body = '';
+    body += drow('Room', room ? 'Room '+PG.esc(room.roomNumber) : '—') + drow('Room Type', room ? PG.esc(rtName(room.roomTypeId)) : '—');
+    body += drow('Block Type', blk.type) + drow('Date Range', PG.fmtDate(blk.startDate)+' – '+PG.fmtDate(PG.addDays(blk.endDate,-1)));
+    body += drow('Reason', PG.esc(blk.reason));
+    if (blk.notes) body += drow('Notes', PG.esc(blk.notes));
+    body += drow('Created By', PG.esc(blk.createdBy)) + drow('Created', PG.fmtDate(blk.createdAt.slice(0,10)));
+
+    blockDrawer.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><h3>Room Block</h3><button class="pg-modal-close" onclick="PG.closeModal(\'blockDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-body">'+body+'</div>' +
+      '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">' +
+        '<div style="display:flex;gap:8px;">' +
+          (CAN_MANAGE?'<button class="btn btn-outline" style="flex:1;" id="opc-edit-block">Edit Block</button>':'') +
+          (CAN_MANAGE?'<button class="btn btn-danger-outline" style="flex:1;" id="opc-end-block">End / Remove Block</button>':'') +
+          (room?'<a class="btn btn-outline" style="flex:1;text-align:center;" href="physical-rooms.html?room='+room.id+'">View Room</a>':'') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+    var editBtn = document.getElementById('opc-edit-block'); if (editBtn) editBtn.addEventListener('click', function(){ openEditBlockModal(blockId); });
+    var endBtn = document.getElementById('opc-end-block'); if (endBtn) endBtn.addEventListener('click', function(){ endOrRemoveBlock(blockId); });
+    PG.openModal('blockDrawer');
+  }
+
+  var editBlockModal = document.createElement('div');
+  editBlockModal.className = 'pg-modal-overlay';
+  editBlockModal.id = 'editBlockModal';
+  document.body.appendChild(editBlockModal);
+  function openEditBlockModal(blockId){
+    var st = PG.getState();
+    var blk = st.roomBlocks.find(function(b){return b.id===blockId;});
+    editBlockModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Edit Block</h3><button class="pg-modal-close" onclick="PG.closeModal(\'editBlockModal\')">&times;</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="form-group"><label class="form-label">Block Type</label><select class="form-control" id="eb-type">' + BLOCK_TYPES.map(function(t){return '<option value="'+t+'"'+(t===blk.type?' selected':'')+'>'+t+'</option>';}).join('') + '</select></div>' +
+        '<div class="grid-2">' +
+          '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="eb-start" value="'+blk.startDate+'"></div>' +
+          '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="eb-end" value="'+PG.addDays(blk.endDate,-1)+'"></div>' +
+        '</div>' +
+        '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><input class="form-control" id="eb-reason" value="'+PG.esc(blk.reason)+'"></div>' +
+        '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="eb-notes">'+PG.esc(blk.notes||'')+'</textarea></div>' +
+        '<div id="eb-conflict"></div>' +
+      '</div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'editBlockModal\')">Cancel</button><button class="btn btn-primary" id="eb-save">Save Changes</button></div>' +
+    '</div>';
+    PG.enhanceSelects(editBlockModal);
+    function checkConflict(){
+      var start = document.getElementById('eb-start').value, endIncl = document.getElementById('eb-end').value;
+      var box = document.getElementById('eb-conflict'), saveBtn = document.getElementById('eb-save');
+      if (!start || !endIncl || endIncl<start){ box.innerHTML=''; saveBtn.disabled=false; return; }
+      var endExclusive = PG.addDays(endIncl,1);
+      var overlapping = PG.assignmentsOverlapping(st, blk.physicalRoomId, start, endExclusive).filter(function(a){return a.reservationItemId; });
+      if (!overlapping.length){ box.innerHTML=''; saveBtn.disabled=false; return; }
+      box.innerHTML = '<div class="help-note help-note-danger" style="margin-top:12px;">This range conflicts with '+overlapping.length+' existing reservation assignment'+(overlapping.length===1?'':'s')+'. Resolve or reassign before saving.</div>';
+      saveBtn.disabled = true;
+    }
+    ['eb-start','eb-end'].forEach(function(id){ document.getElementById(id).addEventListener('change', checkConflict); });
+    document.getElementById('eb-save').addEventListener('click', function(){
+      var reason = document.getElementById('eb-reason').value.trim();
+      var start = document.getElementById('eb-start').value, endIncl = document.getElementById('eb-end').value;
+      if (!reason){ PG.toast('A reason is required.', 'danger'); return; }
+      if (!start || !endIncl || endIncl<start){ PG.toast('Please choose a valid date range.', 'danger'); return; }
+      var endExclusive = PG.addDays(endIncl,1);
+      var overlapping = PG.assignmentsOverlapping(st, blk.physicalRoomId, start, endExclusive);
+      if (overlapping.length){ PG.toast('Resolve the conflicting reservation(s) before saving.', 'danger'); return; }
+      try {
+        var st2 = PG.getState();
+        var rec = st2.roomBlocks.find(function(b){return b.id===blockId;});
+        rec.type = document.getElementById('eb-type').value;
+        rec.startDate = start; rec.endDate = endExclusive;
+        rec.reason = reason; rec.notes = document.getElementById('eb-notes').value.trim();
+        PG.setState(st2);
+        PG.addAudit('Room Block Updated', blockId + ' updated on Room ' + (st2.physicalRooms.find(function(p){return p.id===rec.physicalRoomId;})||{}).roomNumber + '.');
+        PG.toast('Block updated.', 'success');
+        PG.closeModal('editBlockModal');
+        PG.closeModal('blockDrawer');
+        renderGrid();
+      } catch (e) {
+        PG.toast('Failed to save changes. Please try again.', 'danger');
+      }
+    });
+    PG.openModal('editBlockModal');
+  }
+  function endOrRemoveBlock(blockId){
+    var st = PG.getState();
+    var blk = st.roomBlocks.find(function(b){return b.id===blockId;});
+    var room = st.physicalRooms.find(function(p){return p.id===blk.physicalRoomId;});
+    var hasStarted = blk.startDate <= PG.TODAY;
+    var msg = hasStarted ? 'End this block as of today? Room '+room.roomNumber+' will become available again starting tomorrow.' : 'Remove this upcoming block entirely?';
+    if (!confirm(msg)) return;
+    try {
+      var st2 = PG.getState();
+      if (hasStarted){
+        var rec = st2.roomBlocks.find(function(b){return b.id===blockId;});
+        rec.endDate = PG.addDays(PG.TODAY, 1);
+      } else {
+        st2.roomBlocks = st2.roomBlocks.filter(function(b){return b.id!==blockId;});
+      }
+      PG.setState(st2);
+      PG.addAudit('Room Block Ended', blockId + ' ended/removed on Room ' + room.roomNumber + '.');
+      PG.toast('Block '+(hasStarted?'ended.':'removed.'), 'success');
+      PG.closeModal('blockDrawer');
+      renderGrid();
+    } catch (e) {
+      PG.toast('Failed to save changes. Please try again.', 'danger');
+    }
+  }
+}
+
+if (!CAN_MANAGE) {
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Operations Calendar</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to view the Operations Calendar.<br>Contact a Hotel Admin to request access.</div></div></div>';
+} else {
+  init();
+}
+</script>
+</body>
+</html>

@@ -489,6 +489,10 @@ function renderCancelModal(stage){
     var st = PG.getState();
     var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
     st.reservations[idx] = r;
+    // Cancelling a reservation must also free any physical rooms it held — otherwise
+    // the room stays "Reserved" forever from the physical-assignment layer's point of
+    // view even though the commercial layer shows the inventory as released.
+    st.roomAssignments.forEach(function(a){ if (a.reservationId===r.id && a.assignmentStatus!=='Cancelled') a.assignmentStatus = 'Cancelled'; });
     PG.setState(st);
     PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '. Reason: ' + reason + '.' + refundNote);
     PG.toast('Reservation cancelled. Inventory has been restored.', 'warn');
