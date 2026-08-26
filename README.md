@@ -1,4 +1,4 @@
-# Palestine Grand Hotel — Hotel Reservation Admin Platform (Prototype)
+# Palestine Grand Hotel — Hotel Reservation and Basic Room Operations Platform (Prototype)
 
 **Live site:** https://eyad-tritecs.github.io/Hotel-Platform/
 **Repository:** https://github.com/Eyad-tritecs/Hotel-Platform (owner account: `Eyad-tritecs`)
@@ -10,7 +10,7 @@ This document exists so a **new chat session** (or a new developer) can pick up 
 
 ## 1. What this project is
 
-A **clickable, browser-based prototype** of a B2B, multi-tenant, admin-first Hotel Reservation Administration Platform, built for a single pilot hotel: **Palestine Grand Hotel** (Bethlehem, Palestine, USD currency). It is designed to let Product, Engineering, and business stakeholders understand the MVP scope by *navigating* realistic workflows rather than reading a spec document.
+A **clickable, browser-based prototype** of a B2B, multi-tenant, admin-first Hotel Reservation and Basic Room Operations Platform, built for a single pilot hotel: **Palestine Grand Hotel** (Bethlehem, Palestine, USD currency). It is designed to let Product, Engineering, and business stakeholders understand the MVP scope by *navigating* realistic workflows rather than reading a spec document.
 
 It is **not** a real product: there is no server, no database, no authentication, and no real payment processing. All "backend" behavior is simulated client-side (see §4).
 
@@ -19,10 +19,11 @@ It is **not** a real product: there is no server, no database, no authentication
 - B2B, admin-first, desktop-first, multi-tenant platform (this prototype models **one tenant**: Palestine Grand Hotel).
 - Operated from a Hotel Admin Panel — **for hotel staff**, not guests.
 - Visual language: **Metronic-style** enterprise admin UI (dark navy sidebar, white content, card-based layout, top header).
+- **Physical rooms are inside the MVP** (as of the room-operations scope update): a lightweight operational layer beneath room-type commercial inventory — see §4.6. Full front-desk and housekeeping functionality (check-in/out workflows, housekeeping status boards, maintenance ticketing) remains **outside** the MVP.
 
 ### 1.2 Explicitly out of scope — do not build these
 
-A customer-facing booking website or mobile app; OTA integrations (Booking.com, Expedia, Agoda, Hotels.com, Trip.com) or OTA sync; PMS/CRS/Channel Manager integrations; outbound ARI; physical room-number assignment; Check-in/Check-out as a workflow; housekeeping; maintenance; POS/restaurant management; folios/full accounting; payroll/HR; CRM marketing; loyalty; gift cards; advanced promotions/revenue management; advanced BI; AI features; complex group booking / rooming lists; complex split payments.
+A customer-facing booking website or mobile app; OTA integrations (Booking.com, Expedia, Agoda, Hotels.com, Trip.com) or OTA sync; PMS/CRS/Channel Manager integrations; outbound ARI; Check-in/Check-out as a workflow; housekeeping; maintenance ticketing; POS/restaurant management; folios/full accounting; payroll/HR; CRM marketing; loyalty; gift cards; advanced promotions/revenue management; advanced BI; AI features; complex group booking / rooming lists; complex split payments; overbooking.
 
 These exclusions have been **explicitly and repeatedly audited** against the codebase (grepped for banned terms) — see commit `292f6b3` for the audit methodology. Any future work must preserve this boundary.
 
@@ -93,7 +94,8 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 
 ```
 {
-  seededAt, hotel, roomTypes, rates, bedConfigs, mealPlans,
+  seededAt, hotel, roomTypes, physicalRooms, roomAssignments, roomBlocks,
+  rates, bedConfigs, mealPlans,
   inventoryOverrides, dateAdjustments, adjustments,
   customers, reservations, nextResId, ratePlans, audit
 }
@@ -101,6 +103,7 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 
 - **`hotel`** — single tenant profile object: `name, legalName, propertyCode, currency, city, country, address, phoneCode, phone, email, checkInTime, checkOutTime, timezone, starRating, status, policySummary`.
 - **`roomTypes`** — array of `{ id, name, code, sellable, baseCapacity, maxAdults, maxChildren, bed, baseRate, active, desc }`. `sellable` is the *current* count (mutated by adjustments); `baseCapacity` is the original seeded count, kept immutable so the UI can show "Configured Capacity" vs. "Authorized Adjustments" as a diff.
+- **`physicalRooms`**, **`roomAssignments`**, **`roomBlocks`** — the physical-room operational layer, introduced alongside the room-operations scope update. See §4.6.
 - **`rates`** — `{ [roomTypeId]: { [date]: price } }`, a per-date calendar used by `PG.rateFor()`. This is the actual pricing engine for computing reservation totals — **not** the same thing as `ratePlans` (see below), which is an admin-facing display concept.
 - **`ratePlans`** — array of `{ id, name, roomTypeId, mealPlan, startDate, endDate, price, currency, active }`. These are shown in the Rates screen and picked in the New Reservation wizard's Rate Plan dropdown, but the *actual* price used in totals still comes from the `rates` calendar via `PG.rateFor()`. (This is a known inconsistency — see §9.)
 - **`bedConfigs`**, **`mealPlans`** — flat string arrays, user-editable via the "managed select" component (§6.4). Seeded with a handful of common values.
@@ -121,7 +124,7 @@ The prototype needs to *feel* like a real connected system (creating a reservati
   status,            // Draft | Pending Payment | Confirmed | Cancelled | Completed | No Show
   paymentStatus,     // Pay on Arrival | Payment Required | Link Sent | Paid | Failed | Expired | Refund Pending | Refunded
   paymentMethod,     // "Pay on Arrival" | "Payment Link"
-  rooms: [ { roomTypeId, qty, adults, children, ratePlanName } ],  // one or more "Reservation Items"
+  rooms: [ { id, roomTypeId, qty, adults, children, ratePlanName } ],  // one or more "Reservation Items"; `id` (e.g. "RES-10245-itm-1") is what RoomAssignment.reservationItemId points to
   taxAmount, feeAmount,   // stored at creation time so Reservation Detail's pricing always matches what was shown when booked
   notes,
   transactionRef, paymentLinkUrl, paymentLinkGeneratedAt, paymentLinkExpiresAt, paymentPaidAt,  // payment-link lifecycle fields, populated as the flow progresses
@@ -136,6 +139,7 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 4. Payment (`paymentMethod`, `paymentStatus`, `transactionRef`, etc.) belongs to the **whole reservation**, never to an individual item.
 5. `status` (Reservation Status) and `paymentStatus` (Payment Status) are **separate fields, kept visually distinct** (see §6.3) but correlated by business logic (e.g. cancelling a Paid reservation sets `paymentStatus` to `Refund Pending`).
 6. Occupancy (`adults`/`children`) per item is **derived, not user-entered** — computed from the room type's `maxAdults`/`maxChildren` × quantity in the New Reservation wizard, and is read-only in the UI. This was a deliberate change (see commit history around the "New Reservation" rework).
+7. Each reservation item has a stable `id` (a nested field, so it's `undefined` on reservations saved before this was added — guard accordingly). `RoomAssignment.reservationItemId` references it, connecting a commercial Reservation Item to one or more physical rooms.
 
 ### 4.4 Availability & pricing engine
 
@@ -147,6 +151,25 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 ### 4.5 Date handling — a hard-won lesson
 
 **All date math (`PG.addDays`, `PG.dateRange`, `PG.fmtDate`, etc.) is implemented in UTC via `Date.UTC(...)`, never via local-time `Date` parsing.** This was a real, painful bug (commit history around "Fix state migration..." mentions it, but the actual root-cause fix was in an earlier session): parsing `"2026-08-23T00:00:00"` as local time and then calling `.toISOString()` can silently roll the date backward or forward depending on the host machine's UTC offset. In one sandboxed browser environment this caused an *infinite loop* in `dateRange()` that crashed the whole page. **Never reintroduce local-time date parsing anywhere in this codebase.** Always go through the `PG.*` date helpers.
+
+### 4.6 Physical rooms — the operational allocation layer
+
+Physical rooms sit **beneath** room-type commercial inventory as a second, connected layer:
+
+- **Room-type inventory** (`roomTypes[].sellable`, `rates`, `inventoryOverrides`, `dateAdjustments`) is the **commercial** availability and pricing layer — unchanged by this update, still what `PG.computeAvailability()`/`PG.validateAvailability()` operate on, and still what the New Reservation wizard checks before letting a booking proceed.
+- **Physical-room assignment** (`physicalRooms`, `roomAssignments`, `roomBlocks`) is the **operational** allocation layer: which actual room fulfills which reservation item, for which date range.
+
+**`physicalRooms`** — array of `{ id, propertyId, roomTypeId, roomNumber, building, floor, bedConfiguration, view, accessibilityFeatures, connectingRoomIds, notes, isActive, isSellable, operationalStatus }`. `operationalStatus` is the room's **stored, manually-set** baseline state — one of `Available | Held | Out of Order | Out of Service | Inactive`. `Reserved` is never stored; it's always derived live from a covering `roomAssignment` (see `PG.roomStatusOn()`). Housekeeping states (**Clean/Dirty/Inspected/Checked In/Checked Out/Occupied**) are deliberately excluded — out of MVP scope per §1.2.
+
+**`roomAssignments`** — array of `{ id, propertyId, reservationId, reservationItemId, physicalRoomId, arrivalDate, departureDate, assignmentStatus, assignedAt, assignedBy, changeReason }`. `assignmentStatus` is currently `Assigned` (confirmed) | `Held` (tentative, used while the reservation itself isn't yet Confirmed/Paid) | `Cancelled`. One reservation item with `qty > 1` has one `roomAssignment` per physical room (e.g. RES-10245's `dlx` item, qty 2, has two assignment rows).
+
+**`roomBlocks`** — array of `{ id, propertyId, physicalRoomId, startDate, endDate, type, reason, notes, createdAt, createdBy }`. An operational hold against a specific physical room independent of any reservation (maintenance, deep cleaning, etc.). `blk-3` in the seed data is a **deliberate conflict** — it overlaps `asn-5`'s tentative hold on the same room (`fam-402`) — left in on purpose as a realistic example of the kind of clash a future room-assignment UI will need to surface and resolve.
+
+**Engine helpers** (`assets/js/app.js`): `PG.physicalRoomsForType()`, `PG.isPhysicalRoomBlocked()`, `PG.isPhysicalRoomAssigned()`, `PG.roomStatusOn()`, `PG.eligiblePhysicalRooms()` / `PG.eligiblePhysicalRoomCount()` (active + sellable + unblocked + unassigned rooms of a type on a date), and `PG.validateRoomAssignmentCapacity()` (the physical-layer counterpart to `PG.validateAvailability()` — blocks confirming more assignments than eligible physical rooms exist for the stay; **no overbooking** at this layer).
+
+**Known, intentional gap:** `physicalRooms` counts (active + sellable) don't always numerically equal `roomTypes[].sellable` yet — e.g. Standard has 10 physical rooms but only 8 are currently active+sellable (one Out of Order, one Inactive). The two layers are not yet unified into a single source of truth; that reconciliation is deferred to when the full Physical Rooms UI is built (see §11). Do not silently "fix" this mismatch — it's seeded deliberately to demonstrate the layering.
+
+**Nothing beyond this data layer and the nav entry has been built yet** — there is no `physical-rooms.html` page. It's one of the intentionally-not-yet-built pages the nav links to (see §7), same pattern as `operations-calendar.html`/`guests.html`/the report pages.
 
 ---
 
@@ -226,11 +249,12 @@ A from-scratch (not select-wrapping) dropdown for editable string lists — curr
 
 ## 7. Current navigation structure
 
-Defined in `NAV` in `app.js`. **This was restructured in the most recent session** (commit `fcc6cda`) to:
+Defined in `NAV` in `app.js`. **Most recently restructured** (room-operations scope update) so the old "Overview" section is folded into "Hotel Management" and Physical Rooms is added:
 
 ```
-Overview          → Dashboard (index.html), Operations Calendar (operations-calendar.html — NOT YET BUILT)
-Hotel Management  → Hotel Profile, Room Types, Rates, Availability & Inventory
+Hotel Management  → Dashboard (index.html), Operations Calendar (operations-calendar.html — NOT YET BUILT),
+                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html — NOT YET BUILT),
+                     Rates, Availability & Inventory
 Reservations      → Reservations, New Reservation, Guests (guests.html — NOT YET BUILT)
 Payments          → Payments
 Reports           → Reservation Reports, Inventory Reports, Payment Reports (ALL THREE — NOT YET BUILT)
@@ -238,7 +262,7 @@ Settings          → Hotel Policies, Taxes & Fees, Payment Configuration
 Administration    → Hotels (hotels.html — NOT YET BUILT, super-admin-only), Users, Roles, Permissions, Audit
 ```
 
-**The nav links to five pages that do not exist yet.** This is intentional — the user's own prompt said "Do not generate all new screens from this prompt alone. Use the following prompts to create and connect each area." Expect follow-up prompts to build: `operations-calendar.html`, `guests.html`, `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. When you build them, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new labels to `CRUMB_LINKS` too).
+**The nav links to six pages that do not exist yet.** This is intentional, following the same "don't build every screen from one prompt" sequencing established earlier in the project. Expect follow-up prompts to build: `operations-calendar.html`, `guests.html`, `physical-rooms.html`, `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. When you build them, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new labels to `CRUMB_LINKS` too — `physical-rooms.html`'s crumb link is already registered).
 
 The old "Guided Journey" nav item was removed from the sidebar in this restructure (it's not in the new spec's nav list) but the page (`demo-journey.html`) still exists and is still linked from the Dashboard's Quick Operations panel — don't delete it.
 
@@ -251,7 +275,7 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 | `index.html` | **Dashboard / Overview** | Fully rebuilt as an operational workspace — every number is computed live from state (not hardcoded). Includes a real "Attention Required" alert engine (expiring payment links, failed payments, low availability, active Stop Sell, stale drafts >24h), dismissible where appropriate. Deep-links into `reservations.html`/`payments.html` via query params. |
 | `hotel-profile.html` | Tenant profile, editable | Country/City/Currency/Timezone are dropdowns (`PG.REF`); phone has a separate country-code dropdown. |
 | `room-types.html` | Room type list | Table with View/Edit actions + Add. |
-| `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete removes associated `rates[id]` and `ratePlans` referencing it. |
+| `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete removes associated `rates[id]`, `ratePlans`, `physicalRooms`, `roomAssignments`, and `roomBlocks` referencing it. |
 | `rates.html` | Rate Plan list | Table with Edit action + Add. |
 | `rate-plan-form.html` | Create/edit/**delete** a rate plan | Meal Plan uses managed-select; Currency is a dropdown; shows a live warning if price < the room type's base rate; does not hard-block saving on that warning. |
 | `availability-inventory.html` | Live availability grid + Stop Sell/Reopen/Adjust Inventory | Grid cells are clickable (`tbody .av-cell` only — header cells intentionally excluded, see §9 history). Adjust Inventory is a **Drawer**; Stop Sell/Reopen are **Modals**, each pre-filling from the currently-selected cell. |
@@ -282,6 +306,7 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 - **Reservation dates are reservation-level, not per-item** (§4.3, rule 3) — intentional MVP simplification, do not "fix" without discussion.
 - **Occupancy is derived, not stored as a user preference** — if a room type's `maxAdults`/`maxChildren` changes after a reservation was made, existing reservations keep their originally-computed occupancy (correct — it's a snapshot, not a live join).
 - **No login/auth/role-switcher UI** — `CURRENT_ROLE` is a hardcoded constant.
+- **`physicalRooms`/`roomAssignments`/`roomBlocks` are a data layer only** — no UI reads or writes them yet beyond the seed data and the room-type delete cascade (§8). See §4.6 for the full model and the deliberate active+sellable count mismatch vs. `roomTypes[].sellable`.
 - **GitHub Pages caches aggressively.** When testing changes right after a push, hard-refresh (Ctrl/Cmd+Shift+R) — a stale service-worker-free browser cache has caused "my change isn't showing" confusion at least once.
 - **Browser-automation quirk (dev environment only):** the Claude Browser preview tool's `computer` (screenshot) action is flaky in this sandbox and frequently times out with "the Browser pane is not displayed". When verifying UI changes in an agent session, prefer `javascript_tool`-based DOM/state assertions over screenshots — they're reliable; screenshots are not. Also: the `serve` dev server caches 301 redirects in the *browser's* HTTP cache even after `serve.json` is fixed — use a `?cb=N` cache-busting query param when re-testing a URL you've hit before in the same session.
 
@@ -304,8 +329,9 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 
 Based on the nav structure already wired in but not yet built:
 
-- `operations-calendar.html` — an operational calendar adapted to **room-type inventory**, not physical rooms (explicit constraint from the latest prompt).
+- `operations-calendar.html` — an operational calendar; originally scoped to room-type inventory only, but now that `physicalRooms`/`roomAssignments` exist it could reasonably surface per-room detail too — confirm scope in the prompt that builds it.
 - `guests.html` — a Guests directory (likely: list of `state.customers`, search, maybe a guest detail/history view).
+- `physical-rooms.html` — the detailed Physical Rooms UI (list/detail of `state.physicalRooms`, room blocks, and assignment history) — explicitly deferred by the room-operations scope-update prompt to a future prompt. Likely candidate for a room-assignment flow wired into New Reservation / Reservation Detail using `PG.eligiblePhysicalRooms()` / `PG.validateRoomAssignmentCapacity()`.
 - `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html` — reporting views; `state.audit` and `state.adjustments` already contain data that could feed Inventory Reports.
 - `hotels.html` — a Platform Super Admin-only tenant list (would need `CURRENT_ROLE` toggled to `"Platform Super Admin"` to view/test).
 

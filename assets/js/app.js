@@ -1,4 +1,4 @@
-/* Palestine Grand Hotel — Admin Platform Prototype
+/* Palestine Grand Hotel — Hotel Reservation and Basic Room Operations Platform Prototype
    Shared shell, seed data, and state engine. No backend — localStorage simulates persistence. */
 
 (function (global) {
@@ -116,8 +116,8 @@
         paymentStatus: "Paid",
         paymentMethod: "Payment Link",
         rooms: [
-          { roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast", adults: 2, children: 0 },
-          { roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast", adults: 2, children: 2 }
+          { id: "RES-10245-itm-1", roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast", adults: 2, children: 0 },
+          { id: "RES-10245-itm-2", roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast", adults: 2, children: 2 }
         ],
         notes: "Guest requested early check-in if possible.",
         taxAmount: 50,
@@ -145,7 +145,7 @@
         paymentStatus: "Pay on Arrival",
         paymentMethod: "Pay on Arrival",
         rooms: [
-          { roomTypeId: "std", qty: 1, adults: 2, children: 0 }
+          { id: "RES-10246-itm-1", roomTypeId: "std", qty: 1, adults: 2, children: 0 }
         ],
         taxAmount: 0,
         feeAmount: 0,
@@ -166,7 +166,7 @@
         status: "Pending Payment",
         paymentStatus: "Expired",
         paymentMethod: "Payment Link",
-        rooms: [{ roomTypeId: "fam", qty: 1, adults: 2, children: 1 }],
+        rooms: [{ id: "RES-10247-itm-1", roomTypeId: "fam", qty: 1, adults: 2, children: 1 }],
         taxAmount: 0,
         feeAmount: 0,
         notes: "Booked through Al-Quds Travel Agency.",
@@ -180,6 +180,60 @@
           { ts: TODAY + "T08:07", text: "Payment link expired without payment." }
         ]
       }
+    ];
+
+    var PROPERTY_ID = "PGH-001";
+
+    // Physical rooms: the operational allocation layer beneath room-type commercial
+    // inventory. Counts are seeded close to (but deliberately not always exactly equal
+    // to) each room type's `sellable` figure — a room can be active in the building but
+    // temporarily non-sellable (Out of Order/Out of Service/Inactive), which is why the
+    // two layers are tracked separately rather than one being computed from the other
+    // yet. See README §9.
+    var physicalRooms = [
+      { id: "std-101", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "101", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-102", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "102", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-103", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "103", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: ["std-104"], notes: "Connects to Room 104.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-104", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "104", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: ["std-103"], notes: "Connects to Room 103.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-105", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "105", building: "Main Building", floor: 1, bedConfiguration: "2 Single Beds", view: "Courtyard View", accessibilityFeatures: ["Wheelchair Accessible", "Grab Bars"], connectingRoomIds: [], notes: "ADA-compliant accessible room.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-201", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "201", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-202", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "202", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "Held for a walk-in currently at the desk.", isActive: true, isSellable: true, operationalStatus: "Held" },
+      { id: "std-203", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "203", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-204", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "204", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "Plumbing leak reported " + addDays(TODAY, -2) + "; maintenance pending.", isActive: true, isSellable: false, operationalStatus: "Out of Order" },
+      { id: "std-205", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "205", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "Temporarily removed from inventory pending refurbishment.", isActive: false, isSellable: false, operationalStatus: "Inactive" },
+
+      { id: "dlx-301", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "301", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "dlx-302", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "302", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: ["dlx-303"], notes: "Connects to Room 303.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "dlx-303", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "303", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: ["dlx-302"], notes: "Connects to Room 302.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "dlx-304", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "304", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "dlx-305", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "305", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "dlx-306", propertyId: PROPERTY_ID, roomTypeId: "dlx", roomNumber: "306", building: "Main Building", floor: 3, bedConfiguration: "1 King Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "Extended out-of-service window — HVAC replacement scheduled.", isActive: true, isSellable: false, operationalStatus: "Out of Service" },
+
+      { id: "fam-401", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "401", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "fam-402", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "402", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "fam-403", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "403", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "fam-404", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "404", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" }
+    ];
+
+    // Room assignments connect each reservation's room items to specific physical
+    // rooms. A reservation that isn't yet Confirmed/Paid gets a "Held" (tentative)
+    // assignment rather than "Assigned" — mirrors the Reservation/Payment status split.
+    var roomAssignments = [
+      { id: "asn-1", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-1", physicalRoomId: "dlx-301", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
+      { id: "asn-2", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-1", physicalRoomId: "dlx-302", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
+      { id: "asn-3", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-2", physicalRoomId: "fam-401", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
+      { id: "asn-4", propertyId: PROPERTY_ID, reservationId: "RES-10246", reservationItemId: "RES-10246-itm-1", physicalRoomId: "std-101", arrivalDate: "2026-08-22", departureDate: "2026-08-24", assignmentStatus: "Assigned", assignedAt: TODAY + "T11:41", assignedBy: "Hotel Admin", changeReason: "" },
+      { id: "asn-5", propertyId: PROPERTY_ID, reservationId: "RES-10247", reservationItemId: "RES-10247-itm-1", physicalRoomId: "fam-402", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 2), assignmentStatus: "Held", assignedAt: addDays(TODAY, -1) + "T08:05", assignedBy: "Hotel Admin", changeReason: "Tentative hold pending payment confirmation." }
+    ];
+
+    // Room blocks: operational holds against a physical room independent of any
+    // reservation (maintenance, deep cleaning, etc.). blk-3 is a deliberate data
+    // conflict — it overlaps asn-5's tentative hold on the same room — left in as a
+    // realistic example of the kind of clash a future room-assignment UI must surface.
+    var roomBlocks = [
+      { id: "blk-1", propertyId: PROPERTY_ID, physicalRoomId: "std-204", startDate: addDays(TODAY, -2), endDate: addDays(TODAY, 3), type: "Maintenance", reason: "Plumbing leak repair", notes: "Awaiting plumber parts.", createdAt: addDays(TODAY, -2) + "T09:00", createdBy: "Hotel Admin" },
+      { id: "blk-2", propertyId: PROPERTY_ID, physicalRoomId: "dlx-306", startDate: TODAY, endDate: addDays(TODAY, 45), type: "Maintenance", reason: "HVAC replacement", notes: "Extended out-of-service window.", createdAt: TODAY + "T08:30", createdBy: "Hotel Admin" },
+      { id: "blk-3", propertyId: PROPERTY_ID, physicalRoomId: "fam-402", startDate: addDays(TODAY, 1), endDate: addDays(TODAY, 3), type: "Maintenance", reason: "Deep cleaning scheduled", notes: "Conflicts with the tentative hold for RES-10247 on the same room — needs manual resolution.", createdAt: addDays(TODAY, -1) + "T07:50", createdBy: "Hotel Admin" }
     ];
 
     return {
@@ -203,6 +257,9 @@
         policySummary: "Free cancellation up to 24 hours before arrival. Standard check-in is 14:00 and check-out is 12:00. Full payment is due at check-in unless the reservation was prepaid via Payment Link."
       },
       roomTypes: roomTypes,
+      physicalRooms: physicalRooms,
+      roomAssignments: roomAssignments,
+      roomBlocks: roomBlocks,
       rates: rates,
       bedConfigs: ["1 Queen Bed", "1 King Bed", "1 Queen + 2 Single Beds", "2 Single Beds", "2 Double Beds"],
       mealPlans: ["Room Only", "Breakfast Included", "Half Board", "Full Board"],
@@ -317,6 +374,71 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Physical rooms — the operational allocation layer beneath room-type      */
+  /* commercial inventory. Room-type `sellable` remains the authoritative     */
+  /* commercial availability figure for now (see README §9); these helpers    */
+  /* let a future assignment UI check physical-room eligibility without      */
+  /* allowing more assignments than physically exist for a date.             */
+  /* ---------------------------------------------------------------- */
+  function physicalRoomsForType(state, roomTypeId) {
+    return (state.physicalRooms || []).filter(function (pr) { return pr.roomTypeId === roomTypeId; });
+  }
+  function isPhysicalRoomBlocked(state, physicalRoomId, dateStr) {
+    return (state.roomBlocks || []).some(function (b) {
+      return b.physicalRoomId === physicalRoomId && dateStr >= b.startDate && dateStr < b.endDate;
+    });
+  }
+  function isPhysicalRoomAssigned(state, physicalRoomId, dateStr, excludeAssignmentId) {
+    return (state.roomAssignments || []).some(function (a) {
+      if (a.id === excludeAssignmentId) return false;
+      if (a.assignmentStatus === "Cancelled") return false;
+      return a.physicalRoomId === physicalRoomId && dateStr >= a.arrivalDate && dateStr < a.departureDate;
+    });
+  }
+  // The status a room shows on a given date. "Reserved" is always derived from a live
+  // assignment, never stored — per product rule, housekeeping states (Clean/Dirty/etc.)
+  // are intentionally out of MVP scope.
+  function roomStatusOn(state, physicalRoomId, dateStr) {
+    var room = (state.physicalRooms || []).find(function (pr) { return pr.id === physicalRoomId; });
+    if (!room) return null;
+    if (!room.isActive) return "Inactive";
+    if (isPhysicalRoomAssigned(state, physicalRoomId, dateStr)) return "Reserved";
+    if (isPhysicalRoomBlocked(state, physicalRoomId, dateStr)) return room.operationalStatus === "Out of Service" ? "Out of Service" : "Out of Order";
+    return room.operationalStatus || "Available";
+  }
+  function eligiblePhysicalRooms(state, roomTypeId, dateStr) {
+    return physicalRoomsForType(state, roomTypeId).filter(function (pr) {
+      return pr.isActive && pr.isSellable && !isPhysicalRoomBlocked(state, pr.id, dateStr) && !isPhysicalRoomAssigned(state, pr.id, dateStr);
+    });
+  }
+  function eligiblePhysicalRoomCount(state, roomTypeId, dateStr) {
+    return eligiblePhysicalRooms(state, roomTypeId, dateStr).length;
+  }
+  // Guards against confirming more room assignments than physically exist for the
+  // stay — the physical-layer counterpart to validateAvailability's commercial check.
+  // No overbooking is permitted at this layer in the MVP.
+  function validateRoomAssignmentCapacity(state, roomTypeId, checkIn, checkOut, qty) {
+    var nights = dateRange(checkIn, checkOut);
+    var problems = [];
+    nights.forEach(function (d) {
+      var n = eligiblePhysicalRoomCount(state, roomTypeId, d);
+      if (n < qty) problems.push({ date: d, eligible: n });
+    });
+    return { ok: problems.length === 0, problems: problems, nights: nights };
+  }
+  var ROOM_STATUS_BADGE = {
+    "Available": "badge-green",
+    "Reserved": "badge-blue",
+    "Held": "badge-yellow",
+    "Out of Order": "badge-red",
+    "Out of Service": "badge-red",
+    "Inactive": "badge-gray"
+  };
+  function roomStatusBadge(status) {
+    return '<span class="badge ' + (ROOM_STATUS_BADGE[status] || "badge-gray") + '"><span class="badge-dot"></span>' + status + "</span>";
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Formatting helpers                                                 */
   /* ---------------------------------------------------------------- */
   var STATUS_BADGE = {
@@ -385,13 +507,12 @@
   var CURRENT_ROLE = "Hotel Admin"; // this prototype's persona; "Platform Super Admin" would also see Hotels
 
   var NAV = [
-    { section: "Overview", items: [
-      { key: "dashboard", label: "Dashboard", href: "index.html", icon: "grid" },
-      { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" }
-    ]},
     { section: "Hotel Management", items: [
+      { key: "dashboard", label: "Dashboard", href: "index.html", icon: "grid" },
+      { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" },
       { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
       { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
+      { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
       { key: "rates", label: "Rates", href: "rates.html", icon: "tag" },
       { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar" }
     ]},
@@ -427,6 +548,7 @@
     grid: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>',
     chart: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/><path d="M2 20h20"/></svg>',
     bed: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/><path d="M3 18v2M21 18v2M3 12V8a1 1 0 0 1 1-1h6v5"/></svg>',
+    door: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2.5" width="14" height="19" rx="1.2"/><path d="M15 12h.01"/></svg>',
     tag: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.6 12.6 12 21.2 2.8 12 11.4 3.4H20a1 1 0 0 1 1 1v8.2Z"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/></svg>',
     calendar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
     list: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
@@ -461,8 +583,8 @@
   }
 
   var CRUMB_LINKS = {
-    "Dashboard": "index.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
-    "Rates": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
+    "Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
+    "Physical Rooms": "physical-rooms.html", "Rates": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
     "New Reservation": "new-reservation.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
     "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
     "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Hotels": "hotels.html", "Users": "users.html",
@@ -689,6 +811,14 @@
     bookedCount: bookedCount,
     isStopSell: isStopSell,
     rateFor: rateFor,
+    physicalRoomsForType: physicalRoomsForType,
+    isPhysicalRoomBlocked: isPhysicalRoomBlocked,
+    isPhysicalRoomAssigned: isPhysicalRoomAssigned,
+    roomStatusOn: roomStatusOn,
+    eligiblePhysicalRooms: eligiblePhysicalRooms,
+    eligiblePhysicalRoomCount: eligiblePhysicalRoomCount,
+    validateRoomAssignmentCapacity: validateRoomAssignmentCapacity,
+    roomStatusBadge: roomStatusBadge,
     statusBadge: statusBadge,
     payBadge: payBadge,
     esc: esc,

@@ -68,11 +68,15 @@ if (readOnly){
 
 if (rt && !readOnly){
   document.getElementById('deleteBtn').addEventListener('click', function(){
-    if (!confirm('Delete "'+rt.name+'"? This cannot be undone and will remove its rates and rate plans.')) return;
+    if (!confirm('Delete "'+rt.name+'"? This cannot be undone and will remove its rates, rate plans, and physical rooms.')) return;
     var st = PG.getState();
     st.roomTypes = st.roomTypes.filter(function(r){ return r.id!==rt.id; });
     delete st.rates[rt.id];
     st.ratePlans = st.ratePlans.filter(function(p){ return p.roomTypeId!==rt.id; });
+    var removedRoomIds = st.physicalRooms.filter(function(pr){ return pr.roomTypeId===rt.id; }).map(function(pr){ return pr.id; });
+    st.physicalRooms = st.physicalRooms.filter(function(pr){ return pr.roomTypeId!==rt.id; });
+    st.roomBlocks = st.roomBlocks.filter(function(b){ return removedRoomIds.indexOf(b.physicalRoomId)===-1; });
+    st.roomAssignments = st.roomAssignments.filter(function(a){ return removedRoomIds.indexOf(a.physicalRoomId)===-1; });
     PG.setState(st);
     PG.addAudit('Room Type Deleted', rt.name + ' was deleted.');
     PG.toast('Room type deleted.', 'warn');
