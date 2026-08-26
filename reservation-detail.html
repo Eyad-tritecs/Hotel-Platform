@@ -36,6 +36,8 @@ var page = PG.mount("reservations", ["Reservations", "Reservations", "Reservatio
 var s = PG.getState();
 var id = new URLSearchParams(location.search).get('id');
 var r = s.reservations.find(function(x){return x.id===id;});
+// Unassign Room is a secondary, permission-controlled action — see PG.CURRENT_ROLE (§5.3 of README).
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
 
 if (!r){
   page.innerHTML = '<div class="empty-state"><div class="ic">&#10060;</div>Reservation "'+PG.esc(id||'')+'" was not found.<br><br><a class="btn btn-primary" href="reservations.html">Back to Reservations</a></div>';
@@ -56,9 +58,39 @@ function lines(){
     var rt = s.roomTypes.find(function(x){return x.id===room.roomTypeId;});
     var subtotal = 0;
     n.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
-    return {name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room), adults: room.adults, children: room.children};
+    return {itemId: room.id, roomTypeId: room.roomTypeId, name: rt.name, qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room), adults: room.adults, children: room.children};
   });
 }
+function assignmentsForItem(itemId){
+  return (s.roomAssignments || []).filter(function(a){ return a.reservationItemId===itemId && a.assignmentStatus!=='Cancelled'; });
+}
+function anyItemUnassigned(){
+  return r.status!=='Cancelled' && lines().some(function(l){ return assignmentsForItem(l.itemId).length < l.qty; });
+}
+function renderAssignmentBlock(l){
+  var assigns = assignmentsForItem(l.itemId);
+  var rows = assigns.map(function(a){
+    var pr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+    var needsAttention = pr ? !PG.roomEligibleForStay(s, pr, r.checkIn, r.checkOut, a.id) : true;
+    return '<div class="room-assign-row'+(needsAttention?' unassigned':'')+'">' +
+      '<div><div style="font-weight:700;font-size:13px;">'+(pr ? 'Room '+PG.esc(pr.roomNumber)+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span>' : 'Room no longer exists')+'</div>' +
+      (needsAttention ? '<div class="text-sm" style="color:var(--pg-danger);font-weight:600;margin-top:4px;">&#9888; Needs Attention — no longer eligible for these dates. Choose a replacement.</div>' : '') +
+      '<div class="muted text-sm" style="margin-top:4px;">'+a.assignmentStatus+'</div></div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+        (canEditRooms() ? '<button class="btn btn-outline btn-sm change-room-btn" data-assignment="'+a.id+'" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Change Room</button>' : '') +
+        (canEditRooms() && CAN_MANAGE ? '<button class="btn btn-danger-outline btn-sm unassign-btn" data-assignment="'+a.id+'">Unassign</button>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+  var shortfall = l.qty - assigns.length;
+  var unassignedRows = '';
+  for (var i=0;i<shortfall;i++){
+    unassignedRows += '<div class="room-assign-row unassigned"><div class="text-sm" style="color:var(--pg-danger);font-weight:600;">&#9888; No physical room assigned to this unit.</div>' +
+      (canEditRooms() ? '<button class="btn btn-primary btn-sm assign-room-btn" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Assign Room</button>' : '') + '</div>';
+  }
+  return rows + unassignedRows;
+}
+function canEditRooms(){ return r.status!=='Cancelled' && r.status!=='Completed'; }
 function roomCharges(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
 function taxAmount(){ return r.taxAmount != null ? r.taxAmount : Math.round(roomCharges()*0.04*100)/100; }
 function feeAmount(){ return r.feeAmount != null ? r.feeAmount : (r.rooms.length ? 20 : 0); }
@@ -98,10 +130,12 @@ function render(){
   '</div>' + (r.notes ? '<div class="form-group" style="margin-top:6px;"><div class="form-label">Notes</div><div class="text-sm">'+PG.esc(r.notes)+'</div></div>' : ''));
 
   // Section 3 — Room Items
-  html += sectionCard(3, 'Room Items', lines().map(function(l){
+  var unassignedWarning = anyItemUnassigned() ? '<div class="help-note help-note-danger" style="margin-bottom:14px;">&#9888; This reservation has one or more units without a physical room assigned. Assign a room to complete it.</div>' : '';
+  html += sectionCard(3, 'Room Items', unassignedWarning + lines().map(function(l){
     var occ = l.adults != null ? l.adults+' Adult'+(l.adults===1?'':'s')+(l.children ? ', '+l.children+' Child'+(l.children===1?'':'ren') : '') : null;
     return '<div class="room-item-card"><div class="ri-top"><h4>'+l.qty+'× '+l.name+'</h4><span class="ri-total">'+PG.fmtMoney(l.subtotal)+'</span></div>' +
-      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div></div>';
+      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div>' +
+      '<div style="margin-top:4px;">'+renderAssignmentBlock(l)+'</div></div>';
   }).join(''));
 
   // Section 4 — Pricing
@@ -140,6 +174,97 @@ function render(){
   document.getElementById('moreBtn').addEventListener('click', function(e){ e.stopPropagation(); document.getElementById('moreMenu').classList.toggle('show'); });
   document.addEventListener('click', function(){ var m=document.getElementById('moreMenu'); if(m) m.classList.remove('show'); });
   document.getElementById('printStub').addEventListener('click', function(){ PG.toast('Printing / export is outside this MVP prototype.', 'warn'); });
+
+  document.querySelectorAll('.change-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openChangeRoomForAssignment(el.dataset.assignment, el.dataset.item, el.dataset.rt); }); });
+  document.querySelectorAll('.assign-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openAssignRoomFor(el.dataset.item, el.dataset.rt); }); });
+  document.querySelectorAll('.unassign-btn').forEach(function(el){ el.addEventListener('click', function(){ openUnassignModal(el.dataset.assignment); }); });
+}
+
+/* ---- Room assignment management: Change Room / Assign Room / Unassign Room ---- */
+function assignmentsForOtherItems(itemId){
+  var ids = [];
+  lines().forEach(function(l){ if (l.itemId!==itemId) ids = ids.concat(assignmentsForItem(l.itemId).map(function(a){return a.physicalRoomId;})); });
+  return ids;
+}
+function persistAssignmentChange(mutateState, auditAction, auditDetails){
+  var st = PG.getState();
+  mutateState(st);
+  var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
+  st.reservations[idx] = r;
+  PG.setState(st);
+  PG.addAudit(auditAction, auditDetails);
+  PG.toast(auditDetails, 'success');
+  setTimeout(function(){ location.reload(); }, 500);
+}
+function openChangeRoomForAssignment(assignmentId, itemId, roomTypeId){
+  var a = s.roomAssignments.find(function(x){return x.id===assignmentId;});
+  PG.renderChangeRoomDrawer({
+    roomTypeId: roomTypeId, checkIn: r.checkIn, checkOut: r.checkOut,
+    preferences: {}, currentRoomId: a.physicalRoomId, excludeRoomIds: assignmentsForOtherItems(itemId), excludeAssignmentId: a.id,
+    title: 'Change Room', summaryLabel: r.id + ' &middot; ' + cust().name,
+    summarySub: PG.fmtDateShort(r.checkIn) + ' – ' + PG.fmtDateShort(r.checkOut),
+    onConfirm: function(newRoomId){
+      var oldPr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+      var newPr = s.physicalRooms.find(function(p){return p.id===newRoomId;});
+      r.activity.push({ts: PG.nowIso(), text: 'Room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + (newPr?newPr.roomNumber:'—') + '.'});
+      persistAssignmentChange(function(st){
+        var rec = st.roomAssignments.find(function(x){return x.id===assignmentId;});
+        rec.physicalRoomId = newRoomId; rec.assignedAt = PG.nowIso(); rec.assignedBy = 'Hotel Admin';
+      }, 'Room Assignment Changed', r.id + ' — room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + (newPr?newPr.roomNumber:'—') + '.');
+    }
+  });
+}
+function openAssignRoomFor(itemId, roomTypeId){
+  PG.renderChangeRoomDrawer({
+    roomTypeId: roomTypeId, checkIn: r.checkIn, checkOut: r.checkOut,
+    preferences: {}, currentRoomId: null, excludeRoomIds: assignmentsForOtherItems(itemId),
+    title: 'Assign Room', summaryLabel: r.id + ' &middot; ' + cust().name,
+    summarySub: PG.fmtDateShort(r.checkIn) + ' – ' + PG.fmtDateShort(r.checkOut),
+    onConfirm: function(newRoomId){
+      var pr = s.physicalRooms.find(function(p){return p.id===newRoomId;});
+      r.activity.push({ts: PG.nowIso(), text: 'Room ' + (pr?pr.roomNumber:newRoomId) + ' assigned.'});
+      var assignmentStatus = r.status==='Confirmed' ? 'Assigned' : 'Held';
+      persistAssignmentChange(function(st){
+        st.roomAssignments.push({id:'asn-'+Date.now(), propertyId: st.hotel.propertyCode, reservationId: r.id, reservationItemId: itemId,
+          physicalRoomId: newRoomId, arrivalDate: r.checkIn, departureDate: r.checkOut, assignmentStatus: assignmentStatus,
+          assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: ''});
+      }, 'Room Assigned', r.id + ' — room ' + (pr?pr.roomNumber:newRoomId) + ' assigned.');
+    }
+  });
+}
+
+var UNASSIGN_REASONS = ['Guest requested different room','Operational issue with assigned room','Reassigning to balance occupancy','Correcting an assignment error','Other'];
+var unassignModal = document.createElement('div');
+unassignModal.className = 'pg-modal-overlay';
+unassignModal.id = 'unassignModal';
+document.body.appendChild(unassignModal);
+var pendingUnassignId = null;
+function openUnassignModal(assignmentId){
+  pendingUnassignId = assignmentId;
+  var a = s.roomAssignments.find(function(x){return x.id===assignmentId;});
+  var pr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+  unassignModal.innerHTML = '<div class="pg-modal">' +
+    '<div class="pg-modal-header"><h3>Unassign Room</h3><button class="pg-modal-close" onclick="PG.closeModal(\'unassignModal\')">&times;</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="help-note help-note-warning" style="margin-bottom:14px;">Unassigning Room '+(pr?PG.esc(pr.roomNumber):'')+' will leave this reservation unit without a physical room. It will appear in the Unassigned queue until another room is assigned.</div>' +
+      '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="unassign-reason">'+UNASSIGN_REASONS.map(function(rr){return '<option value="'+rr+'">'+rr+'</option>';}).join('')+'</select></div>' +
+      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="unassign-notes" placeholder="Additional context"></textarea></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'unassignModal\')">Cancel</button><button class="btn btn-danger" id="unassignConfirm">Unassign Room</button></div>' +
+  '</div>';
+  PG.enhanceSelects(unassignModal);
+  document.getElementById('unassignConfirm').addEventListener('click', function(){
+    var reason = document.getElementById('unassign-reason').value;
+    var notes = document.getElementById('unassign-notes').value.trim();
+    r.activity.push({ts: PG.nowIso(), text: 'Room ' + (pr?pr.roomNumber:'') + ' unassigned. Reason: ' + reason + (notes ? ' (' + notes + ')' : '') + '.'});
+    PG.closeModal('unassignModal');
+    persistAssignmentChange(function(st){
+      var rec = st.roomAssignments.find(function(x){return x.id===pendingUnassignId;});
+      rec.assignmentStatus = 'Cancelled';
+      rec.changeReason = reason + (notes ? ' — ' + notes : '');
+    }, 'Room Unassigned', r.id + ' — room ' + (pr?pr.roomNumber:'') + ' unassigned. Reason: ' + reason + '.');
+  });
+  PG.openModal('unassignModal');
 }
 
 function sectionCard(num, title, bodyHtml){

@@ -30,6 +30,8 @@
   .cust-toolbar input{flex:1;}
   .cust-toolbar .pg-select{width:160px;flex-shrink:0;}
   .cust-pagination{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--pg-gray-600);}
+  .room-assign-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:8px;background:#fff;}
+  .room-assign-row.unassigned{border-color:var(--pg-danger);background:var(--pg-danger-light);}
 </style>
 </head>
 <body>
@@ -60,7 +62,39 @@ function occupancyFor(roomTypeId, qty){
 function defaultItem(){
   var rtId = s.roomTypes[1] ? s.roomTypes[1].id : s.roomTypes[0].id;
   var occ = occupancyFor(rtId, 1);
-  return {roomTypeId: rtId, ratePlanId: ratePlansFor(rtId)[0].id, qty: 1, adults: occ.adults, children: occ.children};
+  return {roomTypeId: rtId, ratePlanId: ratePlansFor(rtId)[0].id, qty: 1, adults: occ.adults, children: occ.children,
+    requireAccessibility: false, bedConfigPref: null, requireConnecting: false, assignedRoomIds: [], assignmentShortfall: 0};
+}
+
+/* ---- Physical room auto-assignment (see PG.autoAssignRoomsForItem) ---- */
+function bedConfigOptionsFor(roomTypeId){
+  var opts = [];
+  PG.physicalRoomsForType(s, roomTypeId).forEach(function(pr){ if (opts.indexOf(pr.bedConfiguration)===-1) opts.push(pr.bedConfiguration); });
+  return opts.sort();
+}
+function recomputeAssignments(){
+  var usedElsewhere = [];
+  wizard.items.forEach(function(item, idx){
+    var others = [];
+    wizard.items.forEach(function(o,i){ if (i!==idx) others = others.concat(o.assignedRoomIds||[]); });
+    var result = PG.autoAssignRoomsForItem(s, {
+      roomTypeId: item.roomTypeId, checkIn: wizard.checkIn, checkOut: wizard.checkOut, qty: item.qty,
+      requireAccessibility: item.requireAccessibility ? ['Wheelchair Accessible'] : [],
+      bedConfiguration: item.bedConfigPref || null,
+      requireConnecting: item.qty>1 && item.requireConnecting,
+      keepRoomIds: item.assignedRoomIds || [],
+      excludeRoomIds: others
+    });
+    item.assignedRoomIds = result.assignedRoomIds;
+    item.assignmentShortfall = result.shortfall;
+  });
+}
+function allItemsAssigned(){
+  return wizard.items.every(function(it){ return it.assignmentShortfall===0; });
+}
+function roomSummaryChips(pr){
+  var bits = [pr.view, pr.bedConfiguration].concat(pr.accessibilityFeatures||[]);
+  return bits.map(function(b){ return '<span class="chip">'+PG.esc(b)+'</span>'; }).join('');
 }
 
 var wizard = {
@@ -86,12 +120,13 @@ if (new URLSearchParams(location.search).get('demo') === 'ahmad-whatsapp'){
   wizard.checkIn = '2026-08-20';
   wizard.checkOut = '2026-08-23';
   wizard.items = [
-    Object.assign({roomTypeId:'dlx', ratePlanId: ratePlansFor('dlx')[0].id, qty:2}, occupancyFor('dlx',2)),
-    Object.assign({roomTypeId:'fam', ratePlanId: ratePlansFor('fam')[0].id, qty:1}, occupancyFor('fam',1))
+    Object.assign({roomTypeId:'dlx', ratePlanId: ratePlansFor('dlx')[0].id, qty:2, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('dlx',2)),
+    Object.assign({roomTypeId:'fam', ratePlanId: ratePlansFor('fam')[0].id, qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('fam',1))
   ];
   wizard.paymentMethod = 'Payment Link';
   demoTaxOverride = 50;
 }
+recomputeAssignments();
 var currentStep = 1;
 
 var html = '';
@@ -193,6 +228,25 @@ function allItemsAvailable(){
   return wizard.items.every(function(it){ return wizard.checkOut>wizard.checkIn && itemAvailability(it).ok; });
 }
 
+function renderAssignmentBlock(item, idx){
+  var rows = [];
+  for (var slot=0; slot<item.qty; slot++){
+    var roomId = item.assignedRoomIds[slot];
+    if (roomId){
+      var pr = s.physicalRooms.find(function(p){return p.id===roomId;});
+      rows.push('<div class="room-assign-row">' +
+        '<div><div style="font-weight:700;font-size:13px;">&#10003; Room '+PG.esc(pr.roomNumber)+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span></div>' +
+        '<div style="margin-top:5px;">'+roomSummaryChips(pr)+'</div>' +
+        '<div class="muted text-sm" style="margin-top:5px;">'+PG.fmtDateShort(wizard.checkIn)+' &ndash; '+PG.fmtDateShort(wizard.checkOut)+'</div></div>' +
+        '<button class="btn btn-outline btn-sm change-room-btn" data-idx="'+idx+'" data-slot="'+slot+'">Change Room</button>' +
+      '</div>');
+    } else {
+      rows.push('<div class="room-assign-row unassigned"><div class="text-sm" style="color:var(--pg-danger);">&#9888; Unit '+(slot+1)+': no eligible physical room could be assigned for these dates.</div></div>');
+    }
+  }
+  return rows.join('');
+}
+
 function renderItemCards(){
   document.getElementById('nightsDisplay').value = nights().length + ' night' + (nights().length===1?'':'s');
   var wrap = document.getElementById('itemCards');
@@ -201,9 +255,12 @@ function renderItemCards(){
     var plans = ratePlansFor(item.roomTypeId);
     var a = wizard.checkOut>wizard.checkIn ? itemAvailability(item) : {ok:false, problems:[{available:0}]};
     var worst = a.problems && a.problems.length ? a.problems[0].available : rt.sellable;
-    var ok = a.ok;
+    var commerciallyOk = a.ok;
+    var physicallyOk = item.assignmentShortfall===0;
+    var ok = commerciallyOk && physicallyOk;
     var rtOptions = s.roomTypes.map(function(r){return '<option value="'+r.id+'"'+(r.id===item.roomTypeId?' selected':'')+'>'+r.name+'</option>';}).join('');
     var planOptions = plans.map(function(p){return '<option value="'+p.id+'"'+(p.id===item.ratePlanId?' selected':'')+'>'+p.name+' ('+PG.fmtMoney(p.price)+'/night)</option>';}).join('');
+    var bedOptions = '<option value="">No preference</option>' + bedConfigOptionsFor(item.roomTypeId).map(function(b){return '<option value="'+PG.esc(b)+'"'+(item.bedConfigPref===b?' selected':'')+'>'+PG.esc(b)+'</option>';}).join('');
     return '<div class="item-card'+(ok?'':' insufficient')+'" data-idx="'+idx+'">' +
       '<div class="item-card-head"><strong class="text-sm">Room Item '+(idx+1)+'</strong>' +
         (wizard.items.length>1 ? '<button class="btn btn-danger-outline btn-sm remove-item" data-idx="'+idx+'">Remove</button>' : '') +
@@ -214,13 +271,18 @@ function renderItemCards(){
         '<div class="form-group"><label class="form-label">Rate Plan</label><select class="form-control it-plan" data-idx="'+idx+'">'+planOptions+'</select></div>' +
         '<div class="form-group"><label class="form-label">Price per Night</label><input class="form-control" disabled value="'+PG.fmtMoney(ratePlanPrice(item.roomTypeId, item.ratePlanId))+'"></div>' +
         '<div class="form-group" style="grid-column:span 2;"><label class="form-label">Max Occupancy <span class="opt">(set by room type × quantity)</span></label><input class="form-control" disabled value="'+item.adults+' Adults, '+item.children+' Children"></div>' +
+        '<div class="form-group"><label class="form-label">Bed Configuration Preference <span class="opt">(optional)</span></label><select class="form-control it-bed" data-idx="'+idx+'">'+bedOptions+'</select></div>' +
+        '<div class="form-check" style="align-self:end;padding-bottom:10px;"><input type="checkbox" class="it-access" data-idx="'+idx+'" id="it-access-'+idx+'"'+(item.requireAccessibility?' checked':'')+'><label class="form-label" style="margin:0;" for="it-access-'+idx+'">Requires Wheelchair Accessible Room</label></div>' +
+        (item.qty>1 ? '<div class="form-check" style="align-self:end;padding-bottom:10px;"><input type="checkbox" class="it-connect" data-idx="'+idx+'" id="it-connect-'+idx+'"'+(item.requireConnecting?' checked':'')+'><label class="form-label" style="margin:0;" for="it-connect-'+idx+'">Request Connecting Rooms</label></div>' : '<div></div>') +
       '</div>' +
       '<div class="item-foot">' +
         '<span class="text-sm"><strong>Item Total: '+PG.fmtMoney(itemTotal(item))+'</strong></span>' +
         '<span class="text-sm">Available: '+worst+' &middot; Requested: '+item.qty+'</span>' +
-        '<span class="avail-tag '+(ok?'ok':'bad')+'">'+(ok?'Available':'Insufficient Inventory')+'</span>' +
+        '<span class="avail-tag '+(ok?'ok':'bad')+'">'+(ok?'Room(s) Assigned':(commerciallyOk?'Room Assignment Incomplete':'Insufficient Inventory'))+'</span>' +
       '</div>' +
-      (ok ? '' : '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+worst+' '+rt.name+' room(s) available for the selected dates. Reduce quantity, change dates, or remove this item to continue.</div>') +
+      (commerciallyOk ? '' : '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+worst+' '+rt.name+' room(s) available for the selected dates. Reduce quantity, change dates, or remove this item to continue.</div>') +
+      (commerciallyOk && !physicallyOk ? '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+(item.qty-item.assignmentShortfall)+' of '+item.qty+' '+rt.name+' physical room(s) could be assigned for these dates. Reduce quantity, change dates, or choose another room type to continue.</div>' : '') +
+      '<div style="margin-top:10px;">'+renderAssignmentBlock(item, idx)+'</div>' +
     '</div>';
   }).join('');
   PG.enhanceSelects(wrap);
@@ -231,26 +293,62 @@ function bindItemEvents(){
   document.querySelectorAll('.it-rt').forEach(function(el){ el.addEventListener('change', function(){
     var idx=+el.dataset.idx; var it = wizard.items[idx];
     it.roomTypeId = el.value; it.ratePlanId = ratePlansFor(el.value)[0].id;
+    it.bedConfigPref = null; it.assignedRoomIds = [];
     Object.assign(it, occupancyFor(it.roomTypeId, it.qty));
-    renderItemCards(); renderSummary();
+    recomputeAssignments(); renderItemCards(); renderSummary();
   });});
   document.querySelectorAll('.it-qty').forEach(function(el){ el.addEventListener('input', function(){
     var it = wizard.items[+el.dataset.idx];
     it.qty = Math.max(1, parseInt(el.value,10)||1);
     Object.assign(it, occupancyFor(it.roomTypeId, it.qty));
-    renderItemCards(); renderSummary();
+    recomputeAssignments(); renderItemCards(); renderSummary();
   });});
   document.querySelectorAll('.it-plan').forEach(function(el){ el.addEventListener('change', function(){
     wizard.items[+el.dataset.idx].ratePlanId = el.value; renderItemCards(); renderSummary();
   });});
+  document.querySelectorAll('.it-bed').forEach(function(el){ el.addEventListener('change', function(){
+    wizard.items[+el.dataset.idx].bedConfigPref = el.value || null;
+    recomputeAssignments(); renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.it-access').forEach(function(el){ el.addEventListener('change', function(){
+    wizard.items[+el.dataset.idx].requireAccessibility = el.checked;
+    recomputeAssignments(); renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.it-connect').forEach(function(el){ el.addEventListener('change', function(){
+    wizard.items[+el.dataset.idx].requireConnecting = el.checked;
+    recomputeAssignments(); renderItemCards(); renderSummary();
+  });});
   document.querySelectorAll('.remove-item').forEach(function(el){ el.addEventListener('click', function(){
-    wizard.items.splice(+el.dataset.idx,1); renderItemCards(); renderSummary();
+    wizard.items.splice(+el.dataset.idx,1);
+    recomputeAssignments(); renderItemCards(); renderSummary();
+  });});
+  document.querySelectorAll('.change-room-btn').forEach(function(el){ el.addEventListener('click', function(){
+    var idx=+el.dataset.idx, slot=+el.dataset.slot;
+    var item = wizard.items[idx];
+    var rt = s.roomTypes.find(function(r){return r.id===item.roomTypeId;});
+    var others = [];
+    wizard.items.forEach(function(o,i){ others = others.concat(i===idx ? o.assignedRoomIds.filter(function(id,si){return si!==slot;}) : o.assignedRoomIds); });
+    PG.renderChangeRoomDrawer({
+      roomTypeId: item.roomTypeId, checkIn: wizard.checkIn, checkOut: wizard.checkOut,
+      preferences: { requireAccessibility: item.requireAccessibility ? ['Wheelchair Accessible'] : [], bedConfiguration: item.bedConfigPref, requireConnecting: item.qty>1 && item.requireConnecting },
+      currentRoomId: item.assignedRoomIds[slot] || null,
+      excludeRoomIds: others,
+      title: 'Change Room',
+      summaryLabel: rt.name + ' &middot; Unit ' + (slot+1) + ' of ' + item.qty,
+      summarySub: PG.fmtDateShort(wizard.checkIn) + ' – ' + PG.fmtDateShort(wizard.checkOut),
+      onConfirm: function(newRoomId){
+        item.assignedRoomIds[slot] = newRoomId;
+        item.assignmentShortfall = item.assignedRoomIds.filter(function(x){return !!x;}).length < item.qty ? item.qty - item.assignedRoomIds.filter(function(x){return !!x;}).length : 0;
+        renderItemCards(); renderSummary();
+        PG.toast('Room updated.', 'success');
+      }
+    });
   });});
 }
 
 document.getElementById('addItem').addEventListener('click', function(){
   wizard.items.push(defaultItem());
-  renderItemCards(); renderSummary();
+  recomputeAssignments(); renderItemCards(); renderSummary();
 });
 document.getElementById('simAvailChange').addEventListener('click', function(){
   if (!wizard.items.length) return;
@@ -261,10 +359,10 @@ document.getElementById('simAvailChange').addEventListener('click', function(){
   PG.setState(st);
   s = PG.getState();
   PG.toast('Simulated: inventory changed elsewhere for this room type/date. Continue to Review & Save to see the warning.', 'warn');
-  renderItemCards();
+  recomputeAssignments(); renderItemCards();
 });
-document.getElementById('checkIn').addEventListener('change', function(){ wizard.checkIn=this.value; renderItemCards(); renderSummary(); });
-document.getElementById('checkOut').addEventListener('change', function(){ wizard.checkOut=this.value; renderItemCards(); renderSummary(); });
+document.getElementById('checkIn').addEventListener('change', function(){ wizard.checkIn=this.value; recomputeAssignments(); renderItemCards(); renderSummary(); });
+document.getElementById('checkOut').addEventListener('change', function(){ wizard.checkOut=this.value; recomputeAssignments(); renderItemCards(); renderSummary(); });
 
 function pricingBreakdown(){
   var roomCharges = wizard.items.reduce(function(a,it){return a+itemTotal(it);},0);
@@ -313,11 +411,12 @@ function srow(l,v){ return '<div style="display:flex;justify-content:space-betwe
 
 function renderReview(){
   s = PG.getState(); // re-check live state — availability may have changed in another tab/session
-  var stillOk = wizard.checkOut>wizard.checkIn && wizard.items.every(function(it){ return itemAvailability(it).ok; });
+  recomputeAssignments(); // re-check physical room assignments against the live state too
+  var stillOk = wizard.checkOut>wizard.checkIn && wizard.items.every(function(it){ return itemAvailability(it).ok; }) && allItemsAssigned();
   var warningHtml = '';
   if (!stillOk){
     warningHtml = '<div class="help-note help-note-warning" style="margin-bottom:16px;">' +
-      'Availability changed while this reservation was being created. Please review the selected room items before confirming.<br>' +
+      'Availability or room assignment changed while this reservation was being created. Please review the selected room items before confirming.<br>' +
       '<button class="btn btn-outline btn-sm" id="reviewAvailBtn" style="margin-top:10px;">Review Availability</button></div>';
   }
   var p = pricingBreakdown();
@@ -381,6 +480,7 @@ function onNext(){
     if (wizard.checkOut<=wizard.checkIn){ PG.toast('Departure date must be after arrival date.', 'danger'); return; }
     if (!wizard.items.length){ PG.toast('Add at least one room item.', 'danger'); return; }
     if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
+    if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before continuing.', 'danger'); return; }
     showStep(3); return;
   }
   if (currentStep===3){
@@ -469,6 +569,7 @@ if (wizard.paymentMethod){ var po = document.querySelector('.pay-opt[data-pm="'+
 
 function createReservation(mode){
   if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
+  if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before the reservation can be confirmed.', 'danger'); return; }
   var st = PG.getState();
   var id = 'RES-' + st.nextResId;
   st.nextResId += 1;
@@ -495,16 +596,38 @@ function createReservation(mode){
   else activity.push({ts: PG.nowIso(), text: 'Payment method set to Payment Link. Awaiting link generation.'});
 
   var p = pricingBreakdown();
+  var roomItems = wizard.items.map(function(it,i){ return {id: id+'-itm-'+(i+1), roomTypeId:it.roomTypeId, qty:it.qty, adults:it.adults, children:it.children, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; });
   var reservation = {
     id: id, customerId: customerId, source: wizard.source, createdAt: PG.nowIso(),
     checkIn: wizard.checkIn, checkOut: wizard.checkOut, status: status, paymentStatus: paymentStatus, paymentMethod: wizard.paymentMethod,
-    rooms: wizard.items.map(function(it,i){ return {id: id+'-itm-'+(i+1), roomTypeId:it.roomTypeId, qty:it.qty, adults:it.adults, children:it.children, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; }),
+    rooms: roomItems,
     taxAmount: p.taxes, feeAmount: p.fees,
     notes: wizard.notes, activity: activity
   };
   st.reservations.push(reservation);
+
+  // Turn each unit's provisional pick into a real RoomAssignment. Confirmed
+  // reservations get a firm "Assigned" record; Draft/Pending Payment get a
+  // tentative "Held" one, matching the Reservation/Payment status convention.
+  var assignmentStatus = status==='Confirmed' ? 'Assigned' : 'Held';
+  var assignedRoomNumbers = [];
+  wizard.items.forEach(function(it, i){
+    it.assignedRoomIds.forEach(function(roomId){
+      if (!roomId) return;
+      var pr = st.physicalRooms.find(function(p){return p.id===roomId;});
+      if (pr) assignedRoomNumbers.push(pr.roomNumber);
+      st.roomAssignments.push({
+        id: 'asn-' + Date.now() + '-' + st.roomAssignments.length,
+        propertyId: st.hotel.propertyCode, reservationId: id, reservationItemId: roomItems[i].id,
+        physicalRoomId: roomId, arrivalDate: wizard.checkIn, departureDate: wizard.checkOut,
+        assignmentStatus: assignmentStatus, assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: ''
+      });
+    });
+  });
+  reservation.activity.push({ts: PG.nowIso(), text: 'Room(s) assigned: ' + assignedRoomNumbers.join(', ') + '.'});
+
   PG.setState(st);
-  PG.addAudit('Reservation Created', id + ' created via ' + wizard.source + (mode==='Draft' ? ' (Draft)' : '') + '.');
+  PG.addAudit('Reservation Created', id + ' created via ' + wizard.source + (mode==='Draft' ? ' (Draft)' : '') + '. Rooms assigned: ' + assignedRoomNumbers.join(', ') + '.');
   PG.toast('Reservation ' + id + (mode==='Draft' ? ' saved as Draft.' : ' created.'), 'success');
   setTimeout(function(){ location.href = 'reservation-detail.html?id=' + id; }, 500);
 }

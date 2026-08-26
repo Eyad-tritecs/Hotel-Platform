@@ -469,6 +469,144 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Room assignment recommendation engine                                    */
+  /* Deterministic and rule-based on purpose — no AI, no optimization solver. */
+  /* Drives auto-assignment in New Reservation and the Change Room drawer.    */
+  /* ---------------------------------------------------------------- */
+
+  // Whole-stay eligibility for ONE physical room. Per product rule, a Management
+  // Hold/Out of Order/Out of Service block disqualifies a room; an "Other" block does
+  // not (that block type is informational only in this MVP — see README §4.7).
+  function roomEligibleForStay(state, room, checkIn, checkOut, excludeAssignmentId) {
+    if (!room.isActive || !room.isSellable) return false;
+    return dateRange(checkIn, checkOut).every(function (d) {
+      if (isPhysicalRoomAssigned(state, room.id, d, excludeAssignmentId)) return false;
+      var blk = physicalRoomBlockOn(state, room.id, d);
+      if (blk && blk.type !== "Other") return false;
+      return true;
+    });
+  }
+  // A required attribute (currently: accessibility features) is a hard filter — a room
+  // that doesn't have every required feature is not eligible, not just lower-ranked.
+  function roomMeetsRequirements(room, prefs) {
+    if (!prefs || !prefs.requireAccessibility || !prefs.requireAccessibility.length) return true;
+    return prefs.requireAccessibility.every(function (a) { return (room.accessibilityFeatures || []).indexOf(a) > -1; });
+  }
+  // Short, non-sensitive category for why a specific room can't be picked — never
+  // exposes a block's free-text reason/notes, only its type.
+  function roomIneligibilityReason(state, room, checkIn, checkOut, prefs, excludeAssignmentId) {
+    if (!room.isActive) return "Inactive";
+    if (!room.isSellable) return "Not Sellable";
+    var reason = null;
+    dateRange(checkIn, checkOut).some(function (d) {
+      if (isPhysicalRoomAssigned(state, room.id, d, excludeAssignmentId)) { reason = "Reserved"; return true; }
+      var blk = physicalRoomBlockOn(state, room.id, d);
+      if (blk && blk.type === "Out of Order") { reason = "Out of Order"; return true; }
+      if (blk && blk.type === "Out of Service") { reason = "Out of Service"; return true; }
+      if (blk && blk.type === "Management Hold") { reason = "Held"; return true; }
+      return false;
+    });
+    if (reason) return reason;
+    if (!roomMeetsRequirements(room, prefs)) return "Attribute Mismatch";
+    return null; // eligible
+  }
+  function eligiblePhysicalRoomsForStay(state, roomTypeId, checkIn, checkOut, opts) {
+    opts = opts || {};
+    var excludeRoomIds = opts.excludeRoomIds || [];
+    return physicalRoomsForType(state, roomTypeId).filter(function (room) {
+      if (excludeRoomIds.indexOf(room.id) > -1) return false;
+      if (!roomEligibleForStay(state, room, checkIn, checkOut, opts.excludeAssignmentId)) return false;
+      return roomMeetsRequirements(room, opts.preferences || opts);
+    });
+  }
+  // How many soft preferences (bed configuration, connecting-room capability) a room
+  // matches — used only for ranking, never to exclude a room.
+  function roomPreferenceMatchCount(room, prefs) {
+    if (!prefs) return 0;
+    var n = 0;
+    if (prefs.bedConfiguration && room.bedConfiguration === prefs.bedConfiguration) n++;
+    if (prefs.requireConnecting && room.connectingRoomIds && room.connectingRoomIds.length) n++;
+    return n;
+  }
+  // Priority 3: prefer a room with no assignment/block landing on the night right
+  // before arrival or on the departure night itself — i.e. no immediately adjacent
+  // operational constraint that complicates turnover.
+  function roomAdjacencyScore(state, room, checkIn, checkOut) {
+    var score = 0;
+    [addDays(checkIn, -1), checkOut].forEach(function (d) {
+      if (!isPhysicalRoomAssigned(state, room.id, d) && !physicalRoomBlockOn(state, room.id, d)) score++;
+    });
+    return score;
+  }
+  function roomNumberSortValue(room) {
+    var n = parseInt(room.roomNumber, 10);
+    return isNaN(n) ? null : n;
+  }
+  // Deterministic ranking, most-recommended first: (2) preference match count,
+  // (3) adjacency score, (4) lowest room number as the final, predictable tie-breaker.
+  function rankRoomsForAssignment(state, rooms, checkIn, checkOut, prefs) {
+    return rooms.slice().sort(function (a, b) {
+      var pa = roomPreferenceMatchCount(a, prefs), pb = roomPreferenceMatchCount(b, prefs);
+      if (pa !== pb) return pb - pa;
+      var aa = roomAdjacencyScore(state, a, checkIn, checkOut), ab = roomAdjacencyScore(state, b, checkIn, checkOut);
+      if (aa !== ab) return ab - aa;
+      var na = roomNumberSortValue(a), nb = roomNumberSortValue(b);
+      if (na != null && nb != null && na !== nb) return na - nb;
+      return a.roomNumber < b.roomNumber ? -1 : (a.roomNumber > b.roomNumber ? 1 : 0);
+    });
+  }
+  function findConnectingPair(rooms) {
+    for (var i = 0; i < rooms.length; i++) {
+      for (var j = i + 1; j < rooms.length; j++) {
+        var a = rooms[i], b = rooms[j];
+        if ((a.connectingRoomIds || []).indexOf(b.id) > -1 || (b.connectingRoomIds || []).indexOf(a.id) > -1) return [a, b];
+      }
+    }
+    return null;
+  }
+  // Auto-assigns up to `request.qty` distinct physical rooms for one reservation item.
+  // request: { roomTypeId, checkIn, checkOut, qty, requireAccessibility, bedConfiguration,
+  //            requireConnecting, keepRoomIds, excludeRoomIds, excludeAssignmentId }
+  // Priority 1 (retain existing assignment across an edit) is applied first: any room in
+  // keepRoomIds that is still eligible is kept before any new recommendation runs.
+  // Returns { assignedRoomIds, shortfall } — shortfall > 0 means not enough eligible
+  // rooms exist; callers must block confirmation rather than overbook.
+  function autoAssignRoomsForItem(state, request) {
+    var prefs = { requireAccessibility: request.requireAccessibility, bedConfiguration: request.bedConfiguration, requireConnecting: request.requireConnecting };
+    var excludeRoomIds = (request.excludeRoomIds || []).slice();
+    var assigned = [];
+
+    (request.keepRoomIds || []).forEach(function (id) {
+      if (assigned.length >= request.qty) return;
+      if (excludeRoomIds.indexOf(id) > -1 || assigned.indexOf(id) > -1) return;
+      var room = physicalRoomsForType(state, request.roomTypeId).find(function (r) { return r.id === id; });
+      if (!room) return;
+      if (!roomEligibleForStay(state, room, request.checkIn, request.checkOut, request.excludeAssignmentId)) return;
+      if (!roomMeetsRequirements(room, prefs)) return;
+      assigned.push(id);
+    });
+
+    if (assigned.length < request.qty) {
+      var pool = eligiblePhysicalRoomsForStay(state, request.roomTypeId, request.checkIn, request.checkOut, {
+        excludeRoomIds: excludeRoomIds.concat(assigned), excludeAssignmentId: request.excludeAssignmentId, preferences: prefs
+      });
+      var ranked = rankRoomsForAssignment(state, pool, request.checkIn, request.checkOut, prefs);
+      if (prefs.requireConnecting && (request.qty - assigned.length) >= 2) {
+        var pair = findConnectingPair(ranked);
+        if (pair) {
+          ranked = pair.concat(ranked.filter(function (r) { return r.id !== pair[0].id && r.id !== pair[1].id; }));
+        }
+      }
+      ranked.forEach(function (room) {
+        if (assigned.length >= request.qty) return;
+        assigned.push(room.id);
+      });
+    }
+
+    return { assignedRoomIds: assigned, shortfall: Math.max(0, request.qty - assigned.length) };
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Formatting helpers                                                 */
   /* ---------------------------------------------------------------- */
   var STATUS_BADGE = {
@@ -818,6 +956,166 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Change Room drawer — a structured, filterable room picker shared by New       */
+  /* Reservation and Reservation Detail. Never an unstructured <select>: there is  */
+  /* too much per-room information (floor, bed, view, accessibility, connecting,   */
+  /* eligibility) to compare in a dropdown.                                        */
+  /* opts: { roomTypeId, checkIn, checkOut, preferences, currentRoomId,            */
+  /*         excludeRoomIds, excludeAssignmentId, title, summaryLabel, summarySub, */
+  /*         onConfirm(newRoomId) }                                                */
+  /* ---------------------------------------------------------------- */
+  var changeRoomDrawerEl = null;
+  function ensureChangeRoomDrawer() {
+    if (changeRoomDrawerEl) return changeRoomDrawerEl;
+    changeRoomDrawerEl = document.createElement("div");
+    changeRoomDrawerEl.className = "pg-drawer-overlay";
+    changeRoomDrawerEl.id = "pgChangeRoomDrawer";
+    document.body.appendChild(changeRoomDrawerEl);
+    return changeRoomDrawerEl;
+  }
+  function uniqueValues(arr) {
+    var out = [];
+    arr.forEach(function (v) { if (v != null && v !== "" && out.indexOf(v) === -1) out.push(v); });
+    return out;
+  }
+  function renderChangeRoomDrawer(opts) {
+    var state = getState();
+    var el = ensureChangeRoomDrawer();
+    var allRooms = physicalRoomsForType(state, opts.roomTypeId);
+    var prefs = opts.preferences || {};
+    var filters = { q: "", floor: "all", view: "all", bed: "all", access: "all", connecting: "all" };
+    var pendingRoomId = null;
+
+    function rowsData() {
+      return allRooms.map(function (room) {
+        var isCurrent = room.id === opts.currentRoomId;
+        var usedElsewhere = !isCurrent && (opts.excludeRoomIds || []).indexOf(room.id) > -1;
+        var trueReason = usedElsewhere ? "Assigned to another room in this reservation" : roomIneligibilityReason(state, room, opts.checkIn, opts.checkOut, prefs, opts.excludeAssignmentId);
+        // The currently assigned room is never disabled (it's already picked), but its
+        // reason still surfaces as a "Needs Attention" note if it has since become ineligible.
+        return { room: room, isCurrent: isCurrent, reason: isCurrent ? null : trueReason, needsAttention: isCurrent ? trueReason : null, prefMatch: roomPreferenceMatchCount(room, prefs) };
+      });
+    }
+    function passesFilters(row) {
+      var r = row.room;
+      if (filters.q && r.roomNumber.toLowerCase().indexOf(filters.q) === -1) return false;
+      if (filters.floor !== "all" && String(r.floor) !== filters.floor) return false;
+      if (filters.view !== "all" && r.view !== filters.view) return false;
+      if (filters.bed !== "all" && r.bedConfiguration !== filters.bed) return false;
+      if (filters.access !== "all" && (r.accessibilityFeatures || []).indexOf(filters.access) === -1) return false;
+      if (filters.connecting === "yes" && !(r.connectingRoomIds && r.connectingRoomIds.length)) return false;
+      return true;
+    }
+    function sortedRows() {
+      var rows = rowsData().filter(passesFilters);
+      var eligible = rows.filter(function (r) { return !r.reason; });
+      var ineligible = rows.filter(function (r) { return r.reason; });
+      var rankedRooms = rankRoomsForAssignment(state, eligible.map(function (r) { return r.room; }), opts.checkIn, opts.checkOut, prefs);
+      var rankedEligible = rankedRooms.map(function (room) { return eligible.find(function (r) { return r.room.id === room.id; }); });
+      ineligible.sort(function (a, b) { return a.room.roomNumber < b.room.roomNumber ? -1 : 1; });
+      return rankedEligible.concat(ineligible);
+    }
+
+    function optionsFor(field) {
+      return uniqueValues(allRooms.map(function (r) { return field === "access" ? null : r[field]; })).sort();
+    }
+    var floorOpts = uniqueValues(allRooms.map(function (r) { return r.floor; })).sort(function (a, b) { return a - b; });
+    var viewOpts = uniqueValues(allRooms.map(function (r) { return r.view; })).sort();
+    var bedOpts = uniqueValues(allRooms.map(function (r) { return r.bedConfiguration; })).sort();
+    var accessOpts = uniqueValues(allRooms.reduce(function (a, r) { return a.concat(r.accessibilityFeatures || []); }, [])).sort();
+
+    function renderChip(text) { return '<span class="chip">' + esc(text) + "</span>"; }
+    function renderRoomRow(row) {
+      var r = row.room;
+      var disabled = !!row.reason;
+      var badges = "";
+      if (row.isCurrent) {
+        badges += '<span class="badge badge-blue"><span class="badge-dot"></span>Currently Assigned</span> ';
+        if (row.needsAttention) badges += '<span class="badge badge-red"><span class="badge-dot"></span>Needs Attention: ' + esc(row.needsAttention) + "</span>";
+      }
+      else if (!disabled && row.prefMatch > 0) badges += '<span class="badge badge-green"><span class="badge-dot"></span>Matches Preference</span> ';
+      else if (!disabled) badges += '<span class="badge badge-gray"><span class="badge-dot"></span>Recommended</span> ';
+      if (disabled) badges += '<span class="badge badge-red"><span class="badge-dot"></span>' + esc(row.reason) + "</span>";
+      var attrBits = [r.view, r.bedConfiguration].concat(r.accessibilityFeatures || []);
+      if (r.connectingRoomIds && r.connectingRoomIds.length) {
+        var nums = r.connectingRoomIds.map(function (id) { var pr = allRooms.find(function (x) { return x.id === id; }) || state.physicalRooms.find(function (x) { return x.id === id; }); return pr ? pr.roomNumber : id; });
+        attrBits.push("Connects: " + nums.join(", "));
+      }
+      return '<div class="crd-room' + (disabled ? " disabled" : "") + (pendingRoomId === r.id ? " selected" : "") + '" data-room-id="' + r.id + '">' +
+        '<div class="crd-room-top"><strong>Room ' + esc(r.roomNumber) + "</strong><span class=\"muted text-sm\">Floor " + r.floor + "</span></div>" +
+        '<div style="margin:6px 0;">' + badges + "</div>" +
+        '<div class="crd-attrs">' + attrBits.map(renderChip).join("") + "</div>" +
+      "</div>";
+    }
+
+    function renderList() {
+      var rows = sortedRows();
+      var listEl = el.querySelector("#crd-list");
+      if (!rows.length) { listEl.innerHTML = '<div class="empty-state">No rooms match these filters.</div>'; return; }
+      listEl.innerHTML = rows.map(renderRoomRow).join("");
+      listEl.querySelectorAll(".crd-room:not(.disabled)").forEach(function (card) {
+        card.addEventListener("click", function () {
+          var id = card.dataset.roomId;
+          pendingRoomId = (id === opts.currentRoomId) ? null : id;
+          renderList();
+          renderImpact();
+        });
+      });
+    }
+    function renderImpact() {
+      var box = el.querySelector("#crd-impact");
+      var confirmBtn = el.querySelector("#crd-confirm");
+      if (!pendingRoomId) { box.innerHTML = ""; confirmBtn.disabled = true; return; }
+      var newRoom = allRooms.find(function (r) { return r.id === pendingRoomId; });
+      var oldRoom = opts.currentRoomId ? (allRooms.find(function (r) { return r.id === opts.currentRoomId; }) || state.physicalRooms.find(function (r) { return r.id === opts.currentRoomId; })) : null;
+      box.innerHTML = '<div class="help-note" style="margin-top:14px;">' +
+        (oldRoom ? "Room " + esc(oldRoom.roomNumber) + " will be replaced by Room " + esc(newRoom.roomNumber) + "." : "Room " + esc(newRoom.roomNumber) + " will be assigned.") +
+        " Pricing and dates are unchanged." +
+      "</div>";
+      confirmBtn.disabled = false;
+    }
+
+    el.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><div><h3>' + esc(opts.title || "Change Room") + '</h3>' +
+        (opts.summaryLabel ? '<div class="muted text-sm">' + esc(opts.summaryLabel) + (opts.summarySub ? " &middot; " + esc(opts.summarySub) : "") + "</div>" : "") +
+      '</div><button class="pg-modal-close" id="crd-close">&times;</button></div>' +
+      '<div class="pg-drawer-body">' +
+        '<input class="form-control" id="crd-search" placeholder="Search by room number" style="margin-bottom:12px;">' +
+        '<div class="crd-filters">' +
+          '<select class="form-control" id="crd-floor"><option value="all">All Floors</option>' + floorOpts.map(function (f) { return '<option value="' + f + '">Floor ' + f + "</option>"; }).join("") + "</select>" +
+          '<select class="form-control" id="crd-view"><option value="all">All Views</option>' + viewOpts.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + "</option>"; }).join("") + "</select>" +
+          '<select class="form-control" id="crd-bed"><option value="all">All Bed Configs</option>' + bedOpts.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + "</option>"; }).join("") + "</select>" +
+          '<select class="form-control" id="crd-access"><option value="all">All Accessibility</option>' + accessOpts.map(function (a) { return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("") + "</select>" +
+          '<select class="form-control" id="crd-connecting"><option value="all">Connecting: Any</option><option value="yes">Has Connecting Room</option></select>' +
+        "</div>" +
+        '<div id="crd-list" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 400px);overflow-y:auto;"></div>' +
+        '<div id="crd-impact"></div>' +
+      "</div>" +
+      '<div class="pg-drawer-footer"><button class="btn btn-light" id="crd-cancel">Cancel</button><button class="btn btn-primary" id="crd-confirm" disabled>Confirm Room Change</button></div>' +
+    "</div>";
+    enhanceSelects(el);
+    pendingRoomId = null;
+    renderList();
+    renderImpact();
+
+    el.querySelector("#crd-close").addEventListener("click", function () { closeModal("pgChangeRoomDrawer"); });
+    el.querySelector("#crd-cancel").addEventListener("click", function () { closeModal("pgChangeRoomDrawer"); });
+    el.querySelector("#crd-search").addEventListener("input", function () { filters.q = this.value.trim().toLowerCase(); renderList(); });
+    el.querySelector("#crd-floor").addEventListener("change", function () { filters.floor = this.value; renderList(); });
+    el.querySelector("#crd-view").addEventListener("change", function () { filters.view = this.value; renderList(); });
+    el.querySelector("#crd-bed").addEventListener("change", function () { filters.bed = this.value; renderList(); });
+    el.querySelector("#crd-access").addEventListener("change", function () { filters.access = this.value; renderList(); });
+    el.querySelector("#crd-connecting").addEventListener("change", function () { filters.connecting = this.value; renderList(); });
+    el.querySelector("#crd-confirm").addEventListener("click", function () {
+      if (!pendingRoomId) return;
+      var chosen = pendingRoomId;
+      closeModal("pgChangeRoomDrawer");
+      opts.onConfirm(chosen);
+    });
+    openModal("pgChangeRoomDrawer");
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Public API                                                         */
   /* ---------------------------------------------------------------- */
   global.PG = {
@@ -855,6 +1153,13 @@
     eligiblePhysicalRoomCount: eligiblePhysicalRoomCount,
     validateRoomAssignmentCapacity: validateRoomAssignmentCapacity,
     roomStatusBadge: roomStatusBadge,
+    roomEligibleForStay: roomEligibleForStay,
+    roomMeetsRequirements: roomMeetsRequirements,
+    roomIneligibilityReason: roomIneligibilityReason,
+    eligiblePhysicalRoomsForStay: eligiblePhysicalRoomsForStay,
+    rankRoomsForAssignment: rankRoomsForAssignment,
+    autoAssignRoomsForItem: autoAssignRoomsForItem,
+    renderChangeRoomDrawer: renderChangeRoomDrawer,
     statusBadge: statusBadge,
     payBadge: payBadge,
     esc: esc,
