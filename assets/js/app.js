@@ -98,11 +98,22 @@
     // Fixed nightly rates for Ahmad Khalil's RES-10245 scenario (Deluxe $720, Family $450 over 3 nights).
     ["2026-08-20","2026-08-21","2026-08-22"].forEach(function(d){ rates.dlx[d] = 120; rates.fam[d] = 150; });
 
+    // Guests are hotel customers — kept conceptually and technically separate from
+    // state.users (hotel/platform staff accounts, managed on users.html). Never merge
+    // these two collections or reuse this shape for a staff account.
     var customers = [
-      { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian", notes: "" },
-      { id: "cus-2", name: "Sara Ali", phone: "+970 56 234 5678", email: "sara.ali@example.com", nationality: "Palestinian", notes: "Prefers high floor." },
-      { id: "cus-3", name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian", notes: "" },
-      { id: "cus-4", name: "Layla Nasser", phone: "+970 59 876 5432", email: "layla.nasser@example.com", nationality: "Palestinian", notes: "" }
+      { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian",
+        preferredLanguage: "Arabic", idRef: "PSE-778812345", communicationPreference: "WhatsApp", consentMarketing: true,
+        roomPreferences: "", accessibilityNeeds: "", important: false, notes: "" },
+      { id: "cus-2", name: "Sara Ali", phone: "+970 56 234 5678", email: "sara.ali@example.com", nationality: "Palestinian",
+        preferredLanguage: "Arabic", idRef: "PSE-556690012", communicationPreference: "Phone", consentMarketing: false,
+        roomPreferences: "Prefers high floor, away from the elevator.", accessibilityNeeds: "", important: true, notes: "Requested late check-out on a previous stay." },
+      { id: "cus-3", name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian",
+        preferredLanguage: "English", idRef: "JOR-223345678", communicationPreference: "Email", consentMarketing: true,
+        roomPreferences: "", accessibilityNeeds: "Wheelchair accessible room required.", important: false, notes: "" },
+      { id: "cus-4", name: "Layla Nasser", phone: "+970 59 876 5432", email: "layla.nasser@example.com", nationality: "Palestinian",
+        preferredLanguage: "Arabic", idRef: "PSE-990011223", communicationPreference: "WhatsApp", consentMarketing: false,
+        roomPreferences: "", accessibilityNeeds: "", important: false, notes: "" }
     ];
 
     var reservations = [
@@ -1138,6 +1149,149 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Guest (customer) Add/Edit drawer — shared by guests.html and             */
+  /* guest-detail.html. Guests are hotel customers, kept technically and      */
+  /* conceptually separate from state.users (staff accounts).                */
+  /* opts: { editingId (string|null), onSaved(guestId) }                      */
+  /* ---------------------------------------------------------------- */
+  var GUEST_LANGUAGES = ["Arabic", "English", "Other"];
+  var GUEST_COMM_PREFS = ["Email", "Phone", "WhatsApp", "SMS"];
+  var guestDrawerEl = null;
+  function ensureGuestDrawer() {
+    if (guestDrawerEl) return guestDrawerEl;
+    guestDrawerEl = document.createElement("div");
+    guestDrawerEl.className = "pg-drawer-overlay";
+    guestDrawerEl.id = "pgGuestDrawer";
+    document.body.appendChild(guestDrawerEl);
+    return guestDrawerEl;
+  }
+  function normPhoneForMatch(p) { return (p || "").replace(/\D/g, ""); }
+  function normEmailForMatch(e) { return (e || "").trim().toLowerCase(); }
+  function renderGuestDrawer(opts) {
+    var state = getState();
+    var el = ensureGuestDrawer();
+    var editingId = opts.editingId || null;
+    var cust = editingId ? state.customers.find(function (c) { return c.id === editingId; }) : null;
+    var duplicateConfirmed = false;
+
+    var langOptions = GUEST_LANGUAGES.map(function (l) { return '<option value="' + l + '"' + (cust && cust.preferredLanguage === l ? " selected" : "") + '>' + l + "</option>"; }).join("");
+    var commOptions = GUEST_COMM_PREFS.map(function (c) { return '<option value="' + c + '"' + (cust && cust.communicationPreference === c ? " selected" : "") + '>' + c + "</option>"; }).join("");
+    var natOptions = REF.countries.map(function (c) { return '<option value="' + c + '"' + (cust && cust.nationality === c ? " selected" : "") + '>' + c + "</option>"; }).join("");
+
+    el.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><h3>' + (cust ? "Edit Guest" : "Add Guest") + '</h3><button class="pg-modal-close" onclick="PG.closeModal(\'pgGuestDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-body">' +
+        '<div class="form-group"><label class="form-label">Full Name <span class="opt">(required)</span></label><input class="form-control" id="pgg-name" value="' + (cust ? esc(cust.name) : "") + '"><div class="field-error" id="pgg-err-name"></div></div>' +
+        '<div class="grid-2">' +
+          '<div class="form-group"><label class="form-label">Phone <span class="opt">(required)</span></label><input class="form-control" id="pgg-phone" value="' + (cust ? esc(cust.phone) : "") + '"><div class="field-error" id="pgg-err-phone"></div></div>' +
+          '<div class="form-group"><label class="form-label">Email <span class="opt">(optional)</span></label><input class="form-control" id="pgg-email" value="' + (cust ? esc(cust.email || "") : "") + '"></div>' +
+          '<div class="form-group"><label class="form-label">Nationality</label><select class="form-control" id="pgg-nationality"><option value="">—</option>' + natOptions + "</select></div>" +
+          '<div class="form-group"><label class="form-label">Preferred Language</label><select class="form-control" id="pgg-language">' + langOptions + "</select></div>" +
+          '<div class="form-group"><label class="form-label">Identification Reference <span class="opt">(optional)</span></label><input class="form-control" id="pgg-idref" value="' + (cust ? esc(cust.idRef || "") : "") + '"></div>' +
+          '<div class="form-group"><label class="form-label">Communication Preference</label><select class="form-control" id="pgg-commpref">' + commOptions + "</select></div>" +
+        "</div>" +
+        '<div class="form-check"><input type="checkbox" id="pgg-consent"' + (cust && cust.consentMarketing ? " checked" : "") + '><label class="form-label" style="margin:0;" for="pgg-consent">Consents to marketing communications</label></div>' +
+        '<div class="form-check" style="margin-top:10px;"><input type="checkbox" id="pgg-important"' + (cust && cust.important ? " checked" : "") + '><label class="form-label" style="margin:0;" for="pgg-important">Mark as Important / VIP</label></div>' +
+        '<div class="form-group" style="margin-top:16px;"><label class="form-label">Room &amp; Stay Preferences <span class="opt">(optional)</span></label><textarea class="form-control" id="pgg-roomprefs">' + (cust ? esc(cust.roomPreferences || "") : "") + "</textarea></div>" +
+        '<div class="form-group"><label class="form-label">Accessibility Needs <span class="opt">(optional)</span></label><textarea class="form-control" id="pgg-access">' + (cust ? esc(cust.accessibilityNeeds || "") : "") + "</textarea></div>" +
+        '<div class="form-group"><label class="form-label">Internal Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="pgg-notes">' + (cust ? esc(cust.notes || "") : "") + "</textarea></div>" +
+        '<div id="pgg-dup-warning"></div>' +
+      "</div>" +
+      '<div class="pg-drawer-footer"><button class="btn btn-light" onclick="PG.closeModal(\'pgGuestDrawer\')">Cancel</button><button class="btn btn-primary" id="pgg-save">' + (cust ? "Save Changes" : "Add Guest") + "</button></div>" +
+    "</div>";
+    enhanceSelects(el);
+
+    function findDuplicate(phone, email) {
+      var np = normPhoneForMatch(phone), ne = normEmailForMatch(email);
+      var fresh = getState();
+      return fresh.customers.find(function (c) {
+        if (c.id === editingId) return false;
+        if (np && normPhoneForMatch(c.phone) === np) return true;
+        if (ne && normEmailForMatch(c.email) === ne) return true;
+        return false;
+      }) || null;
+    }
+    function showDuplicateWarning(dup) {
+      var box = document.getElementById("pgg-dup-warning");
+      box.innerHTML = '<div class="help-note help-note-warning" style="margin-top:14px;flex-direction:column;align-items:stretch;">' +
+        '<div style="font-weight:700;margin-bottom:6px;">&#9888; Possible duplicate guest</div>' +
+        "<div>This phone or email closely matches an existing guest profile:</div>" +
+        '<div style="border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:10px;background:#fff;"><strong>' + esc(dup.name) + '</strong><div class="muted text-sm">' + esc(dup.phone || "—") + " &middot; " + esc(dup.email || "—") + "</div></div>" +
+        '<div style="display:flex;gap:8px;margin-top:10px;">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="pgg-dup-use">Use Existing Guest</button>' +
+          '<button type="button" class="btn btn-primary btn-sm" id="pgg-dup-continue">Continue Creating New Guest</button>' +
+        "</div>" +
+      "</div>";
+      document.getElementById("pgg-dup-use").addEventListener("click", function () {
+        closeModal("pgGuestDrawer");
+        opts.onSaved(dup.id, { usedExisting: true });
+      });
+      document.getElementById("pgg-dup-continue").addEventListener("click", function () {
+        duplicateConfirmed = true;
+        box.innerHTML = "";
+        save();
+      });
+    }
+    function save() {
+      document.getElementById("pgg-err-name").textContent = "";
+      document.getElementById("pgg-err-phone").textContent = "";
+      document.getElementById("pgg-name").classList.remove("error");
+      document.getElementById("pgg-phone").classList.remove("error");
+
+      var name = document.getElementById("pgg-name").value.trim();
+      var phone = document.getElementById("pgg-phone").value.trim();
+      var hasError = false;
+      if (!name) { document.getElementById("pgg-err-name").textContent = "Full name is required."; document.getElementById("pgg-name").classList.add("error"); hasError = true; }
+      if (!phone) { document.getElementById("pgg-err-phone").textContent = "Phone is required."; document.getElementById("pgg-phone").classList.add("error"); hasError = true; }
+      if (hasError) { toast("Please fix the highlighted fields.", "danger"); return; }
+
+      var email = document.getElementById("pgg-email").value.trim();
+      if (!duplicateConfirmed) {
+        var dup = findDuplicate(phone, email);
+        if (dup) { showDuplicateWarning(dup); return; }
+      }
+
+      var data = {
+        name: name, phone: phone, email: email,
+        nationality: document.getElementById("pgg-nationality").value,
+        preferredLanguage: document.getElementById("pgg-language").value,
+        idRef: document.getElementById("pgg-idref").value.trim(),
+        communicationPreference: document.getElementById("pgg-commpref").value,
+        consentMarketing: document.getElementById("pgg-consent").checked,
+        important: document.getElementById("pgg-important").checked,
+        roomPreferences: document.getElementById("pgg-roomprefs").value.trim(),
+        accessibilityNeeds: document.getElementById("pgg-access").value.trim(),
+        notes: document.getElementById("pgg-notes").value.trim()
+      };
+
+      try {
+        var st = getState();
+        var resultId;
+        if (editingId) {
+          var idx = st.customers.findIndex(function (c) { return c.id === editingId; });
+          st.customers[idx] = Object.assign({}, st.customers[idx], data);
+          resultId = editingId;
+          setState(st);
+          addAudit("Guest Updated", name + "'s profile was updated.");
+          toast("Guest updated.", "success");
+        } else {
+          resultId = "cus-" + Date.now();
+          st.customers.push(Object.assign({ id: resultId }, data));
+          setState(st);
+          addAudit("Guest Created", name + " added as a new guest.");
+          toast("Guest added.", "success");
+        }
+        closeModal("pgGuestDrawer");
+        opts.onSaved(resultId, { usedExisting: false });
+      } catch (e) {
+        toast("Failed to save changes. Please try again.", "danger");
+      }
+    }
+    document.getElementById("pgg-save").addEventListener("click", save);
+    openModal("pgGuestDrawer");
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Public API                                                         */
   /* ---------------------------------------------------------------- */
   global.PG = {
@@ -1182,6 +1336,7 @@
     rankRoomsForAssignment: rankRoomsForAssignment,
     autoAssignRoomsForItem: autoAssignRoomsForItem,
     renderChangeRoomDrawer: renderChangeRoomDrawer,
+    renderGuestDrawer: renderGuestDrawer,
     statusBadge: statusBadge,
     payBadge: payBadge,
     esc: esc,

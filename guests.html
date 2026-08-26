@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guests — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .filters-grid .form-group{margin-bottom:0;}
+  .filters-grid .form-label{font-size:11px;}
+  @media (max-width:1200px){.filters-grid{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:800px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:1300px){.col-nat{display:none;}}
+  .field-error{color:var(--pg-danger);font-size:11.5px;margin-top:5px;}
+  .form-control.error{border-color:var(--pg-danger);}
+  .skeleton-bar{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--pg-gray-200) 25%,var(--pg-gray-100) 37%,var(--pg-gray-200) 63%);background-size:400% 100%;animation:pg-skel-g 1.4s ease infinite;}
+  @keyframes pg-skel-g{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  .more-wrap{position:relative;display:inline-block;}
+  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:190px;z-index:30;display:none;overflow:hidden;}
+  .more-menu.show{display:block;}
+  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
+  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+  .dup-match{border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:10px;background:#fff;}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("guests", ["Reservations", "Guests"]);
+var s = PG.getState();
+// Same dead-code-today role gate used by physical-rooms.html / operations-calendar.html.
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+
+var LANGUAGES = ['Arabic', 'English', 'Other'];
+
+function init() {
+  var filters = { q: '', upcoming: 'all', past: 'all', important: 'all', language: 'all', stayFrom: '', stayTo: '' };
+
+  function guestReservations(custId) { return s.reservations.filter(function (r) { return r.customerId === custId; }); }
+  function upcomingFor(custId) {
+    return guestReservations(custId).filter(function (r) { return r.status !== 'Cancelled' && r.checkIn >= PG.TODAY; })
+      .sort(function (a, b) { return a.checkIn < b.checkIn ? -1 : 1; })[0] || null;
+  }
+  function lastStayFor(custId) {
+    return guestReservations(custId).filter(function (r) { return r.status !== 'Cancelled' && r.checkOut <= PG.TODAY; })
+      .sort(function (a, b) { return a.checkOut > b.checkOut ? -1 : 1; })[0] || null;
+  }
+
+  var html = '';
+  html += '<div class="pg-page-head"><div><h1>Guests</h1><div class="sub" id="guestCountSub"></div></div>' +
+    '<div class="pg-actions"><button class="btn btn-primary" id="addGuestBtn">+ Add Guest</button></div></div>';
+
+  html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
+    '<input class="form-control" id="searchBox" placeholder="Search by name, phone, email, or ID reference">' +
+    '<div class="filters-grid">' +
+      '<div class="form-group"><label class="form-label">HAS UPCOMING RESERVATION</label><select class="form-control" id="f-upcoming"><option value="all">All</option><option value="yes">Yes</option><option value="no">No</option></select></div>' +
+      '<div class="form-group"><label class="form-label">HAS PAST RESERVATIONS</label><select class="form-control" id="f-past"><option value="all">All</option><option value="yes">Yes</option><option value="no">No</option></select></div>' +
+      '<div class="form-group"><label class="form-label">IMPORTANT / VIP</label><select class="form-control" id="f-important"><option value="all">All</option><option value="yes">Important only</option><option value="no">Not flagged</option></select></div>' +
+      '<div class="form-group"><label class="form-label">COMMUNICATION LANGUAGE</label><select class="form-control" id="f-language"><option value="all">All Languages</option>' + LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') + '</select></div>' +
+      '<div class="form-group"><label class="form-label">LAST STAY FROM</label><input type="date" class="form-control" id="f-stayfrom"></div>' +
+    '</div>' +
+    '<div class="filters-grid" style="grid-template-columns:220px 1fr;">' +
+      '<div class="form-group"><label class="form-label">LAST STAY TO</label><input type="date" class="form-control" id="f-stayto"></div>' +
+      '<div></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+      '<span class="muted text-sm" id="resultCount"></span>' +
+    '</div>' +
+  '</div></div>';
+
+  html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+    '<th>Guest Name</th><th>Phone / Email</th><th class="col-nat">Nationality</th><th>Preferred Language</th><th>Upcoming Reservation</th><th>Last Stay</th><th class="num">Total Reservations</th><th>Notes</th><th></th>' +
+  '</tr></thead><tbody id="guestsBody"></tbody></table></div></div></div>';
+
+  page.innerHTML = html;
+  PG.enhanceSelects(page);
+  document.getElementById('guestCountSub').textContent = s.customers.length + ' guest' + (s.customers.length === 1 ? '' : 's');
+
+  function filteredGuests() {
+    var q = filters.q.trim().toLowerCase();
+    return s.customers.filter(function (c) {
+      if (q) {
+        var hay = [c.name, c.phone, c.email, c.idRef].join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      if (filters.upcoming !== 'all') { var hasUp = !!upcomingFor(c.id); if ((filters.upcoming === 'yes') !== hasUp) return false; }
+      if (filters.past !== 'all') { var hasPast = !!lastStayFor(c.id); if ((filters.past === 'yes') !== hasPast) return false; }
+      if (filters.important !== 'all') { var imp = !!c.important; if ((filters.important === 'yes') !== imp) return false; }
+      if (filters.language !== 'all' && (c.preferredLanguage || '') !== filters.language) return false;
+      if (filters.stayFrom || filters.stayTo) {
+        var last = lastStayFor(c.id);
+        if (!last) return false;
+        if (filters.stayFrom && last.checkOut < filters.stayFrom) return false;
+        if (filters.stayTo && last.checkOut > filters.stayTo) return false;
+      }
+      return true;
+    }).sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+  }
+
+  function renderTable() {
+    s = PG.getState();
+    var rows = filteredGuests();
+    document.getElementById('resultCount').textContent = rows.length + ' guest' + (rows.length === 1 ? '' : 's');
+    var body = document.getElementById('guestsBody');
+    if (!s.customers.length) {
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128100;</div>No guests yet.<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Guest</button></div></td></tr>';
+      document.getElementById('emptyAddBtn').addEventListener('click', function () { openGuestDrawer(null); });
+      return;
+    }
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128269;</div>No guests match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
+      document.getElementById('emptyClearBtn').addEventListener('click', clearFilters);
+      return;
+    }
+    body.innerHTML = rows.map(function (c) {
+      var up = upcomingFor(c.id);
+      var last = lastStayFor(c.id);
+      var total = guestReservations(c.id).length;
+      var hasNote = !!(c.notes && c.notes.trim());
+      return '<tr>' +
+        '<td><a class="row-link view-link" data-id="' + c.id + '" style="font-weight:700;">' + PG.esc(c.name) + '</a>' + (c.important ? ' <span class="badge badge-purple"><span class="badge-dot"></span>Important</span>' : '') + '</td>' +
+        '<td class="text-sm">' + PG.esc(c.phone || '—') + '<div class="muted text-sm">' + PG.esc(c.email || '—') + '</div></td>' +
+        '<td class="col-nat text-sm">' + PG.esc(c.nationality || '—') + '</td>' +
+        '<td class="text-sm">' + PG.esc(c.preferredLanguage || '—') + '</td>' +
+        '<td class="text-sm">' + (up ? '<a href="reservation-detail.html?id=' + up.id + '">' + up.id + '</a><div class="muted text-sm">' + PG.fmtDateShort(up.checkIn) + '</div>' : '<span class="muted">None</span>') + '</td>' +
+        '<td class="text-sm">' + (last ? PG.fmtDateShort(last.checkOut) : '<span class="muted">—</span>') + '</td>' +
+        '<td class="num">' + total + '</td>' +
+        '<td>' + (hasNote ? '<span title="' + PG.esc(c.notes) + '">&#128172;</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
+          '<button class="btn btn-outline btn-sm view-link" data-id="' + c.id + '">View</button>' +
+          '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + c.id + '">&#8942;</button>' +
+            '<div class="more-menu" data-menu-for="' + c.id + '">' +
+              (CAN_MANAGE ? '<button class="edit-action" data-id="' + c.id + '">Edit</button>' : '') +
+              '<a href="new-reservation.html?customer=' + c.id + '">Create Reservation</a>' +
+            '</div>' +
+          '</div>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function closeAllMenus() { document.querySelectorAll('.more-menu').forEach(function (m) { m.classList.remove('show'); }); }
+  document.addEventListener('click', closeAllMenus);
+  document.getElementById('guestsBody').addEventListener('click', function (e) {
+    var t;
+    if (t = e.target.closest('.more-btn')) {
+      e.stopPropagation();
+      var menu = document.querySelector('.more-menu[data-menu-for="' + t.dataset.id + '"]');
+      var wasOpen = menu.classList.contains('show');
+      closeAllMenus();
+      if (!wasOpen) menu.classList.add('show');
+      return;
+    }
+    if (t = e.target.closest('.view-link')) { location.href = 'guest-detail.html?id=' + t.dataset.id; return; }
+    if (t = e.target.closest('.edit-action')) { closeAllMenus(); openGuestDrawer(t.dataset.id); return; }
+  });
+
+  function clearFilters() {
+    filters = { q: '', upcoming: 'all', past: 'all', important: 'all', language: 'all', stayFrom: '', stayTo: '' };
+    document.getElementById('searchBox').value = '';
+    ['f-upcoming', 'f-past', 'f-important', 'f-language'].forEach(function (id) { document.getElementById(id).value = 'all'; document.getElementById(id).dispatchEvent(new Event('change')); });
+    document.getElementById('f-stayfrom').value = ''; document.getElementById('f-stayto').value = '';
+    renderTable();
+  }
+  document.getElementById('searchBox').addEventListener('input', function () { filters.q = this.value; renderTable(); });
+  document.getElementById('f-upcoming').addEventListener('change', function () { filters.upcoming = this.value; renderTable(); });
+  document.getElementById('f-past').addEventListener('change', function () { filters.past = this.value; renderTable(); });
+  document.getElementById('f-important').addEventListener('change', function () { filters.important = this.value; renderTable(); });
+  document.getElementById('f-language').addEventListener('change', function () { filters.language = this.value; renderTable(); });
+  document.getElementById('f-stayfrom').addEventListener('change', function () { filters.stayFrom = this.value; renderTable(); });
+  document.getElementById('f-stayto').addEventListener('change', function () { filters.stayTo = this.value; renderTable(); });
+  document.getElementById('clearFilters').addEventListener('click', clearFilters);
+
+  // ---- Loading state ----
+  document.getElementById('guestsBody').innerHTML = [0, 1, 2].map(function () {
+    return '<tr><td colspan="9"><div class="skeleton-bar" style="width:60%;"></div></td></tr>';
+  }).join('');
+  setTimeout(renderTable, 200);
+
+  /* ================================================================ */
+  /* Add / Edit Guest drawer — shared component, see PG.renderGuestDrawer   */
+  /* ================================================================ */
+  function openGuestDrawer(id) {
+    PG.renderGuestDrawer({
+      editingId: id,
+      onSaved: function (guestId, info) {
+        if (info && info.usedExisting) { location.href = 'guest-detail.html?id=' + guestId; return; }
+        renderTable();
+        s = PG.getState();
+        document.getElementById('guestCountSub').textContent = s.customers.length + ' guest' + (s.customers.length === 1 ? '' : 's');
+      }
+    });
+  }
+  document.getElementById('addGuestBtn').addEventListener('click', function () { openGuestDrawer(null); });
+}
+
+if (!CAN_MANAGE) {
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Guests</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to view Guests.<br>Contact a Hotel Admin to request access.</div></div></div>';
+} else {
+  init();
+}
+</script>
+</body>
+</html>

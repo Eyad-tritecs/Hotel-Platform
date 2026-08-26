@@ -126,7 +126,13 @@ if (entryParams.get('demo') === 'ahmad-whatsapp'){
   ];
   wizard.paymentMethod = 'Payment Link';
   demoTaxOverride = 50;
-} else if (entryParams.get('rt')){
+}
+if (entryParams.get('customer')){
+  // Entry from the Guests module ("Create Reservation") — prefill the existing guest.
+  var prefCust = s.customers.find(function(c){return c.id===entryParams.get('customer');});
+  if (prefCust){ wizard.customerMode = 'existing'; wizard.customerId = prefCust.id; }
+}
+if (entryParams.get('demo') !== 'ahmad-whatsapp' && entryParams.get('rt')){
   // Entry from Operations Calendar: clicking an empty room/date cell — prefill room type,
   // date, and (if still eligible when this page loads) the exact room that was clicked.
   var prefRt = entryParams.get('rt');
