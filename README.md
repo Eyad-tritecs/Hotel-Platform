@@ -169,7 +169,7 @@ Physical rooms sit **beneath** room-type commercial inventory as a second, conne
 
 **Known, intentional gap:** `physicalRooms` counts (active + sellable) don't always numerically equal `roomTypes[].sellable` yet — e.g. Standard has 10 physical rooms but only 8 are currently active+sellable (one Out of Order, one Inactive). The two layers are not yet unified into a single source of truth; that reconciliation is deferred to when the full Physical Rooms UI is built (see §11). Do not silently "fix" this mismatch — it's seeded deliberately to demonstrate the layering.
 
-**Nothing beyond this data layer and the nav entry has been built yet** — there is no `physical-rooms.html` page. It's one of the intentionally-not-yet-built pages the nav links to (see §7), same pattern as `operations-calendar.html`/`guests.html`/the report pages.
+**`physical-rooms.html`** (see §8) manages this layer directly — add/edit rooms, block rooms, activate/deactivate. It does not yet let staff assign a specific room to a reservation from New Reservation or Reservation Detail; that wiring is still open (see §11).
 
 ---
 
@@ -253,8 +253,7 @@ Defined in `NAV` in `app.js`. **Most recently restructured** (room-operations sc
 
 ```
 Hotel Management  → Dashboard (index.html), Operations Calendar (operations-calendar.html — NOT YET BUILT),
-                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html — NOT YET BUILT),
-                     Rates, Availability & Inventory
+                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html), Rates, Availability & Inventory
 Reservations      → Reservations, New Reservation, Guests (guests.html — NOT YET BUILT)
 Payments          → Payments
 Reports           → Reservation Reports, Inventory Reports, Payment Reports (ALL THREE — NOT YET BUILT)
@@ -262,7 +261,7 @@ Settings          → Hotel Policies, Taxes & Fees, Payment Configuration
 Administration    → Hotels (hotels.html — NOT YET BUILT, super-admin-only), Users, Roles, Permissions, Audit
 ```
 
-**The nav links to six pages that do not exist yet.** This is intentional, following the same "don't build every screen from one prompt" sequencing established earlier in the project. Expect follow-up prompts to build: `operations-calendar.html`, `guests.html`, `physical-rooms.html`, `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. When you build them, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new labels to `CRUMB_LINKS` too — `physical-rooms.html`'s crumb link is already registered).
+**The nav links to five pages that do not exist yet** (`physical-rooms.html` was built in the room-operations-management-UI prompt). This is intentional, following the same "don't build every screen from one prompt" sequencing established earlier in the project. Expect follow-up prompts to build: `operations-calendar.html`, `guests.html`, `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. When you build them, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new labels to `CRUMB_LINKS` too).
 
 The old "Guided Journey" nav item was removed from the sidebar in this restructure (it's not in the new spec's nav list) but the page (`demo-journey.html`) still exists and is still linked from the Dashboard's Quick Operations panel — don't delete it.
 
@@ -276,6 +275,7 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 | `hotel-profile.html` | Tenant profile, editable | Country/City/Currency/Timezone are dropdowns (`PG.REF`); phone has a separate country-code dropdown. |
 | `room-types.html` | Room type list | Table with View/Edit actions + Add. |
 | `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete removes associated `rates[id]`, `ratePlans`, `physicalRooms`, `roomAssignments`, and `roomBlocks` referencing it. |
+| `physical-rooms.html` | **Physical Rooms management** | Dense table (not cards) — Room Number, Room Type, Building/Floor, Bed Config, Key Attributes, Today's Status, Current/Next Reservation, Active State, Actions. Building/Floor/Bed Config/Key Attributes collapse below 1100–1500px; Room Number and Room Type never collapse. Summary strip (Total/Active & Sellable/Reserved Today/Blocked Today/Inactive) reuses the shared `.kpi` tile, not the dashboard's local `.sum-card`. Add/Edit is a **Drawer** (Bed Configuration reuses the managed-select component; Connecting Rooms are kept mutual on save — selecting A→B also links B→A). Room Details is a separate, fully-rebuilt-per-open **Drawer**. Block Room is a **Modal** that live-previews conflicting `roomAssignments` as dates change and hard-disables Save while any non-Cancelled assignment overlaps (see §9) — Out of Order/Out of Service show a destructive (red) impact note, Management Hold/Other show a warning (yellow) one. No delete action anywhere — Activate/Deactivate is the only lifecycle control, and deactivating also clears `isSellable`. Gated by a `CAN_MANAGE` check on `PG.CURRENT_ROLE` (always true today — see §5.3) that renders a permission-denied panel instead, demonstrating a state with no live trigger yet. |
 | `rates.html` | Rate Plan list | Table with Edit action + Add. |
 | `rate-plan-form.html` | Create/edit/**delete** a rate plan | Meal Plan uses managed-select; Currency is a dropdown; shows a live warning if price < the room type's base rate; does not hard-block saving on that warning. |
 | `availability-inventory.html` | Live availability grid + Stop Sell/Reopen/Adjust Inventory | Grid cells are clickable (`tbody .av-cell` only — header cells intentionally excluded, see §9 history). Adjust Inventory is a **Drawer**; Stop Sell/Reopen are **Modals**, each pre-filling from the currently-selected cell. |
@@ -306,7 +306,8 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 - **Reservation dates are reservation-level, not per-item** (§4.3, rule 3) — intentional MVP simplification, do not "fix" without discussion.
 - **Occupancy is derived, not stored as a user preference** — if a room type's `maxAdults`/`maxChildren` changes after a reservation was made, existing reservations keep their originally-computed occupancy (correct — it's a snapshot, not a live join).
 - **No login/auth/role-switcher UI** — `CURRENT_ROLE` is a hardcoded constant.
-- **`physicalRooms`/`roomAssignments`/`roomBlocks` are a data layer only** — no UI reads or writes them yet beyond the seed data and the room-type delete cascade (§8). See §4.6 for the full model and the deliberate active+sellable count mismatch vs. `roomTypes[].sellable`.
+- **Physical Rooms UI manages `physicalRooms`/`roomAssignments`/`roomBlocks` directly (`physical-rooms.html`)**, but nothing else in the app creates a `roomAssignment` yet — reservations still don't assign a specific physical room (New Reservation / Reservation Detail only touch the commercial `roomTypes[].sellable` layer). See §4.6 for the full model and the deliberate active+sellable count mismatch vs. `roomTypes[].sellable`.
+- **Block Room's conflict check treats "Held" and "Assigned" assignments the same** — both block a new room block from saving. A future prompt may want holds to be overridable while confirmed assignments stay hard blocks.
 - **GitHub Pages caches aggressively.** When testing changes right after a push, hard-refresh (Ctrl/Cmd+Shift+R) — a stale service-worker-free browser cache has caused "my change isn't showing" confusion at least once.
 - **Browser-automation quirk (dev environment only):** the Claude Browser preview tool's `computer` (screenshot) action is flaky in this sandbox and frequently times out with "the Browser pane is not displayed". When verifying UI changes in an agent session, prefer `javascript_tool`-based DOM/state assertions over screenshots — they're reliable; screenshots are not. Also: the `serve` dev server caches 301 redirects in the *browser's* HTTP cache even after `serve.json` is fixed — use a `?cb=N` cache-busting query param when re-testing a URL you've hit before in the same session.
 
@@ -331,7 +332,7 @@ Based on the nav structure already wired in but not yet built:
 
 - `operations-calendar.html` — an operational calendar; originally scoped to room-type inventory only, but now that `physicalRooms`/`roomAssignments` exist it could reasonably surface per-room detail too — confirm scope in the prompt that builds it.
 - `guests.html` — a Guests directory (likely: list of `state.customers`, search, maybe a guest detail/history view).
-- `physical-rooms.html` — the detailed Physical Rooms UI (list/detail of `state.physicalRooms`, room blocks, and assignment history) — explicitly deferred by the room-operations scope-update prompt to a future prompt. Likely candidate for a room-assignment flow wired into New Reservation / Reservation Detail using `PG.eligiblePhysicalRooms()` / `PG.validateRoomAssignmentCapacity()`.
+- Wiring an actual **room-assignment flow** into New Reservation / Reservation Detail using `PG.eligiblePhysicalRooms()` / `PG.validateRoomAssignmentCapacity()` — `physical-rooms.html` manages rooms/blocks directly, but no other screen creates a `roomAssignment` yet, so reservations still don't get a specific physical room assigned.
 - `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html` — reporting views; `state.audit` and `state.adjustments` already contain data that could feed Inventory Reports.
 - `hotels.html` — a Platform Super Admin-only tenant list (would need `CURRENT_ROLE` toggled to `"Platform Super Admin"` to view/test).
 

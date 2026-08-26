@@ -383,10 +383,13 @@
   function physicalRoomsForType(state, roomTypeId) {
     return (state.physicalRooms || []).filter(function (pr) { return pr.roomTypeId === roomTypeId; });
   }
-  function isPhysicalRoomBlocked(state, physicalRoomId, dateStr) {
-    return (state.roomBlocks || []).some(function (b) {
+  function physicalRoomBlockOn(state, physicalRoomId, dateStr) {
+    return (state.roomBlocks || []).find(function (b) {
       return b.physicalRoomId === physicalRoomId && dateStr >= b.startDate && dateStr < b.endDate;
-    });
+    }) || null;
+  }
+  function isPhysicalRoomBlocked(state, physicalRoomId, dateStr) {
+    return !!physicalRoomBlockOn(state, physicalRoomId, dateStr);
   }
   function isPhysicalRoomAssigned(state, physicalRoomId, dateStr, excludeAssignmentId) {
     return (state.roomAssignments || []).some(function (a) {
@@ -395,6 +398,32 @@
       return a.physicalRoomId === physicalRoomId && dateStr >= a.arrivalDate && dateStr < a.departureDate;
     });
   }
+  function assignmentsForRoom(state, physicalRoomId) {
+    return (state.roomAssignments || []).filter(function (a) { return a.physicalRoomId === physicalRoomId && a.assignmentStatus !== "Cancelled"; });
+  }
+  // Any non-Cancelled assignment on this room whose stay overlaps [start, endExclusive) —
+  // used by the Block Room flow to detect a block/reservation conflict before saving.
+  function assignmentsOverlapping(state, physicalRoomId, start, endExclusive) {
+    return assignmentsForRoom(state, physicalRoomId).filter(function (a) {
+      return a.arrivalDate < endExclusive && a.departureDate > start;
+    });
+  }
+  function currentOrNextAssignment(state, physicalRoomId, todayStr) {
+    var today = todayStr || TODAY;
+    var list = assignmentsForRoom(state, physicalRoomId).slice().sort(function (a, b) { return a.arrivalDate < b.arrivalDate ? -1 : 1; });
+    var current = list.find(function (a) { return a.arrivalDate <= today && a.departureDate > today; });
+    if (current) return { assignment: current, when: "current" };
+    var next = list.find(function (a) { return a.arrivalDate > today; });
+    return next ? { assignment: next, when: "next" } : null;
+  }
+  function upcomingAssignmentsForRoom(state, physicalRoomId, todayStr) {
+    var today = todayStr || TODAY;
+    return assignmentsForRoom(state, physicalRoomId).filter(function (a) { return a.departureDate > today; })
+      .sort(function (a, b) { return a.arrivalDate < b.arrivalDate ? -1 : 1; });
+  }
+  // Block type determines the derived status while a block is active — Out of Order /
+  // Out of Service map straight through; Management Hold and Other read as "Held".
+  var BLOCK_TYPE_STATUS = { "Out of Order": "Out of Order", "Out of Service": "Out of Service", "Management Hold": "Held", "Other": "Held" };
   // The status a room shows on a given date. "Reserved" is always derived from a live
   // assignment, never stored — per product rule, housekeeping states (Clean/Dirty/etc.)
   // are intentionally out of MVP scope.
@@ -403,7 +432,8 @@
     if (!room) return null;
     if (!room.isActive) return "Inactive";
     if (isPhysicalRoomAssigned(state, physicalRoomId, dateStr)) return "Reserved";
-    if (isPhysicalRoomBlocked(state, physicalRoomId, dateStr)) return room.operationalStatus === "Out of Service" ? "Out of Service" : "Out of Order";
+    var blk = physicalRoomBlockOn(state, physicalRoomId, dateStr);
+    if (blk) return BLOCK_TYPE_STATUS[blk.type] || "Out of Order";
     return room.operationalStatus || "Available";
   }
   function eligiblePhysicalRooms(state, roomTypeId, dateStr) {
@@ -792,6 +822,7 @@
   /* ---------------------------------------------------------------- */
   global.PG = {
     TODAY: TODAY,
+    CURRENT_ROLE: CURRENT_ROLE,
     addDays: addDays,
     fmtDate: fmtDate,
     fmtDateShort: fmtDateShort,
@@ -814,6 +845,11 @@
     physicalRoomsForType: physicalRoomsForType,
     isPhysicalRoomBlocked: isPhysicalRoomBlocked,
     isPhysicalRoomAssigned: isPhysicalRoomAssigned,
+    physicalRoomBlockOn: physicalRoomBlockOn,
+    assignmentsForRoom: assignmentsForRoom,
+    assignmentsOverlapping: assignmentsOverlapping,
+    currentOrNextAssignment: currentOrNextAssignment,
+    upcomingAssignmentsForRoom: upcomingAssignmentsForRoom,
     roomStatusOn: roomStatusOn,
     eligiblePhysicalRooms: eligiblePhysicalRooms,
     eligiblePhysicalRoomCount: eligiblePhysicalRoomCount,

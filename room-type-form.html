@@ -34,7 +34,7 @@ html += '<div class="pg-page-head"><div><h1>'+(id ? (readOnly ? 'View Room Type'
     '<a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a>' +
   '</div></div>';
 
-html += '<div class="help-note" style="margin-bottom:20px;">Inventory is controlled at room-type level. Individual physical room assignment is outside the Initial MVP — sellable quantity below represents how many rooms of this type can be sold per night, not specific room numbers.</div>';
+html += '<div class="help-note" style="margin-bottom:20px;">Inventory is controlled at room-type level — sellable quantity below represents how many rooms of this type can be sold per night, not specific room numbers. Specific rooms of this type are managed on the <a href="physical-rooms.html">Physical Rooms</a> page.</div>';
 
 html += '<div class="card"><div class="card-body"><div class="grid-2">' +
   f('f-name','Room Type Name', rt ? rt.name : '') +

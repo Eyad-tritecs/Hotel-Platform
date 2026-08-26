@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Physical Rooms — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .sum-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px;}
+  @media (max-width:1300px){.sum-grid{grid-template-columns:repeat(2,1fr);}}
+  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .filters-grid .form-group{margin-bottom:0;}
+  .filters-grid .form-label{font-size:11px;}
+  @media (max-width:1100px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:1500px){.col-attrs{display:none;}}
+  @media (max-width:1300px){.col-bed{display:none;}}
+  @media (max-width:1100px){.col-bldg{display:none;}}
+  .chip{display:inline-block;background:var(--pg-gray-100);border:1px solid var(--pg-border);border-radius:12px;padding:2px 8px;font-size:11px;color:var(--pg-gray-700);margin:2px 4px 2px 0;white-space:nowrap;}
+  .checklist-box{border:1px solid var(--pg-border);border-radius:6px;padding:10px 12px;max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}
+  .checklist-box .form-check{gap:8px;}
+  .field-error{color:var(--pg-danger);font-size:11.5px;margin-top:5px;}
+  .form-control.error{border-color:var(--pg-danger);}
+  .detail-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--pg-gray-200);font-size:13px;}
+  .detail-row:last-child{border-bottom:none;}
+  .detail-row .v{font-weight:700;text-align:right;}
+  .drawer-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-500);margin:20px 0 10px;}
+  .drawer-section-title:first-child{margin-top:0;}
+  .skeleton-row td{padding:16px;}
+  .skeleton-bar{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--pg-gray-200) 25%,var(--pg-gray-100) 37%,var(--pg-gray-200) 63%);background-size:400% 100%;animation:pg-skel 1.4s ease infinite;}
+  @keyframes pg-skel{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  .more-wrap{position:relative;display:inline-block;}
+  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:200px;z-index:30;display:none;overflow:hidden;}
+  .more-menu.show{display:block;}
+  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
+  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("physical-rooms", ["Hotel Management", "Physical Rooms"]);
+var s = PG.getState();
+
+// Role gating mirrors the existing superAdminOnly pattern in app.js's NAV — CURRENT_ROLE
+// is hardcoded today (no login/role-switcher UI), so this branch never actually fires,
+// but it's here for when a future prompt wires up real role switching.
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+
+function distinct(arr) {
+  var out = [];
+  arr.forEach(function (v) { if (v != null && v !== '' && out.indexOf(v) === -1) out.push(v); });
+  return out;
+}
+function rt(id) { return s.roomTypes.find(function (r) { return r.id === id; }); }
+function rtName(id) { var r = rt(id); return r ? r.name : id; }
+function roomById(id) { return s.physicalRooms.find(function (r) { return r.id === id; }); }
+
+var BLOCK_TYPES = ['Out of Order', 'Out of Service', 'Management Hold', 'Other'];
+var ACCESSIBILITY_OPTIONS = ['Wheelchair Accessible', 'Grab Bars', 'Roll-in Shower', 'Visual Alarm'];
+var VIEW_OPTIONS = ['No View', 'Old City View', 'Courtyard View', 'Garden View'];
+var STATUS_OPTIONS = ['Available', 'Reserved', 'Held', 'Out of Order', 'Out of Service', 'Inactive'];
+
+function init() {
+  var filters = { q: '', roomType: 'all', building: 'all', floor: 'all', status: 'all', active: 'all' };
+  var editingId = null; // null = Add mode
+  var currentRoom = null; // room targeted by the Block Room modal
+
+  var html = '';
+  html += '<div class="pg-page-head"><div><h1>Physical Rooms</h1>' +
+    '<div class="sub">Individual rooms that belong to each room type — used to assign a specific room to a reservation.</div></div>' +
+    '<div class="pg-actions"><button class="btn btn-primary" id="addRoomBtn">+ Add Physical Room</button></div></div>';
+
+  html += '<div class="sum-grid" id="sumGrid"></div>';
+
+  html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
+    '<input class="form-control" id="searchBox" placeholder="Search by Room Number or Code">' +
+    '<div class="filters-grid">' +
+      '<div class="form-group"><label class="form-label">ROOM TYPE</label><select class="form-control" id="rtFilter"><option value="all">All Room Types</option>' +
+        s.roomTypes.map(function (r) { return '<option value="' + r.id + '">' + PG.esc(r.name) + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="form-group"><label class="form-label">BUILDING</label><select class="form-control" id="bldgFilter"><option value="all">All Buildings</option>' +
+        distinct(s.physicalRooms.map(function (r) { return r.building; })).sort().map(function (b) { return '<option value="' + PG.esc(b) + '">' + PG.esc(b) + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="form-group"><label class="form-label">FLOOR</label><select class="form-control" id="floorFilter"><option value="all">All Floors</option>' +
+        distinct(s.physicalRooms.map(function (r) { return r.floor; })).sort(function (a, b) { return a - b; }).map(function (f) { return '<option value="' + f + '">Floor ' + f + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="form-group"><label class="form-label">OPERATIONAL STATUS</label><select class="form-control" id="statusFilter"><option value="all">All Statuses</option>' +
+        STATUS_OPTIONS.map(function (st2) { return '<option value="' + st2 + '">' + st2 + '</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="form-group"><label class="form-label">ACTIVE STATE</label><select class="form-control" id="activeFilter"><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+      '<span class="muted text-sm" id="resultCount"></span>' +
+    '</div>' +
+  '</div></div>';
+
+  html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+    '<th>Room Number</th><th>Room Type</th><th class="col-bldg">Building / Floor</th><th class="col-bed">Bed Configuration</th>' +
+    '<th class="col-attrs">Key Attributes</th><th>Today\'s Status</th><th>Current / Next Reservation</th><th>Active State</th><th></th>' +
+  '</tr></thead><tbody id="roomsBody"></tbody></table></div></div></div>';
+
+  page.innerHTML = html;
+  PG.enhanceSelects(page);
+
+  // ---- Summary strip ----
+  function renderSummary() {
+    var st = PG.getState();
+    var rooms = st.physicalRooms;
+    var total = rooms.length;
+    var activeSellable = rooms.filter(function (r) { return r.isActive && r.isSellable; }).length;
+    var reservedToday = rooms.filter(function (r) { return PG.roomStatusOn(st, r.id, PG.TODAY) === 'Reserved'; }).length;
+    var blockedToday = rooms.filter(function (r) { return !!PG.physicalRoomBlockOn(st, r.id, PG.TODAY); }).length;
+    var inactive = rooms.filter(function (r) { return !r.isActive; }).length;
+    function tile(label, value, note) {
+      return '<div class="kpi"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div><div class="kpi-note">' + (note || '&nbsp;') + '</div></div>';
+    }
+    document.getElementById('sumGrid').innerHTML =
+      tile('Total Rooms', total, s.hotel.name) +
+      tile('Active &amp; Sellable', activeSellable, 'Assignable to reservations') +
+      tile('Reserved Today', reservedToday, PG.fmtDate(PG.TODAY, { month: 'short', day: 'numeric' })) +
+      tile('Blocked Today', blockedToday, 'Out of Order / Service / Hold') +
+      tile('Inactive', inactive, 'Retired from service');
+  }
+
+  // ---- Key attributes cell ----
+  function keyAttributesHtml(r) {
+    var chips = [];
+    if (r.view) chips.push(r.view);
+    (r.accessibilityFeatures || []).forEach(function (a) { chips.push(a); });
+    if (r.connectingRoomIds && r.connectingRoomIds.length) {
+      var nums = r.connectingRoomIds.map(function (id) { var pr = roomById(id); return pr ? pr.roomNumber : id; });
+      chips.push('Connects: ' + nums.join(', '));
+    }
+    if (!chips.length) return '<span class="muted text-sm">—</span>';
+    return chips.map(function (c) { return '<span class="chip">' + PG.esc(c) + '</span>'; }).join('');
+  }
+
+  function reservationCellHtml(r) {
+    var st = PG.getState();
+    var cn = PG.currentOrNextAssignment(st, r.id, PG.TODAY);
+    if (!cn) return '<span class="muted text-sm">No upcoming reservation</span>';
+    var res = st.reservations.find(function (x) { return x.id === cn.assignment.reservationId; });
+    var cust = res ? st.customers.find(function (c) { return c.id === res.customerId; }) : null;
+    var label = cn.when === 'current' ? 'Current' : 'Next';
+    var dateLbl = cn.when === 'current' ? ('until ' + PG.fmtDateShort(cn.assignment.departureDate)) : ('from ' + PG.fmtDateShort(cn.assignment.arrivalDate));
+    return '<a class="row-link" href="reservation-detail.html?id=' + cn.assignment.reservationId + '">' + cn.assignment.reservationId + '</a>' +
+      '<div class="muted text-sm">' + label + (cust ? ' &middot; ' + PG.esc(cust.name) : '') + ' &middot; ' + dateLbl + (cn.assignment.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</div>';
+  }
+
+  function activeStateHtml(r) {
+    var out = r.isActive ? '<span class="badge badge-green"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>';
+    if (r.isActive && !r.isSellable) out += '<div class="muted text-sm" style="margin-top:4px;">Not sellable</div>';
+    return out;
+  }
+
+  function filteredRooms() {
+    var st = PG.getState();
+    var q = filters.q.trim().toLowerCase();
+    return st.physicalRooms.filter(function (r) {
+      if (filters.roomType !== 'all' && r.roomTypeId !== filters.roomType) return false;
+      if (filters.building !== 'all' && r.building !== filters.building) return false;
+      if (filters.floor !== 'all' && String(r.floor) !== filters.floor) return false;
+      if (filters.status !== 'all' && PG.roomStatusOn(st, r.id, PG.TODAY) !== filters.status) return false;
+      if (filters.active === 'active' && !r.isActive) return false;
+      if (filters.active === 'inactive' && r.isActive) return false;
+      if (q && r.roomNumber.toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    }).sort(function (a, b) {
+      if (a.building !== b.building) return a.building < b.building ? -1 : 1;
+      if (a.floor !== b.floor) return a.floor - b.floor;
+      return a.roomNumber < b.roomNumber ? -1 : 1;
+    });
+  }
+
+  function renderTable() {
+    s = PG.getState();
+    var rows = filteredRooms();
+    document.getElementById('resultCount').textContent = rows.length + ' room' + (rows.length === 1 ? '' : 's');
+    var body = document.getElementById('roomsBody');
+    if (!s.physicalRooms.length) {
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128274;</div>No physical rooms configured yet.<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button></div></td></tr>';
+      document.getElementById('emptyAddBtn').addEventListener('click', function () { openRoomDrawer(null); });
+      return;
+    }
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128269;</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
+      document.getElementById('emptyClearBtn').addEventListener('click', clearFilters);
+      return;
+    }
+    body.innerHTML = rows.map(function (r) {
+      var today = PG.roomStatusOn(s, r.id, PG.TODAY);
+      return '<tr>' +
+        '<td><a class="row-link view-btn" data-id="' + r.id + '" style="font-weight:700;">' + PG.esc(r.roomNumber) + '</a></td>' +
+        '<td>' + PG.esc(rtName(r.roomTypeId)) + '</td>' +
+        '<td class="col-bldg text-sm">' + PG.esc(r.building) + ' &middot; Floor ' + r.floor + '</td>' +
+        '<td class="col-bed text-sm">' + PG.esc(r.bedConfiguration) + '</td>' +
+        '<td class="col-attrs">' + keyAttributesHtml(r) + '</td>' +
+        '<td>' + PG.roomStatusBadge(today) + '</td>' +
+        '<td>' + reservationCellHtml(r) + '</td>' +
+        '<td>' + activeStateHtml(r) + '</td>' +
+        '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
+          '<button class="btn btn-outline btn-sm view-btn" data-id="' + r.id + '">View</button>' +
+          '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + r.id + '">&#8942;</button>' +
+            '<div class="more-menu" data-menu-for="' + r.id + '">' +
+              '<button class="edit-action" data-id="' + r.id + '">Edit</button>' +
+              '<button class="block-action" data-id="' + r.id + '">Block Room</button>' +
+              '<a href="operations-calendar.html?room=' + r.id + '">View in Operations Calendar</a>' +
+              '<button class="toggle-active-action" data-id="' + r.id + '">' + (r.isActive ? 'Deactivate' : 'Activate') + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderAll() { renderSummary(); renderTable(); }
+
+  function closeAllMenus() { document.querySelectorAll('.more-menu').forEach(function (m) { m.classList.remove('show'); }); }
+  document.addEventListener('click', closeAllMenus);
+
+  document.getElementById('roomsBody').addEventListener('click', function (e) {
+    var t;
+    if (t = e.target.closest('.more-btn')) {
+      e.stopPropagation();
+      var id = t.dataset.id;
+      var menu = document.querySelector('.more-menu[data-menu-for="' + id + '"]');
+      var wasOpen = menu.classList.contains('show');
+      closeAllMenus();
+      if (!wasOpen) menu.classList.add('show');
+      return;
+    }
+    if (t = e.target.closest('.view-btn')) { openDetailsDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.edit-action')) { closeAllMenus(); openRoomDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.block-action')) { closeAllMenus(); openBlockModal(t.dataset.id); return; }
+    if (t = e.target.closest('.toggle-active-action')) { closeAllMenus(); toggleActive(t.dataset.id); return; }
+  });
+
+  // ---- Filters ----
+  function clearFilters() {
+    filters = { q: '', roomType: 'all', building: 'all', floor: 'all', status: 'all', active: 'all' };
+    document.getElementById('searchBox').value = '';
+    document.getElementById('rtFilter').value = 'all'; document.getElementById('rtFilter').dispatchEvent(new Event('change'));
+    document.getElementById('bldgFilter').value = 'all'; document.getElementById('bldgFilter').dispatchEvent(new Event('change'));
+    document.getElementById('floorFilter').value = 'all'; document.getElementById('floorFilter').dispatchEvent(new Event('change'));
+    document.getElementById('statusFilter').value = 'all'; document.getElementById('statusFilter').dispatchEvent(new Event('change'));
+    document.getElementById('activeFilter').value = 'all'; document.getElementById('activeFilter').dispatchEvent(new Event('change'));
+    renderTable();
+  }
+  document.getElementById('searchBox').addEventListener('input', function () { filters.q = this.value; renderTable(); });
+  document.getElementById('rtFilter').addEventListener('change', function () { filters.roomType = this.value; renderTable(); });
+  document.getElementById('bldgFilter').addEventListener('change', function () { filters.building = this.value; renderTable(); });
+  document.getElementById('floorFilter').addEventListener('change', function () { filters.floor = this.value; renderTable(); });
+  document.getElementById('statusFilter').addEventListener('change', function () { filters.status = this.value; renderTable(); });
+  document.getElementById('activeFilter').addEventListener('change', function () { filters.active = this.value; renderTable(); });
+  document.getElementById('clearFilters').addEventListener('click', clearFilters);
+
+  // ---- Loading state: brief skeleton, then real data ----
+  renderSummary();
+  document.getElementById('roomsBody').innerHTML = [0, 1, 2].map(function () {
+    return '<tr class="skeleton-row"><td colspan="9"><div class="skeleton-bar" style="width:60%;"></div></td></tr>';
+  }).join('');
+  setTimeout(renderTable, 220);
+
+  /* ================================================================ */
+  /* Add / Edit drawer                                                  */
+  /* ================================================================ */
+  var roomDrawer = document.createElement('div');
+  roomDrawer.className = 'pg-drawer-overlay';
+  roomDrawer.id = 'roomDrawer';
+  document.body.appendChild(roomDrawer);
+  var bedConfigValue = '';
+
+  function buildRoomDrawer(room) {
+    editingId = room ? room.id : null;
+    var rtOptions = s.roomTypes.map(function (r) { return '<option value="' + r.id + '"' + (room && room.roomTypeId === r.id ? ' selected' : '') + '>' + PG.esc(r.name) + '</option>'; }).join('');
+    var viewOptions = VIEW_OPTIONS.map(function (v) { return '<option value="' + v + '"' + (room && room.view === v ? ' selected' : '') + '>' + v + '</option>'; }).join('');
+    var accHtml = ACCESSIBILITY_OPTIONS.map(function (a, i) {
+      var checked = room && (room.accessibilityFeatures || []).indexOf(a) > -1 ? ' checked' : '';
+      return '<div class="form-check"><input type="checkbox" class="acc-check" id="acc-' + i + '" value="' + a + '"' + checked + '><label class="form-label" style="margin:0;" for="acc-' + i + '">' + a + '</label></div>';
+    }).join('');
+    var otherRooms = s.physicalRooms.filter(function (r) { return !room || r.id !== room.id; });
+    var connHtml = otherRooms.length ? otherRooms.map(function (r) {
+      var checked = room && (room.connectingRoomIds || []).indexOf(r.id) > -1 ? ' checked' : '';
+      return '<div class="form-check"><input type="checkbox" class="conn-check" id="conn-' + r.id + '" value="' + r.id + '"' + checked + '><label class="form-label" style="margin:0;" for="conn-' + r.id + '">' + PG.esc(r.roomNumber) + ' &middot; ' + PG.esc(rtName(r.roomTypeId)) + '</label></div>';
+    }).join('') : '<span class="muted text-sm">No other rooms yet.</span>';
+
+    bedConfigValue = room ? room.bedConfiguration : s.bedConfigs[0];
+
+    roomDrawer.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><h3>' + (room ? 'Edit Physical Room' : 'Add Physical Room') + '</h3><button class="pg-modal-close" onclick="PG.closeModal(\'roomDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-body">' +
+        '<div class="grid-2">' +
+          '<div class="form-group"><label class="form-label">Room Number / Code <span class="opt">(required)</span></label><input class="form-control" id="rm-number" value="' + (room ? PG.esc(room.roomNumber) : '') + '"><div class="field-error" id="err-number"></div></div>' +
+          '<div class="form-group"><label class="form-label">Room Type <span class="opt">(required)</span></label><select class="form-control" id="rm-type">' + rtOptions + '</select><div class="field-error" id="err-type"></div></div>' +
+          '<div class="form-group"><label class="form-label">Building</label><input class="form-control" id="rm-building" value="' + (room ? PG.esc(room.building) : (s.hotel.name ? 'Main Building' : '')) + '"></div>' +
+          '<div class="form-group"><label class="form-label">Floor</label><input type="number" class="form-control" id="rm-floor" value="' + (room ? room.floor : 1) + '"></div>' +
+          '<div class="form-group"><label class="form-label">Bed Configuration</label><div id="rm-bed-container"></div></div>' +
+          '<div class="form-group"><label class="form-label">View</label><select class="form-control" id="rm-view">' + viewOptions + '</select></div>' +
+        '</div>' +
+        '<div class="form-group"><label class="form-label">Accessibility Features</label><div class="checklist-box">' + accHtml + '</div></div>' +
+        '<div class="form-group"><label class="form-label">Connecting Rooms</label><div class="checklist-box">' + connHtml + '</div></div>' +
+        '<div class="form-check"><input type="checkbox" id="rm-sellable"' + (!room || room.isSellable ? ' checked' : '') + '><label class="form-label" style="margin:0;" for="rm-sellable">Sellable</label></div>' +
+        '<div class="form-check" style="margin-top:10px;"><input type="checkbox" id="rm-active"' + (!room || room.isActive ? ' checked' : '') + '><label class="form-label" style="margin:0;" for="rm-active">Active</label></div>' +
+        '<div class="form-group" style="margin-top:16px;"><label class="form-label">Internal Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="rm-notes">' + (room ? PG.esc(room.notes) : '') + '</textarea></div>' +
+      '</div>' +
+      '<div class="pg-drawer-footer"><button class="btn btn-light" onclick="PG.closeModal(\'roomDrawer\')">Cancel</button><button class="btn btn-primary" id="roomSave">' + (room ? 'Save Changes' : 'Add Room') + '</button></div>' +
+    '</div>';
+    PG.enhanceSelects(roomDrawer);
+    PG.renderManagedSelect(document.getElementById('rm-bed-container'), {
+      value: bedConfigValue,
+      getList: function () { return PG.getState().bedConfigs; },
+      setList: function (list) { var st = PG.getState(); st.bedConfigs = list; PG.setState(st); },
+      onChange: function (v) { bedConfigValue = v; },
+      placeholder: 'e.g. 2 Queen Beds'
+    });
+    document.getElementById('roomSave').addEventListener('click', saveRoom);
+  }
+
+  function clearFieldErrors() {
+    ['number', 'type'].forEach(function (k) {
+      document.getElementById('err-' + k).textContent = '';
+    });
+    document.getElementById('rm-number').classList.remove('error');
+  }
+
+  function saveRoom() {
+    clearFieldErrors();
+    var st = PG.getState();
+    var number = document.getElementById('rm-number').value.trim();
+    var roomTypeId = document.getElementById('rm-type').value;
+    var errors = {};
+    if (!number) errors.number = 'Room number or code is required.';
+    else {
+      var dup = st.physicalRooms.some(function (pr) {
+        return pr.propertyId === st.hotel.propertyCode && pr.roomNumber.toLowerCase() === number.toLowerCase() && pr.id !== editingId;
+      });
+      if (dup) errors.number = 'A room with this number already exists at this property.';
+    }
+    if (!roomTypeId) errors.type = 'Room type is required.';
+
+    if (Object.keys(errors).length) {
+      if (errors.number) { document.getElementById('err-number').textContent = errors.number; document.getElementById('rm-number').classList.add('error'); }
+      if (errors.type) { document.getElementById('err-type').textContent = errors.type; }
+      PG.toast('Please fix the highlighted fields.', 'danger');
+      return;
+    }
+
+    var accessibility = Array.prototype.slice.call(document.querySelectorAll('.acc-check:checked')).map(function (c) { return c.value; });
+    var connecting = Array.prototype.slice.call(document.querySelectorAll('.conn-check:checked')).map(function (c) { return c.value; });
+    var data = {
+      roomNumber: number,
+      roomTypeId: roomTypeId,
+      building: document.getElementById('rm-building').value.trim(),
+      floor: parseInt(document.getElementById('rm-floor').value, 10) || 0,
+      bedConfiguration: bedConfigValue,
+      view: document.getElementById('rm-view').value,
+      accessibilityFeatures: accessibility,
+      connectingRoomIds: connecting,
+      notes: document.getElementById('rm-notes').value.trim(),
+      isSellable: document.getElementById('rm-sellable').checked,
+      isActive: document.getElementById('rm-active').checked
+    };
+
+    var roomId, previousConnIds;
+    if (editingId) {
+      var idx = st.physicalRooms.findIndex(function (pr) { return pr.id === editingId; });
+      previousConnIds = st.physicalRooms[idx].connectingRoomIds || [];
+      st.physicalRooms[idx] = Object.assign({}, st.physicalRooms[idx], data);
+      roomId = editingId;
+    } else {
+      roomId = 'room-' + Date.now();
+      previousConnIds = [];
+      st.physicalRooms.push(Object.assign({ id: roomId, propertyId: st.hotel.propertyCode }, data));
+    }
+    // Keep connecting-room links mutual.
+    previousConnIds.filter(function (id) { return connecting.indexOf(id) === -1; }).forEach(function (otherId) {
+      var other = st.physicalRooms.find(function (pr) { return pr.id === otherId; });
+      if (other) other.connectingRoomIds = (other.connectingRoomIds || []).filter(function (id) { return id !== roomId; });
+    });
+    connecting.forEach(function (otherId) {
+      var other = st.physicalRooms.find(function (pr) { return pr.id === otherId; });
+      if (other && (other.connectingRoomIds || []).indexOf(roomId) === -1) other.connectingRoomIds = (other.connectingRoomIds || []).concat([roomId]);
+    });
+
+    PG.setState(st);
+    PG.addAudit(editingId ? 'Physical Room Updated' : 'Physical Room Created', 'Room ' + number + ' (' + rtName(roomTypeId) + ') ' + (editingId ? 'updated.' : 'created.'));
+    PG.toast('Room ' + number + ' ' + (editingId ? 'updated.' : 'created.'), 'success');
+    PG.closeModal('roomDrawer');
+    renderAll();
+  }
+
+  function openRoomDrawer(id) {
+    buildRoomDrawer(id ? roomById(id) : null);
+    PG.openModal('roomDrawer');
+  }
+  document.getElementById('addRoomBtn').addEventListener('click', function () { openRoomDrawer(null); });
+
+  /* ================================================================ */
+  /* Room Details drawer                                                */
+  /* ================================================================ */
+  var detailsDrawer = document.createElement('div');
+  detailsDrawer.className = 'pg-drawer-overlay';
+  detailsDrawer.id = 'detailsDrawer';
+  document.body.appendChild(detailsDrawer);
+
+  function roomAuditEntries(room) {
+    return s.audit.filter(function (a) { return a.details && a.details.indexOf('Room ' + room.roomNumber) > -1; }).slice(0, 6);
+  }
+
+  function openDetailsDrawer(id) {
+    s = PG.getState();
+    var room = roomById(id);
+    if (!room) return;
+    var cn = PG.currentOrNextAssignment(s, room.id, PG.TODAY);
+    var upcoming = PG.upcomingAssignmentsForRoom(s, room.id, PG.TODAY);
+    var activeBlock = PG.physicalRoomBlockOn(s, room.id, PG.TODAY);
+
+    function drow(label, value) { return '<div class="detail-row"><span class="muted">' + label + '</span><span class="v">' + value + '</span></div>'; }
+
+    var body = '';
+    body += '<div class="drawer-section-title">Room Identity &amp; Attributes</div>';
+    body += drow('Room Number / Code', PG.esc(room.roomNumber)) + drow('Room Type', PG.esc(rtName(room.roomTypeId))) +
+      drow('Building / Floor', PG.esc(room.building) + ' &middot; Floor ' + room.floor) + drow('Bed Configuration', PG.esc(room.bedConfiguration)) +
+      drow('View', room.view ? PG.esc(room.view) : '<span class="muted">—</span>') +
+      drow('Accessibility', room.accessibilityFeatures.length ? room.accessibilityFeatures.map(function (a) { return PG.esc(a); }).join(', ') : '<span class="muted">None</span>') +
+      drow('Connecting Rooms', room.connectingRoomIds.length ? room.connectingRoomIds.map(function (id2) { var pr = roomById(id2); return pr ? PG.esc(pr.roomNumber) : id2; }).join(', ') : '<span class="muted">None</span>') +
+      drow('Sellable', room.isSellable ? 'Yes' : 'No');
+    if (room.notes) body += '<div class="form-group" style="margin-top:10px;"><div class="form-label">Notes</div><div class="text-sm">' + PG.esc(room.notes) + '</div></div>';
+
+    body += '<div class="drawer-section-title">Current Status</div>';
+    body += '<div style="margin-bottom:6px;">' + PG.roomStatusBadge(PG.roomStatusOn(s, room.id, PG.TODAY)) + '</div>';
+
+    body += '<div class="drawer-section-title">Current / Next Reservation</div>';
+    if (cn) {
+      var res = s.reservations.find(function (x) { return x.id === cn.assignment.reservationId; });
+      var cust = res ? s.customers.find(function (c) { return c.id === res.customerId; }) : null;
+      body += drow(cn.when === 'current' ? 'Current' : 'Next', '<a href="reservation-detail.html?id=' + cn.assignment.reservationId + '">' + cn.assignment.reservationId + '</a>') +
+        drow('Guest', cust ? PG.esc(cust.name) : '—') +
+        drow('Dates', PG.fmtDateShort(cn.assignment.arrivalDate) + ' &ndash; ' + PG.fmtDateShort(cn.assignment.departureDate)) +
+        drow('Assignment Status', cn.assignment.assignmentStatus);
+    } else {
+      body += '<div class="text-sm muted">No current or upcoming reservation for this room.</div>';
+    }
+
+    body += '<div class="drawer-section-title">Active Room Block</div>';
+    if (activeBlock) {
+      body += drow('Type', activeBlock.type) + drow('Dates', PG.fmtDateShort(activeBlock.startDate) + ' &ndash; ' + PG.fmtDateShort(PG.addDays(activeBlock.endDate, -1))) +
+        drow('Reason', PG.esc(activeBlock.reason)) + (activeBlock.notes ? drow('Notes', PG.esc(activeBlock.notes)) : '');
+    } else {
+      body += '<div class="text-sm muted">No active room block.</div>';
+    }
+
+    body += '<div class="drawer-section-title">Upcoming Reservations</div>';
+    if (upcoming.length) {
+      body += upcoming.map(function (a) {
+        var res2 = s.reservations.find(function (x) { return x.id === a.reservationId; });
+        var cust2 = res2 ? s.customers.find(function (c) { return c.id === res2.customerId; }) : null;
+        return '<div class="detail-row"><span><a href="reservation-detail.html?id=' + a.reservationId + '">' + a.reservationId + '</a>' + (cust2 ? ' &middot; ' + PG.esc(cust2.name) : '') + '</span>' +
+          '<span class="v">' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' (Held)' : '') + '</span></div>';
+      }).join('');
+    } else {
+      body += '<div class="text-sm muted">No upcoming reservations booked into this room.</div>';
+    }
+
+    body += '<div class="drawer-section-title">Recent Activity</div>';
+    var entries = roomAuditEntries(room);
+    if (entries.length) {
+      body += '<div class="timeline" style="padding-left:18px;position:relative;">' + entries.map(function (a) {
+        return '<div style="padding-bottom:12px;font-size:12.5px;"><div class="muted text-sm">' + PG.fmtDateShort(a.ts.slice(0, 10)) + ' &middot; ' + a.ts.slice(11) + '</div><div>' + PG.esc(a.details) + '</div></div>';
+      }).join('') + '</div>';
+    } else {
+      body += '<div class="text-sm muted">No recorded activity yet for this room.</div>';
+    }
+
+    detailsDrawer.innerHTML = '<div class="pg-drawer">' +
+      '<div class="pg-drawer-header"><h3>Room ' + PG.esc(room.roomNumber) + '</h3><button class="pg-modal-close" onclick="PG.closeModal(\'detailsDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-body">' + body + '</div>' +
+      '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-light" style="flex:1;" id="detailsEditBtn">Edit</button>' +
+          '<button class="btn btn-danger-outline" style="flex:1;" id="detailsBlockBtn">Block Room</button>' +
+          '<a class="btn btn-outline" style="flex:1;text-align:center;" href="operations-calendar.html?room=' + room.id + '">View Calendar</a>' +
+        '</div>' +
+        '<div class="text-sm muted">Physical rooms can\'t be deleted once they have reservation, assignment, block, or audit history — deactivate a room instead to retire it from service.</div>' +
+      '</div>' +
+    '</div>';
+    document.getElementById('detailsEditBtn').addEventListener('click', function () { PG.closeModal('detailsDrawer'); openRoomDrawer(room.id); });
+    document.getElementById('detailsBlockBtn').addEventListener('click', function () { PG.closeModal('detailsDrawer'); openBlockModal(room.id); });
+    PG.openModal('detailsDrawer');
+  }
+
+  /* ================================================================ */
+  /* Block Room modal                                                   */
+  /* ================================================================ */
+  var blockModal = document.createElement('div');
+  blockModal.className = 'pg-modal-overlay';
+  blockModal.id = 'blockModal';
+  var blockTypeOptions = BLOCK_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+  blockModal.innerHTML = '<div class="pg-modal">' +
+    '<div class="pg-modal-header"><h3>Block Room</h3><button class="pg-modal-close" onclick="PG.closeModal(\'blockModal\')">&times;</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="form-group"><label class="form-label" id="block-room-label">Room</label></div>' +
+      '<div class="form-group"><label class="form-label">Block Type</label><select class="form-control" id="block-type">' + blockTypeOptions + '</select></div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="block-start"></div>' +
+        '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="block-end"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><input class="form-control" id="block-reason" placeholder="e.g. Plumbing repair, deep cleaning"></div>' +
+      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="block-notes"></textarea></div>' +
+      '<div id="block-impact-msg"></div>' +
+      '<div id="block-conflict-box"></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'blockModal\')">Cancel</button><button class="btn btn-danger" id="blockSave">Block Room</button></div>' +
+  '</div>';
+  document.body.appendChild(blockModal);
+  PG.enhanceSelects(blockModal);
+
+  function refreshBlockTypeMsg() {
+    var type = document.getElementById('block-type').value;
+    var destructive = (type === 'Out of Order' || type === 'Out of Service');
+    var box = document.getElementById('block-impact-msg');
+    box.className = 'help-note ' + (destructive ? 'help-note-danger' : 'help-note-warning');
+    box.textContent = destructive
+      ? 'This will remove the room from sellable availability for the selected dates.'
+      : 'This will place a temporary hold on the room, outside normal sale, for the selected dates.';
+  }
+  function checkBlockConflicts() {
+    var start = document.getElementById('block-start').value;
+    var endInclusive = document.getElementById('block-end').value;
+    var box = document.getElementById('block-conflict-box');
+    var saveBtn = document.getElementById('blockSave');
+    if (!start || !endInclusive || endInclusive < start || !currentRoom) { box.innerHTML = ''; saveBtn.disabled = false; return; }
+    var endExclusive = PG.addDays(endInclusive, 1);
+    var overlapping = PG.assignmentsOverlapping(s, currentRoom.id, start, endExclusive);
+    if (!overlapping.length) { box.innerHTML = ''; saveBtn.disabled = false; return; }
+    var rows = overlapping.map(function (a) {
+      var res = s.reservations.find(function (r) { return r.id === a.reservationId; });
+      var cust = res ? s.customers.find(function (c) { return c.id === res.customerId; }) : null;
+      return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">' +
+        '<span><a href="reservation-detail.html?id=' + a.reservationId + '" target="_blank">' + a.reservationId + '</a>' + (cust ? ' &middot; ' + PG.esc(cust.name) : '') + '</span>' +
+        '<span>' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</span>' +
+      '</div>';
+    }).join('');
+    box.innerHTML = '<div class="help-note help-note-danger" style="margin-top:14px;flex-direction:column;align-items:stretch;">' +
+      '<div style="font-weight:700;margin-bottom:6px;">This block conflicts with ' + overlapping.length + ' existing assignment' + (overlapping.length === 1 ? '' : 's') + '.</div>' +
+      rows +
+      '<div style="margin-top:8px;">Resolve or reassign the affected reservation' + (overlapping.length === 1 ? '' : 's') + ' before applying this block.</div>' +
+    '</div>';
+    saveBtn.disabled = true;
+  }
+  ['block-type'].forEach(function (id) { document.getElementById(id).addEventListener('change', refreshBlockTypeMsg); });
+  ['block-start', 'block-end'].forEach(function (id) { document.getElementById(id).addEventListener('change', checkBlockConflicts); });
+
+  function openBlockModal(id) {
+    s = PG.getState();
+    currentRoom = roomById(id);
+    if (!currentRoom) return;
+    document.getElementById('block-room-label').textContent = 'Room ' + currentRoom.roomNumber + ' — ' + rtName(currentRoom.roomTypeId);
+    document.getElementById('block-type').value = 'Out of Order';
+    document.getElementById('block-start').value = PG.TODAY;
+    document.getElementById('block-end').value = PG.TODAY;
+    document.getElementById('block-reason').value = '';
+    document.getElementById('block-notes').value = '';
+    document.getElementById('block-conflict-box').innerHTML = '';
+    document.getElementById('blockSave').disabled = false;
+    refreshBlockTypeMsg();
+    checkBlockConflicts();
+    PG.openModal('blockModal');
+  }
+
+  document.getElementById('blockSave').addEventListener('click', function () {
+    var type = document.getElementById('block-type').value;
+    var start = document.getElementById('block-start').value;
+    var endInclusive = document.getElementById('block-end').value;
+    var reason = document.getElementById('block-reason').value.trim();
+    var notes = document.getElementById('block-notes').value.trim();
+    if (!start || !endInclusive || endInclusive < start) { PG.toast('Please choose a valid date range.', 'danger'); return; }
+    if (!reason) { PG.toast('A reason is required to block a room.', 'danger'); return; }
+    var endExclusive = PG.addDays(endInclusive, 1);
+    var overlapping = PG.assignmentsOverlapping(s, currentRoom.id, start, endExclusive);
+    if (overlapping.length) { PG.toast('Resolve or reassign the affected reservation(s) before applying this block.', 'danger'); return; }
+
+    var st = PG.getState();
+    st.roomBlocks.push({
+      id: 'blk-' + Date.now(), propertyId: st.hotel.propertyCode, physicalRoomId: currentRoom.id,
+      startDate: start, endDate: endExclusive, type: type, reason: reason, notes: notes,
+      createdAt: PG.nowIso(), createdBy: 'Hotel Admin'
+    });
+    PG.setState(st);
+    PG.addAudit('Physical Room Blocked', 'Room ' + currentRoom.roomNumber + ' blocked (' + type + '), ' + PG.fmtDateShort(start) + ' to ' + PG.fmtDateShort(endInclusive) + '. Reason: ' + reason + '.');
+    PG.toast('Room ' + currentRoom.roomNumber + ' blocked for the selected dates.', 'warn');
+    PG.closeModal('blockModal');
+    renderAll();
+  });
+
+  /* ================================================================ */
+  /* Activate / Deactivate                                              */
+  /* ================================================================ */
+  function toggleActive(id) {
+    var st = PG.getState();
+    var room = st.physicalRooms.find(function (pr) { return pr.id === id; });
+    if (!room) return;
+    if (room.isActive) {
+      if (!confirm('Deactivate Room ' + room.roomNumber + '? It will no longer be assignable to reservations.\n\nPhysical rooms with reservation, assignment, block, or audit history can\'t be deleted — deactivating is the supported way to retire a room from service.')) return;
+      room.isActive = false;
+      room.isSellable = false;
+    } else {
+      if (!confirm('Activate Room ' + room.roomNumber + '? It will become assignable to reservations again.')) return;
+      room.isActive = true;
+      room.isSellable = true;
+    }
+    PG.setState(st);
+    PG.addAudit(room.isActive ? 'Physical Room Activated' : 'Physical Room Deactivated', 'Room ' + room.roomNumber + ' ' + (room.isActive ? 'activated.' : 'deactivated.'));
+    PG.toast('Room ' + room.roomNumber + ' ' + (room.isActive ? 'activated.' : 'deactivated.'), room.isActive ? 'success' : 'warn');
+    renderAll();
+  }
+}
+
+if (!CAN_MANAGE) {
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Physical Rooms</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to manage Physical Rooms.<br>Contact a Hotel Admin to request access.</div></div></div>';
+} else {
+  init();
+}
+</script>
+</body>
+</html>

@@ -39,7 +39,7 @@ var selected = null; // {roomTypeId, date}
 var html = '';
 html += '<div class="pg-page-head"><div><h1>Availability &amp; Inventory</h1><div class="sub">Live sellable inventory per room type and stay date</div></div></div>';
 
-html += '<div class="help-note" style="margin-bottom:18px;">Sellable inventory is managed by <b>Property + Room Type + Stay Date</b>. There is no physical room number assignment in this MVP — every number below is a count of sellable units.</div>';
+html += '<div class="help-note" style="margin-bottom:18px;">Sellable inventory is managed by <b>Property + Room Type + Stay Date</b> — every number below is a count of sellable units, not specific rooms. Specific room assignment is managed separately on the <a href="physical-rooms.html">Physical Rooms</a> page.</div>';
 
 html += '<div class="card"><div class="card-body"><div class="toolbar">' +
   '<div class="form-group"><label class="form-label">FROM</label><input type="date" class="form-control" id="fromInput" value="'+fromDate+'"></div>' +
