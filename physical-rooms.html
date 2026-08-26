@@ -545,9 +545,10 @@ function init() {
     var rows = overlapping.map(function (a) {
       var res = s.reservations.find(function (r) { return r.id === a.reservationId; });
       var cust = res ? s.customers.find(function (c) { return c.id === res.customerId; }) : null;
-      return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;">' +
-        '<span><a href="reservation-detail.html?id=' + a.reservationId + '" target="_blank">' + a.reservationId + '</a>' + (cust ? ' &middot; ' + PG.esc(cust.name) : '') + '</span>' +
-        '<span>' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</span>' +
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;gap:8px;">' +
+        '<span><a href="reservation-detail.html?id=' + a.reservationId + '" target="_blank">' + a.reservationId + '</a>' + (cust ? ' &middot; ' + PG.esc(cust.name) : '') +
+          '<div class="muted text-sm">' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</div></span>' +
+        '<button type="button" class="btn btn-outline btn-sm block-conflict-change" data-assignment="' + a.id + '">Change Room</button>' +
       '</div>';
     }).join('');
     box.innerHTML = '<div class="help-note help-note-danger" style="margin-top:14px;flex-direction:column;align-items:stretch;">' +
@@ -556,6 +557,49 @@ function init() {
       '<div style="margin-top:8px;">Resolve or reassign the affected reservation' + (overlapping.length === 1 ? '' : 's') + ' before applying this block.</div>' +
     '</div>';
     saveBtn.disabled = true;
+    box.querySelectorAll('.block-conflict-change').forEach(function (btn) {
+      btn.addEventListener('click', function () { openChangeRoomForConflict(btn.dataset.assignment); });
+    });
+  }
+  function openChangeRoomForConflict(assignmentId, onDone) {
+    var st = PG.getState();
+    var a = st.roomAssignments.find(function (x) { return x.id === assignmentId; });
+    var res = st.reservations.find(function (r) { return r.id === a.reservationId; });
+    var item = res.rooms.find(function (x) { return x.id === a.reservationItemId; });
+    var cust = st.customers.find(function (c) { return c.id === res.customerId; });
+    var otherRoomIds = [];
+    res.rooms.forEach(function (it) {
+      if (it.id === item.id) return;
+      st.roomAssignments.filter(function (x) { return x.reservationItemId === it.id && x.assignmentStatus !== 'Cancelled'; }).forEach(function (x) { otherRoomIds.push(x.physicalRoomId); });
+    });
+    PG.renderChangeRoomDrawer({
+      roomTypeId: item.roomTypeId, checkIn: a.arrivalDate, checkOut: a.departureDate,
+      preferences: {}, currentRoomId: a.physicalRoomId, excludeRoomIds: otherRoomIds, excludeAssignmentId: a.id,
+      title: 'Change Room', summaryLabel: res.id + ' &middot; ' + (cust ? cust.name : 'Guest'),
+      summarySub: PG.fmtDateShort(a.arrivalDate) + ' – ' + PG.fmtDateShort(a.departureDate),
+      onConfirm: function (newRoomId) {
+        try {
+          var st2 = PG.getState();
+          var newRoom = st2.physicalRooms.find(function (p) { return p.id === newRoomId; });
+          if (!newRoom || !PG.roomEligibleForStay(st2, newRoom, a.arrivalDate, a.departureDate, a.id)) {
+            PG.toast('That room is no longer available — the previous assignment has been kept.', 'danger');
+            return;
+          }
+          var oldRoom = st2.physicalRooms.find(function (p) { return p.id === a.physicalRoomId; });
+          var rec = st2.roomAssignments.find(function (x) { return x.id === assignmentId; });
+          rec.physicalRoomId = newRoomId; rec.assignedAt = PG.nowIso(); rec.assignedBy = 'Hotel Admin';
+          var idx = st2.reservations.findIndex(function (r) { return r.id === res.id; });
+          st2.reservations[idx].activity.push({ ts: PG.nowIso(), text: 'Room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' while resolving a block conflict.' });
+          PG.setState(st2);
+          PG.addAudit('Room Assignment Changed', res.id + ' — room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' (resolving a block conflict).');
+          PG.toast('Room ' + newRoom.roomNumber + ' assigned.', 'success');
+          s = PG.getState();
+          if (onDone) onDone(); else checkBlockConflicts();
+        } catch (e) {
+          PG.toast('Failed to save changes — the previous room assignment has been kept.', 'danger');
+        }
+      }
+    });
   }
   ['block-type'].forEach(function (id) { document.getElementById(id).addEventListener('change', refreshBlockTypeMsg); });
   ['block-start', 'block-end'].forEach(function (id) { document.getElementById(id).addEventListener('change', checkBlockConflicts); });
@@ -605,11 +649,51 @@ function init() {
   /* ================================================================ */
   /* Activate / Deactivate                                              */
   /* ================================================================ */
+  var deactivateBlockedModal = document.createElement('div');
+  deactivateBlockedModal.className = 'pg-modal-overlay';
+  deactivateBlockedModal.id = 'deactivateBlockedModal';
+  document.body.appendChild(deactivateBlockedModal);
+  function openDeactivateBlockedModal(room, activeAssignments) {
+    function renderRows() {
+      var st = PG.getState();
+      var live = st.roomAssignments.filter(function (a) { return a.physicalRoomId === room.id && a.assignmentStatus !== 'Cancelled' && a.departureDate > PG.TODAY; });
+      if (!live.length) { PG.closeModal('deactivateBlockedModal'); toggleActive(room.id); return; }
+      var rows = live.map(function (a) {
+        var res = st.reservations.find(function (r) { return r.id === a.reservationId; });
+        var cust = res ? st.customers.find(function (c) { return c.id === res.customerId; }) : null;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;gap:8px;">' +
+          '<span><a href="reservation-detail.html?id=' + a.reservationId + '" target="_blank">' + a.reservationId + '</a>' + (cust ? ' &middot; ' + PG.esc(cust.name) : '') +
+            '<div class="muted text-sm">' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</div></span>' +
+          '<button type="button" class="btn btn-outline btn-sm deactivate-conflict-change" data-assignment="' + a.id + '">Change Room</button>' +
+        '</div>';
+      }).join('');
+      deactivateBlockedModal.innerHTML = '<div class="pg-modal">' +
+        '<div class="pg-modal-header"><h3>Can\'t Deactivate Room ' + PG.esc(room.roomNumber) + '</h3><button class="pg-modal-close" onclick="PG.closeModal(\'deactivateBlockedModal\')">&times;</button></div>' +
+        '<div class="pg-modal-body">' +
+          '<div class="help-note help-note-danger" style="margin-bottom:14px;flex-direction:column;align-items:stretch;">' +
+            '<div style="font-weight:700;margin-bottom:6px;">This room has ' + live.length + ' active reservation' + (live.length === 1 ? '' : 's') + ' or hold' + (live.length === 1 ? '' : 's') + '.</div>' +
+            rows +
+            '<div style="margin-top:8px;">Reassign every affected reservation before this room can be deactivated.</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'deactivateBlockedModal\')">Close</button></div>' +
+      '</div>';
+      deactivateBlockedModal.querySelectorAll('.deactivate-conflict-change').forEach(function (btn) {
+        btn.addEventListener('click', function () { openChangeRoomForConflict(btn.dataset.assignment, renderRows); });
+      });
+    }
+    renderRows();
+    PG.openModal('deactivateBlockedModal');
+  }
   function toggleActive(id) {
     var st = PG.getState();
     var room = st.physicalRooms.find(function (pr) { return pr.id === id; });
     if (!room) return;
     if (room.isActive) {
+      // A room can't be deactivated out from under an active reservation or temporary
+      // hold — staff must reassign those first, the same rule that governs Block Room.
+      var activeAssignments = st.roomAssignments.filter(function (a) { return a.physicalRoomId === id && a.assignmentStatus !== 'Cancelled' && a.departureDate > PG.TODAY; });
+      if (activeAssignments.length) { openDeactivateBlockedModal(room, activeAssignments); return; }
       if (!confirm('Deactivate Room ' + room.roomNumber + '? It will no longer be assignable to reservations.\n\nPhysical rooms with reservation, assignment, block, or audit history can\'t be deleted — deactivating is the supported way to retire a room from service.')) return;
       room.isActive = false;
       room.isSellable = false;

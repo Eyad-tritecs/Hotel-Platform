@@ -26,6 +26,8 @@
   .room-item-card h4{font-size:13.5px;}
   .room-item-card .ri-meta{font-size:12px;color:var(--pg-gray-600);margin-top:4px;}
   .room-item-card .ri-total{font-weight:700;font-size:14px;}
+  .room-assign-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:8px;background:#fff;}
+  .room-assign-row.needs-attention{border-color:var(--pg-danger);background:var(--pg-danger-light);}
 </style>
 </head>
 <body>
@@ -36,7 +38,7 @@ var page = PG.mount("reservations", ["Reservations", "Reservations", "Reservatio
 var s = PG.getState();
 var id = new URLSearchParams(location.search).get('id');
 var r = s.reservations.find(function(x){return x.id===id;});
-// Unassign Room is a secondary, permission-controlled action — see PG.CURRENT_ROLE (§5.3 of README).
+// Room management actions (Change Room) are permission-controlled — see PG.CURRENT_ROLE (§5.3 of README).
 var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
 
 if (!r){
@@ -64,31 +66,43 @@ function lines(){
 function assignmentsForItem(itemId){
   return (s.roomAssignments || []).filter(function(a){ return a.reservationItemId===itemId && a.assignmentStatus!=='Cancelled'; });
 }
-function anyItemUnassigned(){
-  return r.status!=='Cancelled' && lines().some(function(l){ return assignmentsForItem(l.itemId).length < l.qty; });
+// A reservation is never allowed to go without a physical room by design (see README
+// §4.7 core rule) — this only fires for legacy/migrated data saved before that rule
+// existed, or when a room stops being eligible after assignment (e.g. blocked). Both
+// are "needs attention" facts about an otherwise-invalid state, never a supported
+// parallel status.
+function anyItemNeedsAttention(){
+  if (r.status==='Cancelled') return false;
+  return lines().some(function(l){
+    var assigns = assignmentsForItem(l.itemId);
+    if (assigns.length < l.qty) return true;
+    return assigns.some(function(a){
+      var pr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+      return !pr || !PG.roomEligibleForStay(s, pr, r.checkIn, r.checkOut, a.id);
+    });
+  });
 }
 function renderAssignmentBlock(l){
   var assigns = assignmentsForItem(l.itemId);
   var rows = assigns.map(function(a){
     var pr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
     var needsAttention = pr ? !PG.roomEligibleForStay(s, pr, r.checkIn, r.checkOut, a.id) : true;
-    return '<div class="room-assign-row'+(needsAttention?' unassigned':'')+'">' +
+    return '<div class="room-assign-row'+(needsAttention?' needs-attention':'')+'">' +
       '<div><div style="font-weight:700;font-size:13px;">'+(pr ? 'Room '+PG.esc(pr.roomNumber)+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span>' : 'Room no longer exists')+'</div>' +
       (needsAttention ? '<div class="text-sm" style="color:var(--pg-danger);font-weight:600;margin-top:4px;">&#9888; Needs Attention — no longer eligible for these dates. Choose a replacement.</div>' : '') +
       '<div class="muted text-sm" style="margin-top:4px;">'+a.assignmentStatus+'</div></div>' +
-      '<div style="display:flex;gap:6px;flex-shrink:0;">' +
-        (canEditRooms() ? '<button class="btn btn-outline btn-sm change-room-btn" data-assignment="'+a.id+'" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Change Room</button>' : '') +
-        (canEditRooms() && CAN_MANAGE ? '<button class="btn btn-danger-outline btn-sm unassign-btn" data-assignment="'+a.id+'">Unassign</button>' : '') +
-      '</div>' +
+      (canEditRooms() ? '<button class="btn btn-outline btn-sm change-room-btn" data-assignment="'+a.id+'" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Change Room</button>' : '') +
     '</div>';
   }).join('');
+  // Defensive only — a reservation item should never actually reach zero assignments
+  // (see anyItemNeedsAttention comment); this exists purely to self-heal legacy data.
   var shortfall = l.qty - assigns.length;
-  var unassignedRows = '';
+  var gapRows = '';
   for (var i=0;i<shortfall;i++){
-    unassignedRows += '<div class="room-assign-row unassigned"><div class="text-sm" style="color:var(--pg-danger);font-weight:600;">&#9888; No physical room assigned to this unit.</div>' +
+    gapRows += '<div class="room-assign-row needs-attention"><div class="text-sm" style="color:var(--pg-danger);font-weight:600;">&#9888; Needs Attention — this unit has no physical room.</div>' +
       (canEditRooms() ? '<button class="btn btn-primary btn-sm assign-room-btn" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Assign Room</button>' : '') + '</div>';
   }
-  return rows + unassignedRows;
+  return rows + gapRows;
 }
 function canEditRooms(){ return r.status!=='Cancelled' && r.status!=='Completed'; }
 function roomCharges(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
@@ -130,8 +144,8 @@ function render(){
   '</div>' + (r.notes ? '<div class="form-group" style="margin-top:6px;"><div class="form-label">Notes</div><div class="text-sm">'+PG.esc(r.notes)+'</div></div>' : ''));
 
   // Section 3 — Room Items
-  var unassignedWarning = anyItemUnassigned() ? '<div class="help-note help-note-danger" style="margin-bottom:14px;">&#9888; This reservation has one or more units without a physical room assigned. Assign a room to complete it.</div>' : '';
-  html += sectionCard(3, 'Room Items', unassignedWarning + lines().map(function(l){
+  var attentionWarning = anyItemNeedsAttention() ? '<div class="help-note help-note-danger" style="margin-bottom:14px;">&#9888; One or more units in this reservation need attention — resolve the room assignment below.</div>' : '';
+  html += sectionCard(3, 'Room Items', attentionWarning + lines().map(function(l){
     var occ = l.adults != null ? l.adults+' Adult'+(l.adults===1?'':'s')+(l.children ? ', '+l.children+' Child'+(l.children===1?'':'ren') : '') : null;
     return '<div class="room-item-card"><div class="ri-top"><h4>'+l.qty+'× '+l.name+'</h4><span class="ri-total">'+PG.fmtMoney(l.subtotal)+'</span></div>' +
       '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div>' +
@@ -177,24 +191,30 @@ function render(){
 
   document.querySelectorAll('.change-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openChangeRoomForAssignment(el.dataset.assignment, el.dataset.item, el.dataset.rt); }); });
   document.querySelectorAll('.assign-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openAssignRoomFor(el.dataset.item, el.dataset.rt); }); });
-  document.querySelectorAll('.unassign-btn').forEach(function(el){ el.addEventListener('click', function(){ openUnassignModal(el.dataset.assignment); }); });
 }
 
-/* ---- Room assignment management: Change Room / Assign Room / Unassign Room ---- */
+/* ---- Room assignment management: Change Room / Assign Room (self-heal only — see anyItemNeedsAttention) ---- */
 function assignmentsForOtherItems(itemId){
   var ids = [];
   lines().forEach(function(l){ if (l.itemId!==itemId) ids = ids.concat(assignmentsForItem(l.itemId).map(function(a){return a.physicalRoomId;})); });
   return ids;
 }
+// Atomic + fail-safe: mutateState() only runs after revalidation at the call site, and
+// if anything throws before PG.setState() the previous assignment is left untouched —
+// nothing partial is ever written to localStorage.
 function persistAssignmentChange(mutateState, auditAction, auditDetails){
-  var st = PG.getState();
-  mutateState(st);
-  var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
-  st.reservations[idx] = r;
-  PG.setState(st);
-  PG.addAudit(auditAction, auditDetails);
-  PG.toast(auditDetails, 'success');
-  setTimeout(function(){ location.reload(); }, 500);
+  try {
+    var st = PG.getState();
+    mutateState(st);
+    var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
+    st.reservations[idx] = r;
+    PG.setState(st);
+    PG.addAudit(auditAction, auditDetails);
+    PG.toast(auditDetails, 'success');
+    setTimeout(function(){ location.reload(); }, 500);
+  } catch (e) {
+    PG.toast('Failed to save changes — the previous room assignment has been kept.', 'danger');
+  }
 }
 function openChangeRoomForAssignment(assignmentId, itemId, roomTypeId){
   var a = s.roomAssignments.find(function(x){return x.id===assignmentId;});
@@ -204,13 +224,19 @@ function openChangeRoomForAssignment(assignmentId, itemId, roomTypeId){
     title: 'Change Room', summaryLabel: r.id + ' &middot; ' + cust().name,
     summarySub: PG.fmtDateShort(r.checkIn) + ' – ' + PG.fmtDateShort(r.checkOut),
     onConfirm: function(newRoomId){
+      // Revalidate immediately before saving — state may have changed since the drawer opened.
+      var freshState = PG.getState();
+      var newPr = freshState.physicalRooms.find(function(p){return p.id===newRoomId;});
+      if (!newPr || !PG.roomEligibleForStay(freshState, newPr, r.checkIn, r.checkOut, a.id)){
+        PG.toast('That room is no longer available — the previous assignment has been kept.', 'danger');
+        return;
+      }
       var oldPr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
-      var newPr = s.physicalRooms.find(function(p){return p.id===newRoomId;});
-      r.activity.push({ts: PG.nowIso(), text: 'Room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + (newPr?newPr.roomNumber:'—') + '.'});
+      r.activity.push({ts: PG.nowIso(), text: 'Room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + newPr.roomNumber + '.'});
       persistAssignmentChange(function(st){
         var rec = st.roomAssignments.find(function(x){return x.id===assignmentId;});
         rec.physicalRoomId = newRoomId; rec.assignedAt = PG.nowIso(); rec.assignedBy = 'Hotel Admin';
-      }, 'Room Assignment Changed', r.id + ' — room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + (newPr?newPr.roomNumber:'—') + '.');
+      }, 'Room Assignment Changed', r.id + ' — room changed from ' + (oldPr?oldPr.roomNumber:'—') + ' to ' + newPr.roomNumber + '.');
     }
   });
 }
@@ -221,50 +247,21 @@ function openAssignRoomFor(itemId, roomTypeId){
     title: 'Assign Room', summaryLabel: r.id + ' &middot; ' + cust().name,
     summarySub: PG.fmtDateShort(r.checkIn) + ' – ' + PG.fmtDateShort(r.checkOut),
     onConfirm: function(newRoomId){
-      var pr = s.physicalRooms.find(function(p){return p.id===newRoomId;});
-      r.activity.push({ts: PG.nowIso(), text: 'Room ' + (pr?pr.roomNumber:newRoomId) + ' assigned.'});
+      var freshState = PG.getState();
+      var pr = freshState.physicalRooms.find(function(p){return p.id===newRoomId;});
+      if (!pr || !PG.roomEligibleForStay(freshState, pr, r.checkIn, r.checkOut)){
+        PG.toast('That room is no longer available. Please choose another.', 'danger');
+        return;
+      }
+      r.activity.push({ts: PG.nowIso(), text: 'Room ' + pr.roomNumber + ' assigned.'});
       var assignmentStatus = r.status==='Confirmed' ? 'Assigned' : 'Held';
       persistAssignmentChange(function(st){
         st.roomAssignments.push({id:'asn-'+Date.now(), propertyId: st.hotel.propertyCode, reservationId: r.id, reservationItemId: itemId,
           physicalRoomId: newRoomId, arrivalDate: r.checkIn, departureDate: r.checkOut, assignmentStatus: assignmentStatus,
           assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: ''});
-      }, 'Room Assigned', r.id + ' — room ' + (pr?pr.roomNumber:newRoomId) + ' assigned.');
+      }, 'Room Assigned', r.id + ' — room ' + pr.roomNumber + ' assigned.');
     }
   });
-}
-
-var UNASSIGN_REASONS = ['Guest requested different room','Operational issue with assigned room','Reassigning to balance occupancy','Correcting an assignment error','Other'];
-var unassignModal = document.createElement('div');
-unassignModal.className = 'pg-modal-overlay';
-unassignModal.id = 'unassignModal';
-document.body.appendChild(unassignModal);
-var pendingUnassignId = null;
-function openUnassignModal(assignmentId){
-  pendingUnassignId = assignmentId;
-  var a = s.roomAssignments.find(function(x){return x.id===assignmentId;});
-  var pr = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
-  unassignModal.innerHTML = '<div class="pg-modal">' +
-    '<div class="pg-modal-header"><h3>Unassign Room</h3><button class="pg-modal-close" onclick="PG.closeModal(\'unassignModal\')">&times;</button></div>' +
-    '<div class="pg-modal-body">' +
-      '<div class="help-note help-note-warning" style="margin-bottom:14px;">Unassigning Room '+(pr?PG.esc(pr.roomNumber):'')+' will leave this reservation unit without a physical room. It will appear in the Unassigned queue until another room is assigned.</div>' +
-      '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><select class="form-control" id="unassign-reason">'+UNASSIGN_REASONS.map(function(rr){return '<option value="'+rr+'">'+rr+'</option>';}).join('')+'</select></div>' +
-      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="unassign-notes" placeholder="Additional context"></textarea></div>' +
-    '</div>' +
-    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'unassignModal\')">Cancel</button><button class="btn btn-danger" id="unassignConfirm">Unassign Room</button></div>' +
-  '</div>';
-  PG.enhanceSelects(unassignModal);
-  document.getElementById('unassignConfirm').addEventListener('click', function(){
-    var reason = document.getElementById('unassign-reason').value;
-    var notes = document.getElementById('unassign-notes').value.trim();
-    r.activity.push({ts: PG.nowIso(), text: 'Room ' + (pr?pr.roomNumber:'') + ' unassigned. Reason: ' + reason + (notes ? ' (' + notes + ')' : '') + '.'});
-    PG.closeModal('unassignModal');
-    persistAssignmentChange(function(st){
-      var rec = st.roomAssignments.find(function(x){return x.id===pendingUnassignId;});
-      rec.assignmentStatus = 'Cancelled';
-      rec.changeReason = reason + (notes ? ' — ' + notes : '');
-    }, 'Room Unassigned', r.id + ' — room ' + (pr?pr.roomNumber:'') + ' unassigned. Reason: ' + reason + '.');
-  });
-  PG.openModal('unassignModal');
 }
 
 function sectionCard(num, title, bodyHtml){

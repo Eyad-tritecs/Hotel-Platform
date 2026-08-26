@@ -43,7 +43,16 @@ var s = PG.getState();
 var T = PG.TODAY;
 
 function cust(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
-function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
+function assignedRoomsLabel(r){
+  var nums = [];
+  r.rooms.forEach(function(item){
+    s.roomAssignments.filter(function(a){return a.reservationItemId===item.id && a.assignmentStatus!=='Cancelled';}).forEach(function(a){
+      var room = s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+      if (room) nums.push(room.roomNumber);
+    });
+  });
+  return nums.length ? nums.join(', ') : '—';
+}
 function reservationTotal(r){
   var n = PG.dateRange(r.checkIn, r.checkOut), t=0;
   r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
@@ -104,6 +113,30 @@ s.reservations.filter(function(r){return r.status==='Draft';}).forEach(function(
       primary:{label:'Open Draft', href:'reservation-detail.html?id='+r.id}, dismissable:false});
   }
 });
+// Assignment Conflicts — a room with two overlapping active assignments/blocks. Every
+// active reservation must occupy exactly one eligible physical room; a conflict here is
+// a data error to resolve, never a routine state.
+s.physicalRooms.forEach(function(room){
+  var items = [];
+  s.roomAssignments.filter(function(a){return a.physicalRoomId===room.id && a.assignmentStatus!=='Cancelled';}).forEach(function(a){ items.push({start:a.arrivalDate, end:a.departureDate}); });
+  s.roomBlocks.filter(function(b){return b.physicalRoomId===room.id;}).forEach(function(b){ items.push({start:b.startDate, end:b.endDate}); });
+  var conflict = false;
+  for (var i=0; i<items.length && !conflict; i++){
+    for (var j=i+1; j<items.length; j++){
+      if (items[i].start<items[j].end && items[j].start<items[i].end){ conflict = true; break; }
+    }
+  }
+  if (conflict){
+    alerts.push({sev:'danger', icon:'&#9888;', title:'Assignment Conflict', desc: 'Room '+room.roomNumber+' has overlapping reservation/block assignments',
+      primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:false});
+  }
+});
+// Rooms Out of Order — a quick operational count, dedupe'd into one alert.
+var oooRooms = s.physicalRooms.filter(function(room){ return PG.roomStatusOn(s, room.id, T)==='Out of Order'; });
+if (oooRooms.length){
+  alerts.push({sev:'warning', icon:'&#128295;', title:'Rooms Out of Order', desc: oooRooms.length+' room'+(oooRooms.length===1?'':'s')+' currently out of order: '+oooRooms.map(function(r){return r.roomNumber;}).join(', '),
+    primary:{label:'View Physical Rooms', href:'physical-rooms.html'}, dismissable:true});
+}
 
 var html = '';
 // Header
@@ -132,7 +165,7 @@ html += '<div class="card"><div class="card-header"><h3>Attention Required</h3><
 
 // Today's Arrivals
 html += '<div class="card"><div class="card-header"><h3>Today\'s Arrivals</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-  '<th>Reservation</th><th>Guest</th><th>Arrival</th><th>Rooms</th><th>Source</th><th>Reservation Status</th><th>Payment Status</th><th class="num">Total</th><th></th>' +
+  '<th>Reservation</th><th>Guest</th><th>Arrival</th><th>Room(s)</th><th>Source</th><th>Reservation Status</th><th>Payment Status</th><th class="num">Total</th><th></th>' +
   '</tr></thead><tbody>';
 if (!arrivalsToday.length){
   html += '<tr><td colspan="9"><div class="empty-state">No arrivals scheduled for today.</div></td></tr>';
@@ -140,7 +173,7 @@ if (!arrivalsToday.length){
   arrivalsToday.forEach(function(r){
     html += '<tr>' +
       '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
-      '<td>'+PG.esc(cust(r).name)+'</td><td>'+PG.fmtDateShort(r.checkIn)+'</td><td>'+roomCount(r)+'</td><td class="text-sm">'+r.source+'</td>' +
+      '<td>'+PG.esc(cust(r).name)+'</td><td>'+PG.fmtDateShort(r.checkIn)+'</td><td class="text-sm">'+PG.esc(assignedRoomsLabel(r))+'</td><td class="text-sm">'+r.source+'</td>' +
       '<td>'+PG.statusBadge(r.status)+'</td><td>'+PG.payBadge(r.paymentStatus)+'</td><td class="num">'+PG.fmtMoney(reservationTotal(r))+'</td>' +
       '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">View</a></td>' +
     '</tr>';
@@ -168,12 +201,12 @@ html += '</div></div></div>';
 
 // Recent Reservations
 html += '<div class="card"><div class="card-header"><h3>Recent Reservations</h3><a class="btn btn-outline btn-sm" href="reservations.html">View all</a></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-  '<th>Reservation</th><th>Guest</th><th>Stay Dates</th><th>Rooms</th><th>Status</th><th>Payment</th><th>Created</th>' +
+  '<th>Reservation</th><th>Guest</th><th>Stay Dates</th><th>Room(s)</th><th>Status</th><th>Payment</th><th>Created</th>' +
   '</tr></thead><tbody>';
 s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).slice(0,5).forEach(function(r){
   html += '<tr onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">' +
     '<td class="row-link">'+r.id+'</td><td>'+PG.esc(cust(r).name)+'</td>' +
-    '<td>'+PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut)+'</td><td>'+roomCount(r)+'</td>' +
+    '<td>'+PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut)+'</td><td class="text-sm">'+PG.esc(assignedRoomsLabel(r))+'</td>' +
     '<td>'+PG.statusBadge(r.status)+'</td><td>'+PG.payBadge(r.paymentStatus)+'</td>' +
     '<td class="text-sm">'+PG.fmtDate(r.createdAt.slice(0,10),{month:'short',day:'numeric'})+' '+r.createdAt.slice(11)+'</td>' +
   '</tr>';

@@ -182,9 +182,6 @@
         ]
       },
       {
-        // Deliberately unassigned: no roomAssignment exists for this item, demonstrating
-        // the Operations Calendar's Unassigned Reservations lane (and its "arriving
-        // tomorrow" urgency) with zero extra setup.
         id: "RES-10248",
         customerId: "cus-4",
         source: "Phone",
@@ -200,7 +197,7 @@
         notes: "",
         activity: [
           { ts: TODAY + "T09:30", text: "Reservation created via Phone by Hotel Admin." },
-          { ts: TODAY + "T09:31", text: "No physical room assigned at booking time — added to the Unassigned queue." }
+          { ts: TODAY + "T09:31", text: "Room 103 held for this reservation." }
         ]
       }
     ];
@@ -246,7 +243,8 @@
       { id: "asn-2", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-1", physicalRoomId: "dlx-302", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
       { id: "asn-3", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-2", physicalRoomId: "fam-401", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
       { id: "asn-4", propertyId: PROPERTY_ID, reservationId: "RES-10246", reservationItemId: "RES-10246-itm-1", physicalRoomId: "std-101", arrivalDate: "2026-08-22", departureDate: "2026-08-24", assignmentStatus: "Assigned", assignedAt: TODAY + "T11:41", assignedBy: "Hotel Admin", changeReason: "" },
-      { id: "asn-5", propertyId: PROPERTY_ID, reservationId: "RES-10247", reservationItemId: "RES-10247-itm-1", physicalRoomId: "fam-402", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 2), assignmentStatus: "Held", assignedAt: addDays(TODAY, -1) + "T08:05", assignedBy: "Hotel Admin", changeReason: "Tentative hold pending payment confirmation." }
+      { id: "asn-5", propertyId: PROPERTY_ID, reservationId: "RES-10247", reservationItemId: "RES-10247-itm-1", physicalRoomId: "fam-402", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 2), assignmentStatus: "Held", assignedAt: addDays(TODAY, -1) + "T08:05", assignedBy: "Hotel Admin", changeReason: "Tentative hold pending payment confirmation." },
+      { id: "asn-6", propertyId: PROPERTY_ID, reservationId: "RES-10248", reservationItemId: "RES-10248-itm-1", physicalRoomId: "std-103", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 3), assignmentStatus: "Held", assignedAt: TODAY + "T09:31", assignedBy: "Hotel Admin", changeReason: "" }
     ];
 
     // Room blocks: operational holds against a physical room independent of any
@@ -302,7 +300,7 @@
         { ts: TODAY + "T08:07", actor: "Hotel Admin", action: "Payment Link Sent", details: "Payment link sent for RES-10247." },
         { ts: TODAY + "T09:14", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10245 created via Phone." },
         { ts: TODAY + "T11:40", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10246 created via WhatsApp." },
-        { ts: TODAY + "T09:30", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10248 created via Phone. No physical room assigned." }
+        { ts: TODAY + "T09:30", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10248 created via Phone. Room 103 held." }
       ]
     };
   }
