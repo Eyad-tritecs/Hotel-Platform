@@ -2,36 +2,73 @@
 
 **Live site:** https://eyad-tritecs.github.io/Hotel-Platform/
 **Repository:** https://github.com/Eyad-tritecs/Hotel-Platform (owner account: `Eyad-tritecs`)
-**Status:** Actively evolving clickable prototype, no backend, no build step.
+**Status:** Actively evolving clickable prototype. No backend, no build step, no real data persistence beyond the browser.
 
-This document exists so a **new chat session** (or a new developer) can pick up this project with full context, without needing to re-read the entire conversation history that produced it. Read this file first before making any further changes.
+This document exists so a **new chat session** (or a new developer) can pick up this project with full context, without re-reading the conversation history that produced it. **Read this file in full before making any changes.** It is the single source of truth for scope, architecture, conventions, and the reasoning behind non-obvious decisions — keep it current (see §10.8).
 
 ---
 
-## 1. What this project is
+## Table of contents
 
-A **clickable, browser-based prototype** of a B2B, multi-tenant, admin-first Hotel Reservation and Basic Room Operations Platform, built for a single pilot hotel: **Palestine Grand Hotel** (Bethlehem, Palestine, USD currency). It is designed to let Product, Engineering, and business stakeholders understand the MVP scope by *navigating* realistic workflows rather than reading a spec document.
+1. [Project overview](#1-project-overview)
+2. [Running it locally & deployment](#2-running-it-locally--deployment)
+3. [Tech stack and architecture](#3-tech-stack-and-architecture)
+4. [The state engine (`assets/js/app.js`)](#4-the-state-engine-assetsjsappjs)
+5. [Shared UI shell](#5-shared-ui-shell-pgmount-sidebar-header)
+6. [Design system components](#6-design-system-components-assetscssstylecss)
+7. [Navigation structure](#7-current-navigation-structure)
+8. [Page-by-page reference](#8-page-by-page-reference)
+9. [Known issues / deliberate simplifications](#9-known-issues--deliberate-simplifications-read-before-fixing-these)
+10. [Working conventions](#10-working-conventions-established-over-this-project-please-follow-them)
+11. [Suggested next steps](#11-suggested-next-steps-not-yet-requested-but-foreseeable)
+12. [Quick-start checklist for a new session](#12-quick-start-checklist-for-a-new-chat-session)
 
-It is **not** a real product: there is no server, no database, no authentication, and no real payment processing. All "backend" behavior is simulated client-side (see §4).
+---
 
-### 1.1 Product positioning (do not violate these constraints)
+## 1. Project overview
+
+### 1.1 What this is
+
+A **clickable, browser-based prototype** of a B2B, multi-tenant, admin-first Hotel Reservation and Basic Room Operations Platform, built for a single pilot hotel: **Palestine Grand Hotel** (Bethlehem, Palestine, USD currency). It exists to let Product, Engineering, and business stakeholders understand the MVP scope by *navigating* realistic workflows rather than reading a spec document.
+
+It is **not** a real product: there is no server, no database, no authentication, and no real payment processing. Every "backend" behavior — creating a reservation, adjusting inventory, assigning a room, generating a payment link — is simulated client-side against a single JSON blob in `localStorage` (see §4).
+
+### 1.2 Product positioning (do not violate these constraints)
 
 - B2B, admin-first, desktop-first, multi-tenant platform (this prototype models **one tenant**: Palestine Grand Hotel).
 - Operated from a Hotel Admin Panel — **for hotel staff**, not guests.
 - Visual language: **Metronic-style** enterprise admin UI (dark navy sidebar, white content, card-based layout, top header).
-- **Physical rooms are inside the MVP** (as of the room-operations scope update): a lightweight operational layer beneath room-type commercial inventory — see §4.6. Full front-desk and housekeeping functionality (check-in/out workflows, housekeeping status boards, maintenance ticketing) remains **outside** the MVP.
+- **Physical rooms are inside the MVP**: a real operational allocation layer beneath room-type commercial inventory (§4.6–4.7). Full front-desk and housekeeping functionality (Check-In/Check-Out workflows, housekeeping status boards, maintenance ticketing) remains **outside** the MVP.
 
-### 1.2 Explicitly out of scope — do not build these
+### 1.3 Explicitly out of scope — do not build these
 
 A customer-facing booking website or mobile app; OTA integrations (Booking.com, Expedia, Agoda, Hotels.com, Trip.com) or OTA sync; PMS/CRS/Channel Manager integrations; outbound ARI; Check-in/Check-out as a workflow; housekeeping; maintenance ticketing; POS/restaurant management; folios/full accounting; payroll/HR; CRM marketing; loyalty; gift cards; advanced promotions/revenue management; advanced BI; AI features; complex group booking / rooming lists; complex split payments; overbooking.
 
 These exclusions have been **explicitly and repeatedly audited** against the codebase (grepped for banned terms) — see commit `292f6b3` for the audit methodology. Any future work must preserve this boundary.
 
+### 1.4 Feature set at a glance
+
+What's actually built and working today, grouped by module (see §8 for the full page-by-page reference):
+
+- **Hotel setup** — tenant profile, room types (CRUD), rate plans, per-date rate calendar.
+- **Physical rooms** — individual room records (number, floor, bed, view, accessibility, connecting rooms), room blocks (Out of Order / Out of Service / Management Hold / Other), activate/deactivate, all with conflict-safe guardrails (§4.6).
+- **Reservations** — a 4-step guided wizard with **automatic physical-room assignment** (no manual room picking required, but always changeable), multi-room support, a structured Change Room drawer, cancellation, and a full payment-link lifecycle simulation (generate/send/resend/expire/mark-paid).
+- **Operations Calendar** — a Mews-style (inspiration only, not a copy) daily timeline: every physical room as a row, every night as a column, reservation/hold/block bars, live conflict detection, filters, and search.
+- **Guests** — a CRM-lite directory and full guest profile (Overview/Reservations/Payments/Activity tabs), kept technically and conceptually separate from staff accounts, with non-blocking duplicate detection on add.
+- **Dashboard** — a live operational workspace: real "Attention Required" alerts (expiring links, failed payments, low availability, assignment conflicts, rooms out of order, stale drafts), today's arrivals, recent reservations, upcoming occupancy.
+- **Administration & Settings** — lightweight-by-design Users/Roles/Permissions pages, a real Audit log, Hotel Policies / Taxes & Fees / Payment Configuration.
+- **Arabic (RTL)** — one representative screen (`reservations-ar.html`), deliberately not a full localization.
+- **A Guided Journey demo** — a scripted, 7-phase walkthrough of one booking scenario for stakeholder demos.
+
+**Intentionally not yet built** (nav links exist, pages don't — see §7): `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html` (Platform Super Admin tenant list).
+
 ---
 
-## 2. How to run it locally
+## 2. Running it locally & deployment
 
-No build step, no `npm install` for the app itself (it's static HTML/CSS/JS). You only need a static file server because the app uses `fetch`-free but path-relative navigation and `localStorage`, which behaves inconsistently under `file://`.
+### 2.1 Local development
+
+No build step, no `npm install` for the app itself — it's static HTML/CSS/JS. You only need a static file server because the app uses path-relative navigation and `localStorage`, both of which behave inconsistently under `file://`.
 
 The repo includes `.claude/launch.json` wired for the `Claude_Browser` preview tools:
 
@@ -51,31 +88,66 @@ npx serve -l 8791 .
 
 Then open `http://localhost:8791/index.html`.
 
-**Important:** `serve.json` at the project root sets `{"cleanUrls": false}`. Without this, the `serve` package strips query strings when redirecting `page.html` → `page`, which silently breaks every link that passes data via `?id=...` (reservation detail, room-type edit, etc.). Do not remove `serve.json`.
+**Important:** `serve.json` at the project root sets `{"cleanUrls": false}`. Without this, the `serve` package strips query strings when redirecting `page.html` → `page`, which silently breaks every link that passes data via `?id=...` (reservation detail, room-type edit, the many `?rt=`/`?room=`/`?date=`/`?customer=` prefill links, etc.). **Do not remove `serve.json`.**
 
-### 2.1 Deployment
+### 2.2 Deployment
 
-Deployed via **GitHub Pages** from the `main` branch root (no build step — GitHub Pages serves the static files directly). Every `git push` to `main` redeploys automatically within roughly a minute. There is no staging environment; `main` is live.
+Deployed via **GitHub Pages** from the `main` branch root — no build step, GitHub Pages serves the static files directly. Every `git push` to `main` redeploys automatically within roughly a minute. There is no staging environment; `main` is live.
 
 ```bash
 git add -A && git commit -m "..." && git push
 ```
 
-GitHub CLI (`gh`) is authenticated locally as `Eyad-tritecs`. Do not re-authenticate a different account without the user's explicit instruction (this has happened once before, deliberately, at the user's request).
+GitHub CLI (`gh`) is authenticated locally as `Eyad-tritecs`. Do not re-authenticate a different account without the user's explicit instruction.
+
+**GitHub Pages caches aggressively.** When testing changes right after a push, hard-refresh (Ctrl/Cmd+Shift+R). The `serve` dev server also caches 301 redirects in the *browser's* HTTP cache even after `serve.json` is fixed — use a `?cb=N` cache-busting query param when re-testing a URL you've already hit once in the same session.
 
 ---
 
-## 3. Tech stack and architectural approach
+## 3. Tech stack and architecture
+
+### 3.1 Stack
 
 - **Plain HTML + vanilla JS (ES5-leaning syntax, `var`/`function`, no build tooling, no framework, no JSX/TSX).** Every page is a standalone `.html` file with an inline `<script>` block. There is no bundler — what you write is what ships.
-- **One shared stylesheet:** `assets/css/style.css` — the entire design system (see §6).
-- **One shared script:** `assets/js/app.js` — state engine, seed data, shared UI shell, and a small reusable component library, exposed as the global `PG` object (see §5).
-- **Persistence:** `localStorage`, under the single key `pg_hotel_admin_state_v1`. There is no server. "Saving" a reservation, adjusting inventory, etc. all just mutate a JSON blob in `localStorage`.
+- **One shared stylesheet:** `assets/css/style.css` — the entire design system (§6).
+- **One shared script:** `assets/js/app.js` — state engine, seed data, shared UI shell, and a reusable component library, exposed as the global `PG` object (§4–5).
+- **Persistence:** `localStorage`, under the single key `pg_hotel_admin_state_v1`. There is no server. "Saving" anything just mutates a JSON blob in `localStorage`.
 - **Fonts:** Google Fonts `Inter` (and `Tajawal` for the Arabic screen), loaded via `<link>` in each page's `<head>`.
+- **Tests:** plain-Node scripts under `tests/`, no framework (§10.9).
 
-### 3.1 Why this approach
+### 3.2 Why this approach
 
-The prototype needs to *feel* like a real connected system (creating a reservation actually reduces availability elsewhere; cancelling actually restores it) without any backend. A shared `localStorage`-backed state object accessed through a small set of pure functions (`PG.getState()`, `PG.setState()`, `PG.computeAvailability()`, etc.) achieves that cheaply. Every page calls `PG.getState()` fresh at the top of its script and re-reads it after any mutation, so cross-page consistency is automatic.
+The prototype needs to *feel* like a real connected system — creating a reservation actually reduces availability elsewhere and assigns a physical room; cancelling actually restores both — without any backend. A shared `localStorage`-backed state object accessed through a small set of pure functions (`PG.getState()`, `PG.setState()`, `PG.computeAvailability()`, `PG.autoAssignRoomsForItem()`, etc.) achieves that cheaply. Every page calls `PG.getState()` fresh at the top of its script and re-reads it after any mutation, so cross-page consistency is automatic — there is no client-side cache to invalidate.
+
+### 3.3 Project structure
+
+```
+/
+├── index.html                    Dashboard
+├── operations-calendar.html      Daily room-control timeline
+├── hotel-profile.html            Tenant profile
+├── room-types.html / room-type-form.html
+├── physical-rooms.html           Physical room management
+├── rates.html / rate-plan-form.html
+├── availability-inventory.html   Commercial availability grid
+├── reservations.html / reservations-ar.html (Arabic)
+├── new-reservation.html          4-step booking wizard
+├── guests.html / guest-detail.html
+├── reservation-detail.html
+├── payments.html
+├── hotel-policies.html / taxes-fees.html / payment-configuration.html
+├── users.html / roles.html / permissions.html / audit.html
+├── demo-journey.html             Guided stakeholder demo
+├── assets/
+│   ├── css/style.css             The entire design system
+│   └── js/app.js                 State engine + shared component library (global `PG`)
+├── tests/
+│   └── room-assignment.test.js   Plain-Node engine tests
+├── serve.json                    { cleanUrls: false } — required, see §2.1
+└── .claude/launch.json           Dev-server config for the Claude_Browser preview tool
+```
+
+Every `.html` file follows the same skeleton: `<div id="pg-app"></div>` + `<script src="assets/js/app.js"></script>` + one inline `<script>` that calls `PG.mount()` and builds the page (§5).
 
 ---
 
@@ -86,9 +158,9 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 `buildSeed()` returns the full initial state object. `getState()`:
 
 1. If no `localStorage` entry exists, seeds fresh and returns it.
-2. If one exists, `JSON.parse`s it, then **backfills any top-level key that exists in a fresh seed but not in the parsed object** (this is a schema-migration safety net — see §4.4). This was a real bug fixed in commit `07c7269`: without it, any browser holding state saved before a new top-level field was introduced (e.g. `bedConfigs`, `mealPlans`) would throw and silently break the entire page.
+2. If one exists, `JSON.parse`s it, then **backfills any top-level key that exists in a fresh seed but not in the parsed object.** This is a schema-migration safety net: without it, any browser holding state saved before a new top-level field was introduced would throw and silently break the entire page.
 
-**When you add a new top-level field to the seed state, you get migration for free — no extra code needed.** When you add a new *nested* field (e.g. a new property on each reservation, like `taxAmount`), existing reservations in a user's saved state will simply have that field as `undefined`; guard for that in reading code (e.g. `r.taxAmount != null ? r.taxAmount : <fallback>`), as done throughout the codebase.
+**Adding a new top-level field to the seed state gets migration for free — no extra code needed.** Adding a new *nested* field (e.g. a new property on each reservation) means existing saved objects will have that field as `undefined`; guard for that in reading code (e.g. `r.taxAmount != null ? r.taxAmount : <fallback>`), as done throughout the codebase.
 
 ### 4.2 State shape (top-level keys)
 
@@ -103,17 +175,17 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 
 - **`hotel`** — single tenant profile object: `name, legalName, propertyCode, currency, city, country, address, phoneCode, phone, email, checkInTime, checkOutTime, timezone, starRating, status, policySummary`.
 - **`roomTypes`** — array of `{ id, name, code, sellable, baseCapacity, maxAdults, maxChildren, bed, baseRate, active, desc }`. `sellable` is the *current* count (mutated by adjustments); `baseCapacity` is the original seeded count, kept immutable so the UI can show "Configured Capacity" vs. "Authorized Adjustments" as a diff.
-- **`physicalRooms`**, **`roomAssignments`**, **`roomBlocks`** — the physical-room operational layer, introduced alongside the room-operations scope update. See §4.6.
-- **`rates`** — `{ [roomTypeId]: { [date]: price } }`, a per-date calendar used by `PG.rateFor()`. This is the actual pricing engine for computing reservation totals — **not** the same thing as `ratePlans` (see below), which is an admin-facing display concept.
-- **`ratePlans`** — array of `{ id, name, roomTypeId, mealPlan, startDate, endDate, price, currency, active }`. These are shown in the Rates screen and picked in the New Reservation wizard's Rate Plan dropdown, but the *actual* price used in totals still comes from the `rates` calendar via `PG.rateFor()`. (This is a known inconsistency — see §9.)
-- **`bedConfigs`**, **`mealPlans`** — flat string arrays, user-editable via the "managed select" component (§6.4). Seeded with a handful of common values.
+- **`physicalRooms`**, **`roomAssignments`**, **`roomBlocks`** — the physical-room operational layer. See §4.6.
+- **`rates`** — `{ [roomTypeId]: { [date]: price } }`, a per-date calendar used by `PG.rateFor()`. This is the actual pricing engine — **not** the same thing as `ratePlans` below, which is an admin-facing display concept.
+- **`ratePlans`** — array of `{ id, name, roomTypeId, mealPlan, startDate, endDate, price, currency, active }`. Shown in the Rates screen and picked in the New Reservation wizard's Rate Plan dropdown, but the *actual* price used in totals still comes from the `rates` calendar via `PG.rateFor()` (a known inconsistency — see §9).
+- **`bedConfigs`**, **`mealPlans`** — flat string arrays, user-editable via the managed-select component (§6.3).
 - **`inventoryOverrides`** — `{ "roomTypeId|date": { stopSell: true, reason } }`. Presence of a key = Stop Sell is active for that room type + date.
-- **`dateAdjustments`** — `{ "roomTypeId|date": numericDelta }`. Additive per-date sellable-quantity adjustment (from the Adjust Inventory drawer's Increase/Decrease actions), layered on top of `roomTypes[].sellable`.
-- **`adjustments`** — audit-style log of inventory adjustment actions (separate from the general `audit` array; used nowhere in the UI currently except as a data trail — candidate for a future "Inventory Reports" screen).
-- **`customers`** — the **Guests** module's data, kept technically and conceptually separate from staff accounts (`users.html` is a lightweight, static admin page with no backing `state.users` collection — there's nothing to conflate it with, but never add one that reuses this shape). Array of `{ id, name, phone, email, nationality, preferredLanguage, idRef, communicationPreference, consentMarketing, roomPreferences, accessibilityNeeds, important, notes }`. `idRef` (an identification/passport reference) is masked in the UI (`maskIdRef()` in `guest-detail.html` — all but the last 4 characters replaced with `•`), never shown in full outside the Add/Edit drawer. No login/auth concept — a guest is a booking subject, not an account.
+- **`dateAdjustments`** — `{ "roomTypeId|date": numericDelta }`. Additive per-date sellable-quantity adjustment, layered on top of `roomTypes[].sellable`.
+- **`adjustments`** — audit-style log of inventory adjustment actions (separate from the general `audit` array; a candidate data source for a future Inventory Reports screen).
+- **`customers`** — the **Guests** module's data, kept technically and conceptually separate from staff accounts (`users.html` is a lightweight, static admin page with no backing `state.users` collection — never add one that reuses this shape). Array of `{ id, name, phone, email, nationality, preferredLanguage, idRef, communicationPreference, consentMarketing, roomPreferences, accessibilityNeeds, important, notes }`. `idRef` (an identification/passport reference) is masked in the UI — only the last 4 characters shown outside the Add/Edit drawer. No login/auth concept — a guest is a booking subject, not an account.
 - **`reservations`** — see §4.3.
 - **`nextResId`** — integer counter for generating `RES-#####` IDs.
-- **`audit`** — global audit trail array of `{ ts, actor, action, details }`, shown on the Audit page and used to power some Dashboard alerts.
+- **`audit`** — global audit trail array of `{ ts, actor, action, details }`, shown on the Audit page and used to power Dashboard alerts and per-entity Activity tabs (Guests, Physical Rooms).
 
 ### 4.3 Reservation object shape
 
@@ -133,59 +205,62 @@ The prototype needs to *feel* like a real connected system (creating a reservati
 ```
 
 **Domain rules this shape encodes (do not break these):**
+
 1. One reservation → one or more Reservation Items (`rooms[]`).
 2. Each item carries Room Type, Quantity, Rate Plan (name), Occupancy (adults/children), and its price is derivable via `PG.rateFor()`.
-3. Stay dates (`checkIn`/`checkOut`) are **reservation-level, shared across all items** — this is a deliberate MVP simplification (a guest books one trip with possibly multiple room types, all for the same date range). Do not silently change this to per-item dates without discussing it — it would be a significant architecture change.
+3. Stay dates (`checkIn`/`checkOut`) are **reservation-level, shared across all items** — a deliberate MVP simplification (a guest books one trip with possibly multiple room types, all for the same date range). Do not silently change this to per-item dates without discussing it — it's a significant architecture change.
 4. Payment (`paymentMethod`, `paymentStatus`, `transactionRef`, etc.) belongs to the **whole reservation**, never to an individual item.
-5. `status` (Reservation Status) and `paymentStatus` (Payment Status) are **separate fields, kept visually distinct** (see §6.3) but correlated by business logic (e.g. cancelling a Paid reservation sets `paymentStatus` to `Refund Pending`).
-6. Occupancy (`adults`/`children`) per item is **derived, not user-entered** — computed from the room type's `maxAdults`/`maxChildren` × quantity in the New Reservation wizard, and is read-only in the UI. This was a deliberate change (see commit history around the "New Reservation" rework).
-7. Each reservation item has a stable `id` (a nested field, so it's `undefined` on reservations saved before this was added — guard accordingly). `RoomAssignment.reservationItemId` references it, connecting a commercial Reservation Item to one or more physical rooms.
+5. `status` (Reservation Status) and `paymentStatus` (Payment Status) are **separate fields, kept visually distinct** (§6.4) but correlated by business logic (e.g. cancelling a Paid reservation sets `paymentStatus` to `Refund Pending`).
+6. Occupancy (`adults`/`children`) per item is **derived, not user-entered** — computed from the room type's `maxAdults`/`maxChildren` × quantity in the New Reservation wizard, and read-only in the UI.
+7. Each reservation item has a stable `id` (a nested field — `undefined` on reservations saved before this was added; guard accordingly). `RoomAssignment.reservationItemId` references it, connecting a commercial Reservation Item to one or more physical rooms.
 
-### 4.4 Availability & pricing engine
+### 4.4 Availability & pricing engine (commercial layer)
 
 - `PG.computeAvailability(state, roomTypeId, dateStr)` → `{ sellable, booked, available, stopSell }`. `sellable` = `roomTypes[].sellable` + `dateAdjustments[key]`. `booked` = sum of `qty` across all non-Cancelled reservations whose `[checkIn, checkOut)` includes that date. `available` = 0 if `stopSell`, else `max(0, sellable - booked)`.
-- `PG.validateAvailability(state, roomTypeId, checkIn, checkOut, qty)` → checks every night in the range, returns `{ ok, problems, nights }`. This is what blocks the New Reservation wizard from proceeding when inventory is insufficient.
+- `PG.validateAvailability(state, roomTypeId, checkIn, checkOut, qty)` → checks every night in the range, returns `{ ok, problems, nights }`. This is what blocks the New Reservation wizard from proceeding when commercial inventory is insufficient.
 - `PG.bookedCount()`, `PG.isStopSell()`, `PG.rateFor()` are the lower-level primitives the above are built from.
-- **Inventory is always computed live from `reservations` + `inventoryOverrides` + `dateAdjustments`** — there is no separately-maintained "booked count" that could drift out of sync. This is why creating/cancelling a reservation is immediately reflected everywhere (Dashboard, Availability grid, etc.) without any extra bookkeeping.
+- **Inventory is always computed live from `reservations` + `inventoryOverrides` + `dateAdjustments`** — there is no separately-maintained "booked count" that could drift out of sync.
 
 ### 4.5 Date handling — a hard-won lesson
 
-**All date math (`PG.addDays`, `PG.dateRange`, `PG.fmtDate`, etc.) is implemented in UTC via `Date.UTC(...)`, never via local-time `Date` parsing.** This was a real, painful bug (commit history around "Fix state migration..." mentions it, but the actual root-cause fix was in an earlier session): parsing `"2026-08-23T00:00:00"` as local time and then calling `.toISOString()` can silently roll the date backward or forward depending on the host machine's UTC offset. In one sandboxed browser environment this caused an *infinite loop* in `dateRange()` that crashed the whole page. **Never reintroduce local-time date parsing anywhere in this codebase.** Always go through the `PG.*` date helpers.
+**All date math (`PG.addDays`, `PG.dateRange`, `PG.fmtDate`, etc.) is implemented in UTC via `Date.UTC(...)`, never via local-time `Date` parsing.** Parsing `"2026-08-23T00:00:00"` as local time and then calling `.toISOString()` can silently roll the date backward or forward depending on the host machine's UTC offset — this once caused an *infinite loop* in `dateRange()` that crashed the whole page. **Never reintroduce local-time date parsing anywhere in this codebase.** Always go through the `PG.*` date helpers.
 
 ### 4.6 Physical rooms — the operational allocation layer
 
 Physical rooms sit **beneath** room-type commercial inventory as a second, connected layer:
 
-- **Room-type inventory** (`roomTypes[].sellable`, `rates`, `inventoryOverrides`, `dateAdjustments`) is the **commercial** availability and pricing layer — unchanged by this update, still what `PG.computeAvailability()`/`PG.validateAvailability()` operate on, and still what the New Reservation wizard checks before letting a booking proceed.
+- **Room-type inventory** (`roomTypes[].sellable`, `rates`, `inventoryOverrides`, `dateAdjustments`) is the **commercial** availability and pricing layer — what `PG.computeAvailability()`/`PG.validateAvailability()` operate on, and what the New Reservation wizard checks first.
 - **Physical-room assignment** (`physicalRooms`, `roomAssignments`, `roomBlocks`) is the **operational** allocation layer: which actual room fulfills which reservation item, for which date range.
 
-**`physicalRooms`** — array of `{ id, propertyId, roomTypeId, roomNumber, building, floor, bedConfiguration, view, accessibilityFeatures, connectingRoomIds, notes, isActive, isSellable, operationalStatus }`. `operationalStatus` is the room's **stored, manually-set** baseline state — one of `Available | Held | Out of Order | Out of Service | Inactive`. `Reserved` is never stored; it's always derived live from a covering `roomAssignment` (see `PG.roomStatusOn()`). Housekeeping states (**Clean/Dirty/Inspected/Checked In/Checked Out/Occupied**) are deliberately excluded — out of MVP scope per §1.2.
+**`physicalRooms`** — array of `{ id, propertyId, roomTypeId, roomNumber, building, floor, bedConfiguration, view, accessibilityFeatures, connectingRoomIds, notes, isActive, isSellable, operationalStatus }`. `operationalStatus` is the room's **stored, manually-set** baseline state — one of `Available | Held | Out of Order | Out of Service | Inactive`. `Reserved` is never stored; it's always derived live from a covering `roomAssignment` (`PG.roomStatusOn()`). Housekeeping states (Clean/Dirty/Inspected/Checked In/Checked Out/Occupied) are deliberately excluded — out of MVP scope (§1.3).
 
-**`roomAssignments`** — array of `{ id, propertyId, reservationId, reservationItemId, physicalRoomId, arrivalDate, departureDate, assignmentStatus, assignedAt, assignedBy, changeReason }`. `assignmentStatus` is currently `Assigned` (confirmed) | `Held` (tentative, used while the reservation itself isn't yet Confirmed/Paid) | `Cancelled`. One reservation item with `qty > 1` has one `roomAssignment` per physical room (e.g. RES-10245's `dlx` item, qty 2, has two assignment rows).
+**`roomAssignments`** — array of `{ id, propertyId, reservationId, reservationItemId, physicalRoomId, arrivalDate, departureDate, assignmentStatus, assignedAt, assignedBy, changeReason }`. `assignmentStatus` is `Assigned` (Confirmed reservation) | `Held` (tentative, Draft/Pending Payment) | `Cancelled`. A reservation item with `qty > 1` has one `roomAssignment` per physical room.
 
-**`roomBlocks`** — array of `{ id, propertyId, physicalRoomId, startDate, endDate, type, reason, notes, createdAt, createdBy }`. An operational hold against a specific physical room independent of any reservation (maintenance, deep cleaning, etc.). New blocks can no longer be *created* to overlap an active assignment (see §4.7's blocking rule), but `blk-3` in the seed data predates that rule and is kept as a **deliberate, permanent conflict** — it overlaps `asn-5`'s tentative hold on the same room (`fam-402`) — specifically to demonstrate the "Needs Attention" flag (Reservation Detail, RES-10247) and the calendar's conflict-bar styling out of the box. This is the one legitimate case where two things occupy the same room on paper; everywhere else, that combination is now prevented at write time.
+**`roomBlocks`** — array of `{ id, propertyId, physicalRoomId, startDate, endDate, type, reason, notes, createdAt, createdBy }`. `type` is one of `Out of Order | Out of Service | Management Hold | Other`. An operational hold against a specific physical room independent of any reservation. New blocks can no longer be *created* to overlap an active assignment (§4.7's blocking rule) — the one exception, `blk-3` in the seed data, is a **deliberate, permanent conflict** left in on purpose to demonstrate the "Needs Attention" flag and the calendar's conflict-bar styling out of the box (see §9).
 
-**Engine helpers** (`assets/js/app.js`): `PG.physicalRoomsForType()`, `PG.isPhysicalRoomBlocked()`, `PG.isPhysicalRoomAssigned()`, `PG.roomStatusOn()`, `PG.eligiblePhysicalRooms()` / `PG.eligiblePhysicalRoomCount()` (active + sellable + unblocked + unassigned rooms of a type on a date), and `PG.validateRoomAssignmentCapacity()` (the physical-layer counterpart to `PG.validateAvailability()` — blocks confirming more assignments than eligible physical rooms exist for the stay; **no overbooking** at this layer).
+**Engine helpers:** `PG.physicalRoomsForType()`, `PG.isPhysicalRoomBlocked()`, `PG.isPhysicalRoomAssigned()`, `PG.physicalRoomBlockOn()`, `PG.roomStatusOn()`, `PG.eligiblePhysicalRooms()` / `PG.eligiblePhysicalRoomCount()`, `PG.assignmentsForRoom()`, `PG.assignmentsOverlapping()`, `PG.currentOrNextAssignment()`, `PG.upcomingAssignmentsForRoom()`, and `PG.validateRoomAssignmentCapacity()` (the physical-layer counterpart to `PG.validateAvailability()` — no overbooking at this layer).
 
-**Known, intentional gap:** `physicalRooms` counts (active + sellable) don't always numerically equal `roomTypes[].sellable` yet — e.g. Standard has 10 physical rooms but only 8 are currently active+sellable (one Out of Order, one Inactive). The two layers are not yet unified into a single source of truth. Do not silently "fix" this mismatch — it's seeded deliberately to demonstrate the layering.
+**Known, intentional gap:** `physicalRooms` counts (active + sellable) don't always numerically equal `roomTypes[].sellable` — e.g. Standard has 10 physical rooms but only 8 are currently active+sellable (one Out of Order, one Inactive). The two layers are not yet unified into a single source of truth. Do not silently "fix" this mismatch — it's seeded deliberately to demonstrate the layering (§9).
 
-**`physical-rooms.html`** (see §8) manages this layer directly — add/edit rooms, block rooms, activate/deactivate. New Reservation and Reservation Detail now assign specific rooms too — see §4.7.
+`physical-rooms.html` manages this layer directly (add/edit rooms, block rooms, activate/deactivate). New Reservation, Reservation Detail, and Operations Calendar all assign specific rooms too — see §4.7.
 
 ### 4.7 Room-assignment recommendation engine (deterministic — no AI, no optimization solver)
 
-A room type selection in New Reservation now **auto-assigns** a physical room by default — "Book without assigning a room" is not offered as an option anywhere. The engine lives in `assets/js/app.js` and is exercised directly by `tests/room-assignment.test.js` (§10a).
+Selecting a room type in New Reservation **auto-assigns** a physical room by default — "Book without assigning a room" is not offered anywhere. The engine lives in `assets/js/app.js` and is exercised directly by `tests/room-assignment.test.js` (§10.9).
 
-**Core invariant — no Unassigned state exists anywhere in this product.** Every active (non-Cancelled/Expired/Completed/No Show) reservation item always has a real `roomAssignment`: `Held` while the reservation is `Draft`/`Pending Payment`, `Assigned` once it's `Confirmed`. There is no `Unassigned` status, no unassigned queue/lane, and no "Unassign Room" action anywhere — a room can only ever move to a *different* eligible room (Change Room) or be released entirely by cancelling/expiring the reservation, which cancels its assignment(s) as an inseparable part of that same action. A reservation can never be created, saved, or confirmed without a specific eligible physical room for every unit; `PG.autoAssignRoomsForItem()`'s `shortfall` is what blocks that, not a fallback "unassigned" record. (An earlier iteration of this feature had a full Unassigned Reservations concept — lane, filter, queue, action — that was deliberately and completely removed; if you ever see the word "unassigned" reappear in a diff, that's almost certainly a regression, not a feature.)
+**Core invariant — no "Unassigned" state exists anywhere in this product.** Every active (non-Cancelled/Expired/Completed/No Show) reservation item always has a real `roomAssignment`: `Held` while the reservation is Draft/Pending Payment, `Assigned` once it's Confirmed. There is no `Unassigned` status, no unassigned queue/lane, and no "Unassign Room" action anywhere — a room can only ever move to a *different* eligible room (Change Room) or be released entirely by cancelling/expiring the reservation, which cancels its assignment(s) as an inseparable part of that same action. A reservation can never be created, saved, or confirmed without a specific eligible physical room for every unit.
 
-- **Eligibility** (`PG.roomEligibleForStay(state, room, checkIn, checkOut, excludeAssignmentId)`): a room qualifies only if it's active + sellable, has no overlapping non-Cancelled `roomAssignment` for any night of the stay, and has no overlapping `roomBlock` of type `Out of Order`, `Out of Service`, or `Management Hold`. **A block of type `Other` does not disqualify a room** — an explicit, deliberate MVP carve-out (that block type is informational only). `PG.roomMeetsRequirements()` layers a hard filter on top for *required* attributes — currently just the "Requires Wheelchair Accessible Room" checkbox in New Reservation, which maps to `requireAccessibility: ['Wheelchair Accessible']`.
-- **Priority** (`PG.rankRoomsForAssignment()`), most-recommended first: (1) retaining an already-assigned room across an edit is handled *before* ranking even runs, in `PG.autoAssignRoomsForItem()` — a kept room only drops out if it's no longer eligible; (2) preference match count (bed configuration, connecting-room request); (3) `PG.roomAdjacencyScore()` — prefers a room with no assignment/block landing on the night before arrival or on the departure night, ahead of; (4) lowest room number, the final deterministic tie-breaker. A qty≥2 item with "Request Connecting Rooms" checked additionally tries to seat a mutually-connecting pair first (`PG.findConnectingPair()`), a light heuristic, not a solver.
+> **This was a real, corrected mistake, not a style choice.** An earlier iteration briefly introduced a full Unassigned Reservations concept (a calendar lane, an Assigned/Unassigned filter, an "Unassign Room" action, a legend item, and seed data with a roomless reservation). It was identified as a misread of the intended business rule and completely removed in a follow-up correction. **Do not reintroduce any "unassigned" concept without an explicit, unambiguous instruction to do so.** If you ever see the word "unassigned" reappear in a diff, treat it as a likely regression.
+
+- **Eligibility** (`PG.roomEligibleForStay(state, room, checkIn, checkOut, excludeAssignmentId)`): a room qualifies only if it's active + sellable, has no overlapping non-Cancelled `roomAssignment` for any night of the stay, and has no overlapping `roomBlock` of type `Out of Order`, `Out of Service`, or `Management Hold`. **A block of type `Other` does not disqualify a room** — an explicit, deliberate MVP carve-out (that block type is informational only). `PG.roomMeetsRequirements()` layers a hard filter on top for *required* attributes — currently just the "Requires Wheelchair Accessible Room" checkbox, mapping to `requireAccessibility: ['Wheelchair Accessible']`.
+- **Priority** (`PG.rankRoomsForAssignment()`), most-recommended first: **(1)** retaining an already-assigned room across an edit is handled *before* ranking even runs, in `PG.autoAssignRoomsForItem()` — a kept room only drops out if it's no longer eligible; **(2)** preference match count (bed configuration, connecting-room request); **(3)** `PG.roomAdjacencyScore()` — prefers a room with no assignment/block landing on the night before arrival or the departure night; **(4)** lowest room number, the final deterministic tie-breaker. A qty≥2 item with "Request Connecting Rooms" checked additionally tries to seat a mutually-connecting pair first (`PG.findConnectingPair()`) — a light heuristic, not a solver.
 - **`PG.autoAssignRoomsForItem(state, request)`** → `{ assignedRoomIds, shortfall }`. Never assigns the same physical room twice within one call, and honors `request.excludeRoomIds` so sibling items in the same multi-room reservation can't collide. `shortfall > 0` means demand exceeds eligible supply — the UI must block confirmation, never overbook.
-- **`PG.roomIneligibilityReason()`** returns a short, **non-sensitive** category only — `Reserved | Out of Order | Out of Service | Held | Attribute Mismatch | Inactive | Not Sellable` — never a block's free-text `reason`/`notes` field. This is what both the wizard's "no availability" messaging and the Change Room drawer's disabled-room labels use; a block's actual reason text (e.g. "Plumbing leak repair") is deliberately never shown to reservation-flow staff.
-- **`PG.renderChangeRoomDrawer(opts)`** — the shared, structured room picker (a right-side drawer, never a plain `<select>`) used by both New Reservation and Reservation Detail. Ranks eligible rooms first, lists ineligible ones disabled with a reason badge, marks the currently-assigned room, supports search + floor/view/bed/accessibility/connecting filters, and requires picking a new room before showing an impact summary and enabling Confirm. Its DOM (`#pgChangeRoomDrawer`) and CSS (`.crd-*`, `.chip` in `style.css`) are created lazily and reused across opens on a page.
-- **Needs Attention** is the only "something's wrong" state — it never falls back to "unassigned." Reservation Detail and Operations Calendar independently re-check every live assignment's room against `PG.roomEligibleForStay()` on every render. If a room was blocked *after* being assigned, the assignment is flagged in place (no silent reassignment) with a "Needs Attention" badge, and the same Change Room drawer is used to pick a replacement — the flagged room still shows in the list (marked "Currently Assigned" + its ineligibility reason) so staff can see exactly what changed. A reservation item that somehow has zero assignments (only reachable via pre-this-rule legacy `localStorage` data — see the migration note in §9) renders the same way, with an "Assign Room" action instead of "Change Room"; this is explicitly a self-heal path, not a supported ongoing state.
-- **Change Room / Assign Room are atomic and fail-safe.** Every call site (`reservation-detail.html`, `operations-calendar.html`, and the block-conflict resolution flows in `physical-rooms.html`) revalidates the chosen room against fresh state (`PG.roomEligibleForStay()`) immediately before writing, wraps the whole mutate-then-`PG.setState()` sequence in `try/catch`, and only ever mutates the in-memory state object *after* that revalidation passes — so a stale pick, a mid-flight change, or a thrown error all leave the previous assignment exactly as it was, with a toast explaining what happened. Every change/assignment records who, when, old room, new room, and (for Change Room from a block conflict) the reason, in both `roomAssignment.assignedAt/assignedBy` and the reservation's `activity[]` + global `audit[]`.
-- Reservation items round-trip a `roomAssignment` per physical room at save time in `new-reservation.html`'s `createReservation()` — this cannot be skipped; the wizard already blocks Next/Confirm on any shortfall (§8.1). `Confirmed` reservations get `Assigned` records, `Draft`/`Pending Payment` get tentative `Held` ones — same convention as the seed data.
-- **Blocking or deactivating a room that has an active assignment or hold is refused, not silently allowed.** `physical-rooms.html`'s Block Room modal and Deactivate action, and `operations-calendar.html`'s Edit Block modal, all run the same check (`PG.assignmentsOverlapping()` / a manual date-range scan for Deactivate) before saving: if anything overlaps, the affected reservation(s) are listed with an inline **Change Room** button right there in the conflict/blocked modal, Save/Deactivate stays disabled, and the room only becomes blockable/deactivatable once every affected reservation has been moved off it (verified live — resolving the last conflict via the inline Change Room button immediately clears the message and re-enables the action, and for Deactivate, proceeds straight to the normal confirm prompt).
+- **`PG.roomIneligibilityReason()`** returns a short, **non-sensitive** category only — `Reserved | Out of Order | Out of Service | Held | Attribute Mismatch | Inactive | Not Sellable` — never a block's free-text `reason`/`notes` field.
+- **`PG.renderChangeRoomDrawer(opts)`** — the shared, structured room picker (a right-side drawer, never a plain `<select>`) used by New Reservation, Reservation Detail, Operations Calendar, and Physical Rooms' conflict-resolution flows. Ranks eligible rooms first, lists ineligible ones disabled with a reason badge, marks the currently-assigned room, supports search + floor/view/bed/accessibility/connecting filters, and requires picking a new room before showing an impact summary and enabling Confirm. Its DOM (`#pgChangeRoomDrawer`) and CSS (`.crd-*`, `.chip`) are created lazily and reused across opens on a page.
+- **Needs Attention** is the only "something's wrong" state — it never falls back to "unassigned." Reservation Detail and Operations Calendar independently re-check every live assignment's room against `PG.roomEligibleForStay()` on every render. If a room was blocked *after* being assigned, the assignment is flagged in place (no silent reassignment), and the same Change Room drawer picks a replacement. A reservation item that somehow has zero assignments (only reachable via pre-correction legacy `localStorage` data) renders the same way, with an "Assign Room" action instead of "Change Room" — an explicit self-heal path, not a supported ongoing state.
+- **Change Room / Assign Room are atomic and fail-safe.** Every call site revalidates the chosen room against fresh state (`PG.roomEligibleForStay()`) immediately before writing, wraps the mutate-then-`PG.setState()` sequence in `try/catch`, and only mutates in-memory state *after* revalidation passes — a stale pick, a mid-flight change, or a thrown error all leave the previous assignment exactly as it was, with a toast explaining what happened. Every change records who, when, old room, new room, and (when resolving a block conflict) the reason, in both `roomAssignment.assignedAt/assignedBy` and the reservation's `activity[]` + global `audit[]`.
+- Reservations round-trip a `roomAssignment` per physical room at save time in `new-reservation.html`'s `createReservation()` — the wizard already blocks Next/Confirm on any shortfall. `Confirmed` reservations get `Assigned` records; `Draft`/`Pending Payment` get tentative `Held` ones.
+- **Blocking or deactivating a room that has an active assignment or hold is refused, not silently allowed.** `physical-rooms.html`'s Block Room modal and Deactivate action, and `operations-calendar.html`'s Edit Block modal, all check for overlap before saving: if anything overlaps, the affected reservation(s) are listed with an inline **Change Room** button right there in the conflict/blocked modal, Save/Deactivate stays disabled, and the action only proceeds once every affected reservation has been moved off the room.
 
 ---
 
@@ -198,21 +273,21 @@ var page = PG.mount("<nav-key>", ["Crumb 1", "Crumb 2", ...]);
 ```
 
 `PG.mount()`:
-- Renders the sidebar (`renderSidebar`) using the `NAV` array (see §7 for current structure), highlighting the item whose `key` matches the first argument.
-- Renders the header (`renderHeader`) with the breadcrumb trail and the shared header buttons (New Reservation, Reset Demo Data, and — only on the Reservations page — the Arabic toggle).
+- Renders the sidebar (`renderSidebar`) using the `NAV` array (§7), highlighting the item whose `key` matches the first argument.
+- Renders the header (`renderHeader`) with the breadcrumb trail and shared header buttons (New Reservation, Reset Demo Data, and — only on the Reservations page — the Arabic toggle).
 - Returns the `<main id="pg-page">` element; the page's script builds an HTML string and assigns it to `page.innerHTML`.
 
 ### 5.1 Breadcrumb linking rule
 
-**Only a *middle* breadcrumb crumb is ever a clickable link.** The first crumb (section label, e.g. "Hotel Management") and the last crumb (current page) are always plain text. This was an explicit, deliberate fix (commit `07c7269`) after the user pointed out the opposite behavior was wrong. `CRUMB_LINKS` in `app.js` maps known crumb label strings to their `.html` file. When adding a new page, pass crumbs like `["Section", "List Page Name", "Current Sub-Page"]` for a 3-level trail (middle one links back to the list), or just `["Section", "Page Name"]` for a top-level page (zero links, matches the Hotel Profile pattern). Reservation Detail deliberately passes `["Reservations", "Reservations", "Reservation Detail"]` (the section label and the list-page label are both literally "Reservations", by design, per explicit user instruction).
+**Only a *middle* breadcrumb crumb is ever a clickable link.** The first crumb (section label) and the last crumb (current page) are always plain text. `CRUMB_LINKS` in `app.js` maps known crumb label strings to their `.html` file. When adding a new page, pass crumbs like `["Section", "List Page Name", "Current Sub-Page"]` for a 3-level trail, or `["Section", "Page Name"]` for a top-level page. Reservation Detail deliberately passes `["Reservations", "Reservations", "Reservation Detail"]` (the section label and the list-page label are both literally "Reservations", by design).
 
 ### 5.2 Property-context control
 
-The header also renders a `.pg-property-ctx` pill showing "Palestine Grand Hotel" with a building icon, to the left of the breadcrumb. Per spec: single-property users (this whole prototype, currently) see just the name, no switcher. A multi-property switcher was never built — there is only one tenant/property in this prototype.
+The header renders a `.pg-property-ctx` pill showing "Palestine Grand Hotel" with a building icon, to the left of the breadcrumb. Single-property users (this whole prototype) see just the name, no switcher — a multi-property switcher was never built.
 
 ### 5.3 Role gating
 
-`CURRENT_ROLE` (currently hardcoded to `"Hotel Admin"`) in `app.js` gates `NAV` items flagged `superAdminOnly: true` (currently only "Hotels"). There is no login screen or role switcher UI — this is a hardcoded persona. If a future prompt asks for a role switcher, this is the variable to wire up.
+`CURRENT_ROLE` (hardcoded to `"Hotel Admin"`, exported as `PG.CURRENT_ROLE`) gates `NAV` items flagged `superAdminOnly: true` (currently only "Hotels"). It also backs a `CAN_MANAGE` check reused across several pages (`physical-rooms.html`, `operations-calendar.html`, `guests.html`, `guest-detail.html`) that renders a permission-denied panel when false — **always true today**, since there is no login screen or role switcher UI. If a future prompt asks for a role switcher, this is the variable to wire up; the permission-denied panels already exist and will activate automatically.
 
 ---
 
@@ -220,56 +295,58 @@ The header also renders a `.pg-property-ctx` pill showing "Palestine Grand Hotel
 
 The visual language is **Metronic-inspired**: dark navy sidebar (`--pg-sidebar-bg: #1e2129`), white content area, primary blue `--pg-primary: #1B84FF`, card-based layout with `border-radius: 8px`, dense operational tables. All design tokens are CSS custom properties on `:root` — check there before hardcoding a color.
 
-### 6.1 Core components (all shared, all in `style.css` unless noted)
+### 6.1 Core components
 
 | Component | Classes | Notes |
 |---|---|---|
-| Buttons | `.btn .btn-primary/-light/-outline/-success/-danger/-danger-outline`, `.btn-sm`, `.btn-block` | Hover states explicitly re-declare label color (a global `a:hover` rule has higher specificity than `.btn-primary`'s base color and was silently making button labels disappear on hover — fixed, don't remove those hover color declarations). |
+| Buttons | `.btn .btn-primary/-light/-outline/-success/-danger/-danger-outline`, `.btn-sm`, `.btn-block` | Hover states explicitly re-declare label color (a global `a:hover` rule has higher specificity and would otherwise make labels disappear on hover — don't remove those declarations). |
 | Cards | `.card .card-header .card-body .card-footer` | `.card-body.no-pad` for edge-to-edge tables. |
-| Tables | `table.dt` | Dense operational table style. |
-| Badges | `.badge .badge-gray/-blue/-green/-yellow/-red/-purple`, `.badge-dot`, `.badge-outline` | **Reservation Status uses solid badges; Payment Status always adds `.badge-outline`** (outlined, not filled) so the two are visually distinguishable even when they share a color semantic. Use `PG.statusBadge(status)` / `PG.payBadge(status)` — never hand-roll a badge. |
-| Alerts | `.help-note` (default = info/blue), `.help-note-warning/-danger/-success` | Use these instead of inline `style="background:..."` — that was the pattern before it got formalized (commit `c7df2cc`). |
-| Modals | `.pg-modal-overlay.show > .pg-modal` with `.pg-modal-header/-body/-footer` | Opened/closed via `PG.openModal(id)` / `PG.closeModal(id)`, which just toggle the `.show` class. Use for **confirmations** (Cancel Reservation, Stop Sell, Reopen). |
-| Drawers | `.pg-drawer-overlay.show > .pg-drawer` with `.pg-drawer-header/-body/-footer` | Same open/close mechanics as Modal (same `PG.openModal`/`closeModal`, just different overlay class). Use for **longer forms** (currently only Adjust Inventory). RTL-aware (`html[dir="rtl"]` flips the slide direction). |
+| Tables | `table.dt` | Dense operational table style, used everywhere lists are shown. |
+| Badges | `.badge .badge-gray/-blue/-green/-yellow/-red/-purple`, `.badge-dot`, `.badge-outline` | **Reservation Status uses solid badges; Payment Status always adds `.badge-outline`** so the two stay visually distinguishable even when they share a color semantic. Use `PG.statusBadge(status)` / `PG.payBadge(status)` / `PG.roomStatusBadge(status)` — never hand-roll a badge. |
+| Alerts | `.help-note` (default = info/blue), `.help-note-warning/-danger/-success` | Use these instead of inline `style="background:..."`. |
+| Modals | `.pg-modal-overlay.show > .pg-modal` with `.pg-modal-header/-body/-footer` | Opened/closed via `PG.openModal(id)` / `PG.closeModal(id)`. Use for **confirmations** (Cancel Reservation, Stop Sell, Block Room, Unassign-style flows). |
+| Drawers | `.pg-drawer-overlay.show > .pg-drawer` with `.pg-drawer-header/-body/-footer` | Same open/close mechanics as Modal. Use for **longer forms and pickers** (Adjust Inventory, Add/Edit Room, Change Room, Add/Edit Guest, Filters). RTL-aware. |
 | Toasts | `PG.toast(message, type)` | `type` ∈ `success/warn/danger`. Auto-dismisses. |
-| Tabs | `.pg-tabs .pg-tab.active` | First real usage is `guest-detail.html` (Overview/Reservations/Payments/Activity) — a single `#tabContent` div re-rendered per click, not four DOM subtrees. Reservation Detail still uses numbered structured sections instead of tabs (an explicitly-allowed alternative per an earlier prompt) — that pattern wasn't retrofitted to tabs. |
-| Stepper | `.pg-steps .pg-step.active/.done`, `.pg-step-connector.done` | Used by New Reservation's 4-step wizard. Connector lines are **dedicated flex elements between steps**, not an absolutely-positioned `::after` — the latter used to visually overlap step labels (fixed in `67a80b9`). |
-| Timeline | `.timeline .t-item` | Used by Reservation Detail's Activity/Audit section. |
-| Empty states | `.empty-state` | Used across list/table pages when a filter yields no rows. |
+| Tabs | `.pg-tabs .pg-tab.active` | Used by `guest-detail.html` (Overview/Reservations/Payments/Activity) — a single content `<div>` re-rendered per click, not four DOM subtrees. Reservation Detail still uses numbered structured sections instead of tabs (an explicitly-allowed alternative). |
+| Stepper | `.pg-steps .pg-step.active/.done`, `.pg-step-connector.done` | Used by New Reservation's 4-step wizard. Connector lines are dedicated flex elements between steps, not an absolutely-positioned `::after`. |
+| Timeline | `.timeline .t-item` | Used by Reservation Detail, Physical Rooms, and Guest Detail's Activity sections. |
+| Chips | `.chip` | Small attribute tags (room view, bed config, accessibility features) — shared across Physical Rooms and the Change Room drawer. |
+| Empty states | `.empty-state` | Used across list/table pages when a filter yields no rows, or a dataset is genuinely empty. |
 | Custom dropdowns | see §6.2 | Replaces native `<select>` app-wide. |
 
 ### 6.2 Custom Select engine (`PG.enhanceSelects(root)`)
 
-Native `<select class="form-control">` elements are **progressively enhanced** into a styled dropdown (`.pg-select > .pg-select-trigger + .pg-select-menu`). The trick: the native `<select>` stays in the DOM (visually hidden via `position:absolute; opacity:0`), so **any existing code that reads `.value` or listens for `"change"` keeps working untouched** — enhancement is purely visual. Clicking a custom option sets `nativeSelect.value` and dispatches a real `"change"` event.
+Native `<select class="form-control">` elements are **progressively enhanced** into a styled dropdown (`.pg-select > .pg-select-trigger + .pg-select-menu`). The native `<select>` stays in the DOM (visually hidden), so **any existing code that reads `.value` or listens for `"change"` keeps working untouched** — enhancement is purely visual.
 
-**Critical gotcha:** if you ever set `.value` on an enhanced select *programmatically* (not through user click), you **must** also do `el.dispatchEvent(new Event('change'))` afterward, or the custom dropdown's visible trigger label will silently show the wrong text while the underlying value is actually correct. This exact bug was found and fixed twice (Availability page's Stop Sell modal and Adjust Inventory drawer, commit `07c7269`) — watch for it in any new code that pre-fills a select.
+**Critical gotcha:** if you ever set `.value` on an enhanced select *programmatically* (not through user click), you **must** also do `el.dispatchEvent(new Event('change'))` afterward, or the custom dropdown's visible trigger label will silently show the wrong text while the underlying value is actually correct. This bug has been found and fixed multiple times across the project — watch for it in any new code that pre-fills a select.
 
-Call `PG.enhanceSelects(container)` once after any `innerHTML` assignment that includes `<select class="form-control">` elements — including inside dynamically-created modals/drawers appended to `document.body`, and after any re-render that rebuilds selects (e.g. New Reservation's item cards).
+Call `PG.enhanceSelects(container)` once after any `innerHTML` assignment that includes `<select class="form-control">` elements — including inside dynamically-created modals/drawers, and after any re-render that rebuilds selects.
 
 ### 6.3 Managed-list dropdown (`PG.renderManagedSelect(container, opts)`)
 
-A from-scratch (not select-wrapping) dropdown for editable string lists — currently used for **Bed Configuration** (`state.bedConfigs`) and **Meal Plan** (`state.mealPlans`). Supports inline "+ Add New…" (reveals a text input in the menu) and a per-option "×" delete (with a native `confirm()` and a "can't delete the last one" guard). `opts` = `{ value, getList(), setList(list), onChange(v), placeholder }`. If a future prompt asks for another user-managed reference list (e.g. cancellation reasons, adjustment reasons — those are currently hardcoded arrays), reuse this component rather than inventing a new pattern.
+A from-scratch (not select-wrapping) dropdown for editable string lists — used for **Bed Configuration** (`state.bedConfigs`) and **Meal Plan** (`state.mealPlans`). Supports inline "+ Add New…" and a per-option "×" delete (with a native `confirm()` and a "can't delete the last one" guard). `opts` = `{ value, getList(), setList(list), onChange(v), placeholder }`. Reuse this component for any future user-managed reference list rather than inventing a new pattern.
 
 ### 6.4 Status badge color semantics (audited, keep consistent)
 
 | Status | Class | Meaning |
 |---|---|---|
-| Confirmed, Paid | `.badge-green` | Positive |
+| Confirmed, Paid, Available | `.badge-green` | Positive |
 | Cancelled, Failed | `.badge-red` | Destructive |
-| Pending Payment, Payment Required, Refund Pending | `.badge-yellow` | Warning |
-| Expired, Refunded, Draft | `.badge-gray` | Neutral |
-| Link Sent | `.badge-purple` | Info (payment-link-specific state) |
-| Pay on Arrival | `.badge-blue` | Info |
+| Pending Payment, Payment Required, Refund Pending, Held | `.badge-yellow` | Warning |
+| Expired, Refunded, Draft, Inactive | `.badge-gray` | Neutral |
+| Link Sent, Important (guest flag) | `.badge-purple` | Info / distinguishing flag |
+| Pay on Arrival, Reserved | `.badge-blue` | Info |
 
 ---
 
 ## 7. Current navigation structure
 
-Defined in `NAV` in `app.js`. **Most recently restructured** (room-operations scope update) so the old "Overview" section is folded into "Hotel Management" and Physical Rooms is added:
+Defined in the `NAV` array in `app.js`:
 
 ```
 Hotel Management  → Dashboard (index.html), Operations Calendar (operations-calendar.html),
-                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html), Rates, Availability & Inventory
+                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html),
+                     Rates, Availability & Inventory
 Reservations      → Reservations, New Reservation, Guests (guests.html)
 Payments          → Payments
 Reports           → Reservation Reports, Inventory Reports, Payment Reports (ALL THREE — NOT YET BUILT)
@@ -277,9 +354,9 @@ Settings          → Hotel Policies, Taxes & Fees, Payment Configuration
 Administration    → Hotels (hotels.html — NOT YET BUILT, super-admin-only), Users, Roles, Permissions, Audit
 ```
 
-**The nav links to three pages that do not exist yet** (`physical-rooms.html`, `operations-calendar.html`, and `guests.html` are all built now). This is intentional, following the same "don't build every screen from one prompt" sequencing established earlier in the project. Expect follow-up prompts to build: `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. When you build them, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new labels to `CRUMB_LINKS` too).
+**The nav links to three pages that do not exist yet:** `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. This is intentional — screens get built incrementally, one focused prompt at a time, not all at once. When you build one of these, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new label to `CRUMB_LINKS` too).
 
-The old "Guided Journey" nav item was removed from the sidebar in this restructure (it's not in the new spec's nav list) but the page (`demo-journey.html`) still exists and is still linked from the Dashboard's Quick Operations panel — don't delete it.
+The old "Guided Journey" nav item was removed from the sidebar in an earlier restructure, but the page (`demo-journey.html`) still exists and is still linked from the Dashboard's Quick Operations panel — don't delete it.
 
 ---
 
@@ -287,100 +364,95 @@ The old "Guided Journey" nav item was removed from the sidebar in this restructu
 
 | File | Purpose | Notes |
 |---|---|---|
-| `index.html` | **Dashboard / Overview** | Fully rebuilt as an operational workspace — every number is computed live from state (not hardcoded). "Attention Required" alert engine covers expiring payment links, failed payments, low availability, active Stop Sell, stale drafts >24h, **Assignment Conflicts** (a physical room with overlapping active assignments/blocks — links to Operations Calendar), and **Rooms Out of Order** (links to Physical Rooms); the conflict/OOO alerts are not dismissible/dedupe'd, respectively, same pattern as the pre-existing ones. Today's Arrivals and Recent Reservations both show each reservation's assigned physical room number(s) (`assignedRoomsLabel()`), not just a room *count* — deliberately no "Unassigned" KPI or queue exists (§4.7/§9). Deep-links into `reservations.html`/`payments.html` via query params. |
-| `operations-calendar.html` | **Operations Calendar — the main daily room-control workspace** | See §8.2 for the full writeup. Split-view: a scrollable timeline grid (sticky date header, sticky room column, physical rooms as rows grouped under collapsible room-type headers) plus a right-side drawer for whatever's selected. There is no Unassigned lane — every active reservation is guaranteed a physical room, so it renders on exactly that room's row. |
+| `index.html` | **Dashboard / Overview** | Every number computed live from state. "Attention Required" alert engine covers expiring payment links, failed payments, low availability, active Stop Sell, stale drafts >24h, **Assignment Conflicts** (a physical room with overlapping active assignments/blocks — links to Operations Calendar), and **Rooms Out of Order** (links to Physical Rooms). Today's Arrivals and Recent Reservations show each reservation's assigned physical room number(s) (`assignedRoomsLabel()`), never just a room count. Deep-links into `reservations.html`/`payments.html` via query params. |
+| `operations-calendar.html` | **Operations Calendar — the main daily room-control workspace** | See §8.2. Split-view: a scrollable timeline grid (sticky date header, sticky room column, physical rooms as rows grouped under collapsible room-type headers) plus a right-side drawer for whatever's selected. Every active reservation is guaranteed a physical room, so it renders on exactly that room's row — there is no "unassigned" lane. |
 | `hotel-profile.html` | Tenant profile, editable | Country/City/Currency/Timezone are dropdowns (`PG.REF`); phone has a separate country-code dropdown. |
 | `room-types.html` | Room type list | Table with View/Edit actions + Add. |
-| `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete removes associated `rates[id]`, `ratePlans`, `physicalRooms`, `roomAssignments`, and `roomBlocks` referencing it. |
-| `physical-rooms.html` | **Physical Rooms management** | Dense table (not cards) — Room Number, Room Type, Building/Floor, Bed Config, Key Attributes, Today's Status, Current/Next Reservation, Active State, Actions. Building/Floor/Bed Config/Key Attributes collapse below 1100–1500px; Room Number and Room Type never collapse. Summary strip (Total/Active & Sellable/Reserved Today/Blocked Today/Inactive) reuses the shared `.kpi` tile, not the dashboard's local `.sum-card`. Add/Edit is a **Drawer** (Bed Configuration reuses the managed-select component; Connecting Rooms are kept mutual on save — selecting A→B also links B→A). Room Details is a separate, fully-rebuilt-per-open **Drawer**. Block Room is a **Modal** that live-previews conflicting `roomAssignments` as dates change and hard-disables Save while any non-Cancelled assignment overlaps (see §9) — Out of Order/Out of Service show a destructive (red) impact note, Management Hold/Other show a warning (yellow) one. No delete action anywhere — Activate/Deactivate is the only lifecycle control, and deactivating also clears `isSellable`. Gated by a `CAN_MANAGE` check on `PG.CURRENT_ROLE` (always true today — see §5.3) that renders a permission-denied panel instead, demonstrating a state with no live trigger yet. |
+| `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete cascades to associated `rates[id]`, `ratePlans`, `physicalRooms`, `roomAssignments`, and `roomBlocks`. |
+| `physical-rooms.html` | **Physical Rooms management** | Dense table (not cards) — Room Number, Room Type, Building/Floor, Bed Config, Key Attributes, Today's Status, Current/Next Reservation, Active State, Actions; lower-priority columns collapse below 1100–1500px. Summary strip (Total/Active & Sellable/Reserved Today/Blocked Today/Inactive). Add/Edit is a **Drawer** (Connecting Rooms kept mutual on save). Room Details is a separate, rebuilt-per-open **Drawer**. Block Room is a **Modal** that live-previews conflicting assignments and lists each with an inline **Change Room** button — Save stays disabled until every conflict is resolved. Deactivate runs the same conflict check. No delete action anywhere — Activate/Deactivate is the only lifecycle control. |
 | `rates.html` | Rate Plan list | Table with Edit action + Add. |
-| `rate-plan-form.html` | Create/edit/**delete** a rate plan | Meal Plan uses managed-select; Currency is a dropdown; shows a live warning if price < the room type's base rate; does not hard-block saving on that warning. |
-| `availability-inventory.html` | Live availability grid + Stop Sell/Reopen/Adjust Inventory | Grid cells are clickable (`tbody .av-cell` only — header cells intentionally excluded, see §9 history). Adjust Inventory is a **Drawer**; Stop Sell/Reopen are **Modals**, each pre-filling from the currently-selected cell. |
+| `rate-plan-form.html` | Create/edit/**delete** a rate plan | Meal Plan uses managed-select; shows a (non-blocking) live warning if price < the room type's base rate. |
+| `availability-inventory.html` | Live commercial availability grid + Stop Sell/Reopen/Adjust Inventory | Grid cells are clickable (`tbody .av-cell` only). Adjust Inventory is a **Drawer**; Stop Sell/Reopen are **Modals**, each pre-filling from the selected cell. |
 | `reservations.html` | Reservations worklist | Search + 5 filters (status, payment status, source, arrival, departure) + Clear Filters. Supports `?arrival=/?departure=/?status=/?payStatus=/?source=` query prefiltering. Has the Arabic toggle header button (only page that does). |
-| `guests.html` | **Guests directory** | Dense searchable table (not a card gallery) — Guest Name, Phone/Email, Nationality (collapses below 1300px), Preferred Language, Upcoming Reservation, Last Stay, Total Reservations, Notes indicator, Actions. Filters: search (name/phone/email/`idRef`), Has Upcoming/Has Past Reservations, Important/VIP, Communication Language, Last Stay date range, Clear Filters. Add/Edit is `PG.renderGuestDrawer()` (§8.3) — same shared-component pattern as `PG.renderChangeRoomDrawer`. |
-| `guest-detail.html` | **Guest profile — full page, not a modal**, since a guest has several related datasets staff move between | See §8.3. Header: name, contact, preferred language, Important badge, Edit Guest, Create Reservation (`new-reservation.html?customer=`). Tabs (reusing the pre-existing, previously-unused `.pg-tabs`/`.pg-tab` CSS): Overview, Reservations, Payments, Activity. |
-| `reservations-ar.html` | **The single representative Arabic (RTL) screen** | A from-scratch Arabic mirror of the Reservations worklist (own hand-written sidebar/header in Arabic, not `PG.mount`). Deliberately the *only* Arabic screen — do not build more without being asked ("representative only, do not duplicate the entire prototype"). Row click navigates to the (English) `reservation-detail.html`. |
-| `new-reservation.html` | **New Reservation — 4-step guided wizard** | Steps: Guest & Source → Stay & Rooms → Pricing & Payment → Review & Save. See §8.1 for detail. Supports `?demo=ahmad-whatsapp` to pre-fill the Guided Journey scenario. Step 2 **auto-assigns a physical room** per unit the moment a room type/quantity/date/preference changes (§4.7) — no "book without assigning a room" option exists. Each assigned unit shows a summary card (room number, floor, bed, view, accessibility, dates) with a **Change Room** button opening `PG.renderChangeRoomDrawer()`. A shortfall (not enough eligible physical rooms) blocks Next/Confirm with an explanatory message, distinct from the pre-existing commercial-availability message. |
-| `reservation-detail.html` | Reservation detail | 6 numbered sections (Summary, Guest, Room Items, Pricing, Payment, Activity/Audit). Header shows both Status and Payment badges + Cancel + More menu. Cancel opens a Modal with a live before/after inventory visual, and now also cancels the reservation's `roomAssignments` (§4.7 bugfix). Payment card logic branches on `paymentStatus` (Payment Required → Generate; Link Sent → Resend only, no redundant "Send"; Expired → Regenerate only; Failed → Generate New Link only — redundant "Resend" buttons were deliberately removed per user feedback). Room Items (Section 3) shows each unit's assigned physical room with **Change Room** only — there is no Unassign Room action. Re-checks every live assignment's eligibility on render and flags a room **Needs Attention** if it was blocked after assignment, without ever silently reassigning (§4.7); an "Assign Room" fallback only appears for a legacy item with zero assignments (pre-this-rule `localStorage` data), framed as the same Needs Attention state, never a separate "unassigned" one. |
+| `guests.html` | **Guests directory** | Dense searchable table (not a card gallery) — Guest Name, Phone/Email, Nationality (collapses below 1300px), Preferred Language, Upcoming Reservation, Last Stay, Total Reservations, Notes indicator, Actions. Filters: search (name/phone/email/`idRef`), Has Upcoming/Has Past Reservations, Important/VIP, Communication Language, Last Stay date range, Clear Filters. Add/Edit is `PG.renderGuestDrawer()` (§8.3). |
+| `guest-detail.html` | **Guest profile — full page, not a modal**, since a guest has several related datasets staff move between | See §8.3. Header: name, contact, preferred language, Important badge, Edit Guest, Create Reservation (`new-reservation.html?customer=`). Tabs: Overview, Reservations, Payments, Activity. |
+| `reservations-ar.html` | **The single representative Arabic (RTL) screen** | A from-scratch Arabic mirror of the Reservations worklist (own hand-written sidebar/header, not `PG.mount`). Deliberately the *only* Arabic screen. Row click navigates to the (English) `reservation-detail.html`. |
+| `new-reservation.html` | **New Reservation — 4-step guided wizard** | Steps: Guest & Source → Stay & Rooms → Pricing & Payment → Review & Save. See §8.1. Supports `?demo=ahmad-whatsapp` (Guided Journey), `?rt=&room=&date=` (Operations Calendar empty-cell click), and `?customer=` (Guests "Create Reservation") prefills. Step 2 **auto-assigns a physical room** per unit the moment room type/quantity/date/preference changes — no "book without assigning a room" option exists. Each assigned unit shows a summary card with a **Change Room** button. A shortfall blocks Next/Confirm with an explanatory message, distinct from the commercial-availability message. |
+| `reservation-detail.html` | Reservation detail | 6 numbered sections (Summary, Guest, Room Items, Pricing, Payment, Activity/Audit). Header shows Status + Payment badges, Cancel, More menu. Cancel cancels the reservation's `roomAssignments` too. Payment card logic branches on `paymentStatus` (Payment Required → Generate; Link Sent → Resend only; Expired → Regenerate only; Failed → Generate New Link only). Room Items shows each unit's assigned room with **Change Room** only — no Unassign action. Flags a room **Needs Attention** if it was blocked after assignment; an "Assign Room" fallback only appears for legacy pre-correction data with zero assignments. |
 | `payments.html` | Payments worklist | Status filter dropdown + `?status=` query support. |
-| `hotel-policies.html`, `taxes-fees.html`, `payment-configuration.html` | Settings, mostly read-only/lightweight | Explicitly kept lightweight per the original brief ("reuses standard platform capabilities"). |
-| `users.html`, `roles.html`, `permissions.html`, `audit.html` | Administration | Lightweight by design, except Audit which reads the real `state.audit` log. |
-| `demo-journey.html` | **Guided Journey** — a 7-phase clickable walkthrough of one full scenario (Ahmad Khalil, WhatsApp booking → payment → cancellation) | Not in primary nav anymore (see §7) but linked from the Dashboard. Opens `new-reservation.html?demo=ahmad-whatsapp` and other screens in new tabs so the checklist stays visible. |
+| `hotel-policies.html`, `taxes-fees.html`, `payment-configuration.html` | Settings, mostly read-only/lightweight | Explicitly kept lightweight per the original brief. |
+| `users.html`, `roles.html`, `permissions.html`, `audit.html` | Administration | Lightweight by design, except Audit, which reads the real `state.audit` log. |
+| `demo-journey.html` | **Guided Journey** — a 7-phase clickable walkthrough of one scenario (Ahmad Khalil, WhatsApp booking → payment → cancellation) | Not in primary nav (§7) but linked from the Dashboard. Opens `new-reservation.html?demo=ahmad-whatsapp` and other screens in new tabs so the checklist stays visible. |
 
 ### 8.1 New Reservation wizard — key behaviors to preserve
 
-- **Nothing is pre-selected.** `wizard.source`, `wizard.customerId`, `wizard.paymentMethod` all start `null`. Summary rows only render once the user has actually made that choice (fixed after user feedback: "some data appears before they are selected in the flow"). "Next" is blocked with a toast until the required field for that step is chosen.
-- Guest step has **search (name/phone) + sort (Newest/Alphabetical) + pagination** over `state.customers` (see `renderCustList()`).
-- Room items: Adults/Children are **read-only**, computed as `roomType.maxAdults/maxChildren × qty` — the user cannot edit them directly (fixed after user feedback).
-- A **"Simulate: Availability Changed (Demo)"** button on Step 2 applies a real Stop Sell to the first item's room type/date, so proceeding to Review genuinely triggers the "availability changed" warning (this is real logic reacting to real state, not a scripted fake).
-- The "Continue" button was renamed to **"Next →"** per user feedback.
-- Continue button label is literally `id="nextBtn"` — same ID reused across steps.
-- Each item also carries `requireAccessibility` (bool, hard filter → `['Wheelchair Accessible']`), `bedConfigPref` (soft ranking preference), and — only shown once qty>1 — `requireConnecting` (soft preference). `recomputeAssignments()` re-runs `PG.autoAssignRoomsForItem()` for every item whenever any of these, the room type, quantity, or the reservation's dates change, always excluding rooms already picked by sibling items.
-- Supports `?rt=<roomTypeId>&room=<physicalRoomId>&date=<YYYY-MM-DD>` for Operations Calendar's "click an empty cell" interaction: prefills a single-unit item with that room type and a 1-night stay starting on that date, then asks the engine to *keep* the clicked room specifically (`keepRoomIds`) — if it's since become ineligible, the engine gracefully falls back to its normal top pick rather than erroring.
+- **Nothing is pre-selected.** `wizard.source`, `wizard.customerId`, `wizard.paymentMethod` all start `null`. Summary rows only render once the user has actually made that choice. "Next" is blocked with a toast until the required field for that step is chosen.
+- Guest step has **search (name/phone) + sort (Newest/Alphabetical) + pagination** over `state.customers`.
+- Room items: Adults/Children are **read-only**, computed as `roomType.maxAdults/maxChildren × qty`.
+- A **"Simulate: Availability Changed (Demo)"** button on Step 2 applies a real Stop Sell, so proceeding to Review genuinely triggers the "availability changed" warning — real logic reacting to real state, not a scripted fake.
+- The "Continue" button is labeled **"Next →"**, with `id="nextBtn"` reused across steps.
+- Each item also carries `requireAccessibility` (bool, hard filter), `bedConfigPref` (soft ranking preference), and — only shown once qty>1 — `requireConnecting` (soft preference). `recomputeAssignments()` re-runs `PG.autoAssignRoomsForItem()` for every item whenever any of these, the room type, quantity, or the reservation's dates change, always excluding rooms already picked by sibling items.
+- Supports `?rt=<roomTypeId>&room=<physicalRoomId>&date=<YYYY-MM-DD>` for Operations Calendar's "click an empty cell" interaction, and `?customer=<guestId>` for Guests' "Create Reservation": prefills a single-unit item and/or the existing guest, then asks the engine to *keep* the clicked room specifically (`keepRoomIds`) if one was given — falling back gracefully if it's since become ineligible.
 
 ### 8.2 Operations Calendar — key behaviors to preserve
 
-Interaction pattern only loosely modeled on Mews-style hotel operations calendars (no branding, copy, or pixel-for-pixel layout copied) — a split view: a horizontal timeline grid on the left/main area, and a right-side drawer for whichever reservation or room block is selected. The main grid stays visible and scrolled-in-place behind the drawer (it's an overlay, not a route change) so staff never lose date/room context.
+Interaction pattern only loosely modeled on Mews-style hotel operations calendars (no branding, copy, or pixel-for-pixel layout copied) — a split view: a horizontal timeline grid on the main area, and a right-side drawer for whichever reservation or room block is selected. The main grid stays visible and scrolled-in-place behind the drawer (an overlay, not a route change) so staff never lose date/room context.
 
-**There is no Unassigned lane, filter, legend item, or "Assign Room" queue anywhere on this page** — an earlier iteration had one; it was completely removed (data, filters, CSS, and all) once the core rule became "every active reservation always has a physical room" (§4.7). The calendar contains only physical-room rows grouped by room type, reservation/hold bars on their assigned rooms, block bars, and conflict indicators.
-
-- **Grid mechanics are hand-built, not a `<table>`.** Each room row is a flex container: a `position:sticky; left:0` `.opc-room-info` cell plus a `position:relative` `.opc-track` holding absolutely-positioned `.opc-cell` backgrounds (for empty-cell clicks) and `.opc-bar` elements (reservations/blocks) computed from date-index × `CELL_W` (90px/night). The header row is `position:sticky; top:0`. This is why bars always paint above cells in the DOM (cells render first, bars after) — never reorder that without checking real click hit-testing.
-- **Bar geometry communicates the exclusive checkout date**: a bar's right edge lands exactly at the boundary between the last occupied night's cell and the departure-day cell — it never extends into checkout day. A bar clipped by the visible window gets a flat edge + a `«`/`»` marker instead of a rounded corner on that side.
-- **Conflict detection is real, not styled-in.** `barsForRoom()` flags any two bars on the same physical room whose `[start,end)` ranges overlap — this is the same half-open-interval check used everywhere else in the engine. The seeded `blk-3` (Management Hold) vs. `asn-5` (RES-10247's Held assignment) on `fam-402` is the one deliberately-permanent conflict left in the data (§4.4/§4.7) and is a live, out-of-the-box demonstration of the `.opc-bar.conflict` styling (thick red outline + hazard stripes + a warning icon) — every other combination of assignments/blocks on a room is now prevented at write time, so this is the only place a conflict can still be seen.
-- **Status/type is never color-only.** Every bar variant pairs a background tint with a distinct `border-style` (solid = confirmed/firm, dashed = tentative/hold, dotted = "Other" block) plus icons (payment exception, multi-room, has-notes, conflict) and a full-sentence `aria-label` — screen readers and colorblind users get the same information sighted users do.
-- **Change Room / Assign Room reuse `PG.renderChangeRoomDrawer()`** (§4.7) — this page never reimplements a room picker. "Assign Room" only appears in the Reservation drawer as the legacy-data self-heal path (see the `reservation-detail.html` row above) — it is not a normal booking destination. Cancel Reservation is an *inline* reveal inside the Reservation drawer (reason + Confirm/Keep), not the full before/after-inventory modal `reservation-detail.html` uses — a deliberate scope reduction to avoid duplicating that whole flow in a second file; "Open/Edit Reservation" and "Open Payment" all link to `reservation-detail.html` rather than reimplementing those surfaces here. There is no Check In / Check Out action anywhere, and no Unassign Room action anywhere, per spec.
-- **Editing a Room Block here (`opc-edit-block`) can't be saved into a conflict either** — its conflict box lists every affected reservation with its own inline **Change Room** button, exactly like `physical-rooms.html`'s Block Room modal (§9's blocking rule).
-- **Clicking an empty cell never fires for `!CAN_MANAGE`**, and only navigates to `new-reservation.html?rt=&room=&date=` (§8.1) — it never creates a reservation directly from the calendar.
+- **Grid mechanics are hand-built, not a `<table>`.** Each room row is a flex container: a `position:sticky; left:0` `.opc-room-info` cell plus a `position:relative` `.opc-track` holding absolutely-positioned `.opc-cell` backgrounds (for empty-cell clicks) and `.opc-bar` elements (reservations/blocks) computed from date-index × `CELL_W` (90px/night). The header row is `position:sticky; top:0`. Bars always paint above cells in the DOM (cells render first) — never reorder that without checking real click hit-testing.
+- **Bar geometry communicates the exclusive checkout date**: a bar's right edge lands exactly at the boundary between the last occupied night's cell and the departure-day cell. A bar clipped by the visible window gets a flat edge + a `«`/`»` marker instead of a rounded corner.
+- **Conflict detection is real, not styled-in.** `barsForRoom()` flags any two bars on the same physical room whose `[start,end)` ranges overlap — the seeded `blk-3` vs. `asn-5` conflict on `fam-402` (§4.6, §9) is the one live, out-of-the-box demonstration of the `.opc-bar.conflict` styling (thick red outline + hazard stripes + a warning icon). Every other combination of assignments/blocks is now prevented at write time.
+- **Status/type is never color-only.** Every bar variant pairs a background tint with a distinct `border-style` (solid = confirmed/firm, dashed = tentative/hold, dotted = "Other" block) plus icons and a full-sentence `aria-label`.
+- **Change Room / Assign Room reuse `PG.renderChangeRoomDrawer()`** — this page never reimplements a room picker. Cancel Reservation is an *inline* reveal inside the Reservation drawer (reason + Confirm/Keep), a deliberate scope reduction versus `reservation-detail.html`'s full before/after-inventory modal. "Open/Edit Reservation" and "Open Payment" all link to `reservation-detail.html`. There is no Check In / Check Out action anywhere, and no Unassign Room action anywhere.
+- **Editing a Room Block here can't be saved into a conflict either** — its conflict box lists every affected reservation with its own inline **Change Room** button, exactly like `physical-rooms.html`'s Block Room modal.
+- **Clicking an empty cell never fires for `!CAN_MANAGE`**, and only navigates to `new-reservation.html?rt=&room=&date=` — it never creates a reservation directly from the calendar.
 - **No drag-and-drop of any kind** — dates cannot be resized by dragging a bar's edge, and rooms cannot be reassigned by dragging a bar to another row. The only way to move a reservation to a different room is the Change Room drawer.
-- **Save failures are handled with real `try/catch` around every `PG.setState()` call in this file**, not a scripted/random failure generator — there's no realistic way to make `localStorage.setItem` throw in this prototype, so this state exists defensively (same "permission denied never actually triggers today" honesty as `CAN_MANAGE`) rather than being staged for a demo.
-- **Fixing this file originally surfaced a real bug in `reservation-detail.html`'s cancel flow**: cancelling a reservation set `status='Cancelled'` but never touched `state.roomAssignments`, so a cancelled reservation's room stayed "Reserved" forever from the physical-assignment layer's point of view. Fixed there — `doCancel()` (and this page's inline cancel) both now also mark every non-Cancelled assignment for that reservation as `Cancelled`. Any future cancellation path must do the same — this is exactly the kind of gap that would otherwise silently reintroduce an unassigned-like state.
+- **Save failures are handled with real `try/catch`** around every `PG.setState()` call, not a scripted/random failure generator.
 
 ### 8.3 Guests module — key behaviors to preserve
 
-- **`PG.renderGuestDrawer(opts)`** (`opts: { editingId, onSaved(guestId, {usedExisting}) }`) is the single shared Add/Edit Guest drawer, used identically by `guests.html` and `guest-detail.html` — same "promote a truly-shared component into `app.js`" pattern as `PG.renderChangeRoomDrawer`. It owns its own validation (Full Name + Phone required, inline `field-error` divs, entered data untouched on a failed save since the drawer isn't rebuilt), duplicate detection, and persistence.
-- **Duplicate detection is phone/email fuzzy-matched, never blocking, and never auto-merges.** `normPhoneForMatch()`/`normEmailForMatch()` strip formatting before comparing. A match shows a `help-note-warning` panel with the existing guest's name/phone/email and two explicit choices: **Use Existing Guest** (closes the drawer and navigates to that guest's profile — nothing is created) or **Continue Creating New Guest** (sets an internal `duplicateConfirmed` flag and re-runs save, skipping the check). There is no automatic merge path anywhere.
-- **`onSaved`'s `usedExisting` flag** lets each caller react differently: `guests.html` just re-renders its table when a real save happens, but navigates to the existing profile instead when the duplicate path was taken; `guest-detail.html` re-fetches state and re-renders in place either way (editing always targets the same profile, so there's no "existing guest" branch to navigate to).
-- **Guest Detail tabs are a single `#tabContent` div re-rendered on click**, not four separate DOM subtrees — `activeTab` drives `renderTabContent()`, which is also why `render()` fully rebuilds the page (header included) on every Edit Guest save, keeping the header's Important badge/contact line in sync without a separate refresh path.
-- **"Timing" on the Reservations tab (`timingFor()`) derives Upcoming / Active Now / Completed / Cancelled / No Show from `status` + today's date** — there's no stored "phase" field, and this deliberately never introduces Check-In/Check-Out as actions, only as a read-only classification.
-- **The Payments tab reads the same reservation fields Payment section on `reservation-detail.html` does** (`paymentMethod`, `paymentStatus`, `transactionRef`, computed total via `PG.rateFor()`) — it's a projection, not a separate payments collection.
-- **Activity tab entries are filtered from the global `state.audit` log** by guest name or any of the guest's reservation IDs appearing in `details` — same pattern as `physical-rooms.html`'s per-room activity and `reservation-detail.html`'s per-reservation activity. `PG.renderGuestDrawer()`'s own `addAudit()` calls ("Guest Created"/"Guest Updated", including the guest's name in `details`) are what make profile edits show up here.
-- **Identification reference masking (`maskIdRef()` in `guest-detail.html`)** shows only the last 4 characters; the full value is only ever visible inside the Add/Edit drawer's own input field.
-- Same dead-code-today `CAN_MANAGE`/`PG.CURRENT_ROLE` full-page gate as `physical-rooms.html`/`operations-calendar.html` on both `guests.html` and `guest-detail.html`.
-- `new-reservation.html` supports `?customer=<guestId>` (alongside the existing `?rt=&room=&date=` from Operations Calendar) to prefill an existing guest from "Create Reservation" — sets `wizard.customerMode='existing'` and `wizard.customerId` directly, composable with the room-cell prefill.
+- **`PG.renderGuestDrawer(opts)`** (`opts: { editingId, onSaved(guestId, {usedExisting}) }`) is the single shared Add/Edit Guest drawer, used identically by `guests.html` and `guest-detail.html`. It owns validation (Full Name + Phone required, inline `field-error` divs, entered data untouched on a failed save), duplicate detection, and persistence.
+- **Duplicate detection is phone/email fuzzy-matched, never blocking, and never auto-merges.** A match shows a warning panel with the existing guest's name/phone/email and two explicit choices: **Use Existing Guest** (navigates to that profile — nothing is created) or **Continue Creating New Guest** (saves anyway). There is no automatic merge path.
+- **`onSaved`'s `usedExisting` flag** lets each caller react differently: `guests.html` re-renders its table (or navigates to the existing profile on the duplicate path); `guest-detail.html` re-fetches state and re-renders in place either way.
+- **Guest Detail tabs are a single `#tabContent` div re-rendered on click** — `activeTab` drives `renderTabContent()`, and `render()` fully rebuilds the page on every Edit Guest save to keep the header's Important badge/contact line in sync.
+- **"Timing" on the Reservations tab (`timingFor()`) derives Upcoming / Active Now / Completed / Cancelled / No Show from `status` + today's date** — no stored "phase" field, and no Check-In/Check-Out actions, only a read-only classification.
+- **The Payments tab is a projection**, not a separate collection — it reads the same reservation fields the Payment section on `reservation-detail.html` does.
+- **Activity tab entries are filtered from the global `state.audit` log** by guest name or any of the guest's reservation IDs appearing in `details` — same pattern as `physical-rooms.html`'s and `reservation-detail.html`'s per-entity activity.
+- **Identification reference masking** shows only the last 4 characters outside the Add/Edit drawer's own input field.
+- `new-reservation.html` supports `?customer=<guestId>` (composable with `?rt=&room=&date=`) to prefill an existing guest from "Create Reservation".
 
 ---
 
 ## 9. Known issues / deliberate simplifications (read before "fixing" these)
 
-- **`ratePlans` vs. `rates` calendar duplication.** Rate Plans (admin-facing, has a name/meal plan/date range) and the `rates` per-date calendar (the actual pricing engine) are two separate structures that aren't fully unified. A rate plan's `price` is shown in the New Reservation wizard's dropdown, but the *actual* charged amount still comes from `PG.rateFor()` reading the `rates` calendar. This works fine for the seeded data because they were kept numerically consistent by hand, but it's not architecturally single-sourced. If a future prompt asks for real rate-plan-driven pricing, this needs unifying.
-- **Family Room has no "Flexible + Breakfast" rate plan** — only "Weekend Rate" (`$150`). The Guided Journey's Step 7 text says "Family Room — Flexible + Breakfast" but the actual rate plan name shown will be "Weekend Rate". Numbers are all correct; only the plan *label* doesn't match the illustrative example text. Known and accepted, not yet fixed.
+- **`ratePlans` vs. `rates` calendar duplication.** Rate Plans (admin-facing, has a name/meal plan/date range) and the `rates` per-date calendar (the actual pricing engine) are two separate structures that aren't fully unified. A rate plan's `price` is shown in the New Reservation wizard's dropdown, but the *actual* charged amount still comes from `PG.rateFor()` reading the `rates` calendar. This works for the seeded data because they were kept numerically consistent by hand, but it's not architecturally single-sourced. If a future prompt asks for real rate-plan-driven pricing, this needs unifying.
+- **Family Room has no "Flexible + Breakfast" rate plan** — only "Weekend Rate" (`$150`). The Guided Journey's Step 7 text says "Family Room — Flexible + Breakfast" but the actual rate plan name shown will be "Weekend Rate". Numbers are correct; only the plan *label* doesn't match the illustrative example text. Known and accepted.
 - **Reservation dates are reservation-level, not per-item** (§4.3, rule 3) — intentional MVP simplification, do not "fix" without discussion.
 - **Occupancy is derived, not stored as a user preference** — if a room type's `maxAdults`/`maxChildren` changes after a reservation was made, existing reservations keep their originally-computed occupancy (correct — it's a snapshot, not a live join).
-- **No login/auth/role-switcher UI** — `CURRENT_ROLE` is a hardcoded constant.
-- **Physical Rooms UI (`physical-rooms.html`) and the room-assignment engine (§4.7) both exist now**, but `physicalRooms` active+sellable counts still don't always numerically equal `roomTypes[].sellable` — the two inventory layers aren't unified into one source of truth (see §4.6).
-- **No Unassigned state exists anywhere, by design (§4.7).** An earlier iteration of the room-assignment feature briefly had a full Unassigned Reservations concept (a calendar lane, an Assigned/Unassigned filter, an "Unassign Room" action, a legend item, seed data with a roomless reservation) — it was a genuine misread of the intended business rule and was completely removed in a follow-up correction, including migrating the one seed reservation that had no room (`RES-10248` now holds `std-103`). Do not reintroduce any "unassigned" concept without an explicit, unambiguous instruction to do so — the correction prompt that removed it was emphatic that this was a business-logic error, not a style preference.
-- **Legacy/pre-correction `localStorage` data could still have a roomless active reservation item** if it was saved before the correction shipped. Every relevant screen treats that as a "Needs Attention" self-heal case with an "Assign Room" action (never a separate "unassigned" label or lane) — see the `reservation-detail.html`/`operations-calendar.html` rows in §8.
+- **No login/auth/role-switcher UI** — `CURRENT_ROLE` is a hardcoded constant (§5.3).
+- **`physicalRooms` active+sellable counts still don't always numerically equal `roomTypes[].sellable`** — the two inventory layers aren't unified into one source of truth (§4.6).
+- **No "Unassigned" state exists anywhere, by design (§4.7).** An earlier iteration briefly had one (a calendar lane, an Assigned/Unassigned filter, an "Unassign Room" action, a legend item, seed data with a roomless reservation) — it was a genuine misread of the intended business rule and was completely removed, including migrating the one seed reservation that had no room (`RES-10248` now holds `std-103`). **Do not reintroduce this without an explicit, unambiguous instruction.**
+- **Legacy/pre-correction `localStorage` data could still have a roomless active reservation item** if it was saved before the above correction shipped. Every relevant screen treats that as a "Needs Attention" self-heal case with an "Assign Room" action — never a separate "unassigned" label or lane.
 - **Block Room's conflict check treats "Held" and "Assigned" assignments the same** — both block a new room block from saving. A future prompt may want holds to be overridable while confirmed assignments stay hard blocks.
-- **Room-assignment preferences are minimal by design** — only "Requires Wheelchair Accessible Room" (hard filter), a bed configuration dropdown, and "Request Connecting Rooms" (both soft ranking preferences) exist in New Reservation. There's no UI for other accessibility features or arbitrary attribute requirements; extend `item.requireAccessibility` from a bool to a list if a future prompt asks for more.
+- **Room-assignment preferences are minimal by design** — only "Requires Wheelchair Accessible Room" (hard filter), a bed configuration dropdown, and "Request Connecting Rooms" (soft ranking preferences) exist in New Reservation. Extend `item.requireAccessibility` from a bool to a list if a future prompt asks for more attribute types.
 - **The connecting-pair heuristic (`PG.findConnectingPair()`) is a simple pairwise scan**, not a general solver — it only ever tries to seat one connected pair per item; for qty>2 with connecting requested, remaining units are filled by normal ranking regardless of connectivity.
-- **Room blocks with the free-text legacy type `"Maintenance"` no longer exist in seed data** — Prompt 19 introduced `roomBlocks` before Prompt 20 defined the canonical `Out of Order | Out of Service | Management Hold | Other` enum, so all three seeded blocks used `type: "Maintenance"`, which matched no CSS class and no `BLOCK_TYPE_STATUS` mapping. Fixed by re-typing them to the closest canonical value (`blk-1`→Out of Order, `blk-2`→Out of Service, `blk-3`→Management Hold) while building Operations Calendar, which was the first screen to visibly expose the mismatch. If you ever add a `roomBlocks` entry, always use one of the four canonical types.
-- **Operations Calendar's density is a single "balanced operational" mode** — comfortable/compact toggle was skippable per spec (no existing table-density pattern to reuse) and wasn't built.
-- **GitHub Pages caches aggressively.** When testing changes right after a push, hard-refresh (Ctrl/Cmd+Shift+R) — a stale service-worker-free browser cache has caused "my change isn't showing" confusion at least once.
-- **Browser-automation quirk (dev environment only):** the Claude Browser preview tool's `computer` (screenshot) action is flaky in this sandbox and frequently times out with "the Browser pane is not displayed". When verifying UI changes in an agent session, prefer `javascript_tool`-based DOM/state assertions over screenshots — they're reliable; screenshots are not. Also: the `serve` dev server caches 301 redirects in the *browser's* HTTP cache even after `serve.json` is fixed — use a `?cb=N` cache-busting query param when re-testing a URL you've hit before in the same session.
+- **Operations Calendar's density is a single "balanced operational" mode** — a comfortable/compact toggle was explicitly skippable (no existing table-density pattern to reuse) and wasn't built.
+- **GitHub Pages caches aggressively** and the `serve` dev server caches 301 redirects in the browser's HTTP cache — see §2.2 for the workaround.
+- **Browser-automation quirk (dev environment only):** the Claude Browser preview tool's `computer` (screenshot) action is flaky in this sandbox and frequently times out with "the Browser pane is not displayed". Prefer `javascript_tool`-based DOM/state assertions over screenshots when verifying UI changes in an agent session — they're reliable; screenshots are not.
 
 ---
 
 ## 10. Working conventions established over this project (please follow them)
 
-1. **Always run a syntax check before considering a change done.** Pattern used throughout: extract each modified file's inline `<script>` content via a small Node one-liner and run `node --check` on it (and always `node --check` on `assets/js/app.js` directly). Catches typos before they ever hit the browser.
+1. **Always run a syntax check before considering a change done.** Extract each modified file's inline `<script>` content via a small Node one-liner and run `node --check`/`new Function(code)` on it (and always `node --check` on `assets/js/app.js` directly). Catches typos before they ever hit the browser.
 2. **Verify in the actual browser, not just by reading the code.** Use the `Claude_Browser` MCP tools (`preview_start` with the `hotel-prototype` launch config, then `navigate` + `javascript_tool` to assert real DOM/state). Always `localStorage.clear()` at the start of a test pass to get clean seed data, and again at the end before committing, so the repo's live demo always starts from a clean, seeded state.
 3. **One commit per logical change, pushed immediately**, with a detailed commit message explaining *why*, not just *what* (see `git log` — messages are intentionally thorough, since they double as a changelog). Never batch unrelated fixes into one commit if avoidable.
-4. **Minimum-footprint edits.** Use the `Edit` tool for targeted changes; only rewrite a whole file with `Write` when the change is genuinely pervasive throughout that file (as happened with `new-reservation.html` a few times).
-5. **When the user reports a bug, find the actual root cause before patching symptoms.** Several "simple" bug reports turned out to have one shared root cause (e.g. the missing-schema-migration bug explained three unrelated-seeming symptoms at once). Investigate with `Grep`/`Read` before guessing.
+4. **Minimum-footprint edits.** Use the `Edit` tool for targeted changes; only rewrite a whole file with `Write` when the change is genuinely pervasive throughout that file.
+5. **When the user reports a bug, find the actual root cause before patching symptoms.** Several "simple" bug reports have turned out to share one root cause. Investigate with `Grep`/`Read` before guessing.
 6. **Preserve everything not explicitly touched.** This project has accumulated a lot of interlocking detail across many prompts — never regenerate a whole page "for consistency" unless asked; targeted edits only.
 7. **No emojis, no unnecessary comments in code.** Comments are reserved for non-obvious *why* (see the date-handling and custom-select gotcha comments in `app.js` as the model to follow).
-8. **This README should be kept up to date.** If you make a structural change (new shared component, new state field, new convention), update the relevant section here in the same commit.
+8. **This README should be kept up to date.** If you make a structural change (new shared component, new state field, new convention, new page), update the relevant section here in the same commit.
 9. **Pure engine logic gets simulated unit tests under `tests/`**, run with plain Node (no test framework, no build step) — see `tests/room-assignment.test.js`: `node tests/room-assignment.test.js`. It loads `assets/js/app.js` into a `vm` sandbox stubbing `window`/`localStorage` (app.js is a browser IIFE, not a CommonJS module) and asserts against `PG.*` directly. Add to this file — don't invent a second test convention — when adding new engine logic worth locking down.
+10. **A recurring pitfall in "permission-gate then init()" pages:** `function init(){}` declarations are hoisted, so calling `init()` early doesn't throw — but any `var CONST = [...]` declared *after* that call is still `undefined` when `init()` actually runs (only the declaration is hoisted, not the assignment). This has caused a silent `Cannot read properties of undefined` crash twice already (`physical-rooms.html`, `operations-calendar.html`). **Always place the `if (!CAN_MANAGE) {...} else { init(); }` gate as the very last thing in the script**, after every top-level `var`/`function` the init path depends on.
 
 ---
 
@@ -395,10 +467,11 @@ Do not build these speculatively — wait for the corresponding prompt, per the 
 
 ---
 
-## 12. Quick orientation checklist for a new chat session
+## 12. Quick-start checklist for a new chat session
 
 1. Read this file in full.
 2. `git log --oneline` to see the exact chronological history (commit messages are detailed changelogs).
-3. Read `assets/js/app.js` top-to-bottom once — it's the single source of truth for data shape, shared components, and navigation.
-4. Check the live site (`https://eyad-tritecs.github.io/Hotel-Platform/`) to see current real-world state, or run locally per §2.
-5. Before changing anything, check §9 (known issues/deliberate simplifications) so you don't "fix" something that was a deliberate decision.
+3. Read `assets/js/app.js` top-to-bottom once — it's the single source of truth for data shape, shared components (`PG.render*Drawer`, badges, date helpers), and navigation.
+4. Check the live site (`https://eyad-tritecs.github.io/Hotel-Platform/`) to see current real-world state, or run locally per §2.1.
+5. Run `node tests/room-assignment.test.js` to confirm the room-assignment engine is passing before you start.
+6. Before changing anything, check §9 (known issues/deliberate simplifications) so you don't "fix" something that was a deliberate decision — and re-read the **"no Unassigned state" invariant in §4.7** specifically, since it has been accidentally reintroduced once already.
