@@ -1425,6 +1425,133 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Delete Guest — shared confirm modal, used identically by                */
+  /* guests.html's row menu and guest-detail.html's More menu. Permanent     */
+  /* deletion is only offered when the guest has zero reservations (which    */
+  /* transitively covers payments and any reservation-linked activity) and   */
+  /* no non-profile audit trail; guest identity/history frozen inside past   */
+  /* reservations (Reservation.customerId, guest names copied into activity  */
+  /* text, etc.) is never touched by this — only state.customers is.        */
+  /* opts: { guestId, canManage, onDeleted(guestId) }                        */
+  /* ---------------------------------------------------------------- */
+  function guestLinkedDataSummary(state, guestId) {
+    var cust = state.customers.find(function (c) { return c.id === guestId; });
+    var reservations = state.reservations.filter(function (r) { return r.customerId === guestId; });
+    // "Guest Created"/"Guest Updated" are bookkeeping for the profile itself (and will be
+    // superseded by the "Guest Deleted" entry this same action writes) — they don't count
+    // as the kind of historical/linked record that should block deletion. Anything else
+    // mentioning the guest's name (reservation activity, payments, other operational audit)
+    // does.
+    var nonProfileAudit = (state.audit || []).filter(function (a) {
+      if (a.action === "Guest Created" || a.action === "Guest Updated") return false;
+      return cust && a.details && a.details.indexOf(cust.name) > -1;
+    });
+    return { reservationCount: reservations.length, auditCount: nonProfileAudit.length, blocked: reservations.length > 0 || nonProfileAudit.length > 0 };
+  }
+  var deleteGuestModalEl = null;
+  function ensureDeleteGuestModal() {
+    if (deleteGuestModalEl) return deleteGuestModalEl;
+    deleteGuestModalEl = document.createElement("div");
+    deleteGuestModalEl.className = "pg-modal-overlay";
+    deleteGuestModalEl.id = "pgDeleteGuestModal";
+    document.body.appendChild(deleteGuestModalEl);
+    return deleteGuestModalEl;
+  }
+  function renderDeleteGuestModal(opts) {
+    var state = getState();
+    var el = ensureDeleteGuestModal();
+    var cust = state.customers.find(function (c) { return c.id === opts.guestId; });
+    if (!cust) { toast("Guest not found — it may have already been deleted.", "danger"); return; }
+
+    // Permission-denied state — defensive; both call sites already hide the Delete action
+    // itself when the viewer can't manage guests, so this only fires if invoked directly.
+    if (!opts.canManage) {
+      el.innerHTML = '<div class="pg-modal"><div class="pg-modal-header"><h3>Delete Guest</h3><button class="pg-modal-close" id="pgdg-close">&times;</button></div>' +
+        '<div class="pg-modal-body"><div class="help-note help-note-danger">You don’t have permission to delete guests. Contact a Hotel Admin to request access.</div></div>' +
+        '<div class="pg-modal-footer"><button class="btn btn-primary" id="pgdg-close2">Close</button></div></div>';
+      el.querySelector("#pgdg-close").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+      el.querySelector("#pgdg-close2").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+      openModal("pgDeleteGuestModal");
+      return;
+    }
+
+    var linked = guestLinkedDataSummary(state, opts.guestId);
+
+    // Deletion-blocked state — explain why, and point at the alternative if one exists.
+    // No archive/deactivate feature exists for guests in this prototype (only Physical
+    // Rooms has an Active/Inactive lifecycle) — per instructions, this does not invent one;
+    // it simply says the profile has to stay to preserve reservation/activity history.
+    if (linked.blocked) {
+      var reasonBits = [];
+      if (linked.reservationCount) reasonBits.push(linked.reservationCount + " reservation" + (linked.reservationCount === 1 ? "" : "s") + " (including any payments)");
+      if (linked.auditCount) reasonBits.push(linked.auditCount + " recorded activity/audit entr" + (linked.auditCount === 1 ? "y" : "ies"));
+      el.innerHTML = '<div class="pg-modal"><div class="pg-modal-header"><h3>Delete Guest</h3><button class="pg-modal-close" id="pgdg-close">&times;</button></div>' +
+        '<div class="pg-modal-body">' +
+          '<div class="help-note help-note-danger" style="flex-direction:column;align-items:stretch;">' +
+            "<div style=\"font-weight:700;margin-bottom:6px;\">&#9888; " + esc(cust.name) + " cannot be permanently deleted.</div>" +
+            "<div>This guest has " + reasonBits.join(" and ") + " on file. Deleting a guest with reservation, payment, or activity history would permanently corrupt those records.</div>" +
+          "</div>" +
+          '<div class="help-note" style="margin-top:12px;">There is no archive/deactivate option for guests in this prototype — the profile must remain on file to preserve that history. You can still edit the profile, or view it from the guest’s reservations.</div>' +
+        "</div>" +
+        '<div class="pg-modal-footer"><button class="btn btn-primary" id="pgdg-close2">Close</button></div></div>';
+      el.querySelector("#pgdg-close").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+      el.querySelector("#pgdg-close2").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+      openModal("pgDeleteGuestModal");
+      return;
+    }
+
+    // Confirm state — deletion is actually permitted.
+    el.innerHTML = '<div class="pg-modal"><div class="pg-modal-header"><h3>Delete Guest</h3><button class="pg-modal-close" id="pgdg-close">&times;</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="help-note help-note-danger" style="flex-direction:column;align-items:stretch;">' +
+          "<div>You are about to permanently delete <strong>" + esc(cust.name) + "</strong>.</div>" +
+          "<div style=\"margin-top:6px;\">This action cannot be undone.</div>" +
+        "</div>" +
+        '<div class="text-sm muted" style="margin-top:10px;">This guest has no reservations, payments, or recorded activity on file.</div>' +
+        '<div id="pgdg-status" style="margin-top:12px;"></div>' +
+      "</div>" +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="pgdg-cancel">Cancel</button><button class="btn btn-danger" id="pgdg-confirm">Delete Guest</button></div></div>';
+
+    function setButtonsDisabled(disabled) {
+      el.querySelector("#pgdg-cancel").disabled = disabled;
+      el.querySelector("#pgdg-confirm").disabled = disabled;
+      el.querySelector("#pgdg-close").style.visibility = disabled ? "hidden" : "visible";
+    }
+    el.querySelector("#pgdg-close").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+    el.querySelector("#pgdg-cancel").addEventListener("click", function () { closeModal("pgDeleteGuestModal"); });
+    el.querySelector("#pgdg-confirm").addEventListener("click", function () {
+      setButtonsDisabled(true);
+      document.getElementById("pgdg-status").innerHTML = '<div class="help-note">Deleting guest…</div>';
+      // Simulated latency, consistent with every other mutate-then-refresh action in this
+      // prototype (e.g. reservation-detail.html's save()) — gives the loading state a beat
+      // to actually be visible rather than resolving instantly.
+      setTimeout(function () {
+        try {
+          var fresh = getState();
+          var idx = fresh.customers.findIndex(function (c) { return c.id === opts.guestId; });
+          if (idx === -1) throw new Error("Guest no longer exists.");
+          // Re-check immediately before writing — state may have changed since the modal
+          // opened (e.g. a reservation was created for this guest in another tab).
+          var recheck = guestLinkedDataSummary(fresh, opts.guestId);
+          if (recheck.blocked) throw new Error("This guest now has linked records and can no longer be deleted.");
+          var removedName = fresh.customers[idx].name;
+          fresh.customers.splice(idx, 1);
+          setState(fresh);
+          addAudit("Guest Deleted", removedName + "’s guest profile was permanently deleted by " + CURRENT_ROLE + ".");
+          toast("Guest deleted.", "success");
+          closeModal("pgDeleteGuestModal");
+          opts.onDeleted(opts.guestId);
+        } catch (e) {
+          setButtonsDisabled(false);
+          document.getElementById("pgdg-status").innerHTML = '<div class="help-note help-note-danger">Failed to delete guest' + (e && e.message ? ' — ' + esc(e.message) : '') + '. Please try again.</div>';
+          toast("Failed to delete guest. Please try again.", "danger");
+        }
+      }, 500);
+    });
+    openModal("pgDeleteGuestModal");
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Public API                                                         */
   /* ---------------------------------------------------------------- */
   global.PG = {
@@ -1476,6 +1603,7 @@
     autoAssignRoomsForItem: autoAssignRoomsForItem,
     renderChangeRoomDrawer: renderChangeRoomDrawer,
     renderGuestDrawer: renderGuestDrawer,
+    renderDeleteGuestModal: renderDeleteGuestModal,
     statusBadge: statusBadge,
     payBadge: payBadge,
     esc: esc,

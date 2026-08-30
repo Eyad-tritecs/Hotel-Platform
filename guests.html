@@ -24,6 +24,10 @@
   .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
   .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
   .dup-match{border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:10px;background:#fff;}
+  .more-menu button.danger{color:var(--pg-danger);}
+  .more-menu button.danger:hover{background:var(--pg-danger-light);}
+  .note-link{cursor:pointer;background:none;border:none;padding:0;font-size:14px;}
+  .notes-modal-text{white-space:pre-wrap;font-size:13px;line-height:1.6;}
 </style>
 </head>
 <body>
@@ -130,13 +134,14 @@ function init() {
         '<td class="text-sm">' + (up ? '<a href="reservation-detail.html?id=' + up.id + '">' + up.id + '</a><div class="muted text-sm">' + PG.fmtDateShort(up.checkIn) + '</div>' : '<span class="muted">None</span>') + '</td>' +
         '<td class="text-sm">' + (last ? PG.fmtDateShort(last.checkOut) : '<span class="muted">—</span>') + '</td>' +
         '<td class="num">' + total + '</td>' +
-        '<td>' + (hasNote ? '<span title="' + PG.esc(c.notes) + '">&#128172;</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td>' + (hasNote ? '<button type="button" class="note-link" data-id="' + c.id + '" title="View note">&#128172;</button>' : '<span class="muted">—</span>') + '</td>' +
         '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
           '<button class="btn btn-outline btn-sm view-link" data-id="' + c.id + '">View</button>' +
           '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + c.id + '">&#8942;</button>' +
             '<div class="more-menu" data-menu-for="' + c.id + '">' +
               (CAN_MANAGE ? '<button class="edit-action" data-id="' + c.id + '">Edit</button>' : '') +
               '<a href="new-reservation.html?customer=' + c.id + '">Create Reservation</a>' +
+              (CAN_MANAGE ? '<button class="danger delete-action" data-id="' + c.id + '">Delete Guest</button>' : '') +
             '</div>' +
           '</div>' +
         '</div></td>' +
@@ -158,6 +163,8 @@ function init() {
     }
     if (t = e.target.closest('.view-link')) { location.href = 'guest-detail.html?id=' + t.dataset.id; return; }
     if (t = e.target.closest('.edit-action')) { closeAllMenus(); openGuestDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.delete-action')) { closeAllMenus(); openDeleteGuestModal(t.dataset.id); return; }
+    if (t = e.target.closest('.note-link')) { openNoteModal(t.dataset.id); return; }
   });
 
   function clearFilters() {
@@ -197,6 +204,42 @@ function init() {
     });
   }
   document.getElementById('addGuestBtn').addEventListener('click', function () { openGuestDrawer(null); });
+
+  /* ================================================================ */
+  /* Delete Guest — shared confirm modal, see PG.renderDeleteGuestModal     */
+  /* ================================================================ */
+  function openDeleteGuestModal(id) {
+    PG.renderDeleteGuestModal({
+      guestId: id,
+      canManage: CAN_MANAGE,
+      onDeleted: function () {
+        s = PG.getState();
+        renderTable();
+        document.getElementById('guestCountSub').textContent = s.customers.length + ' guest' + (s.customers.length === 1 ? '' : 's');
+      }
+    });
+  }
+
+  /* ================================================================ */
+  /* View Note — a lightweight read-only modal so staff don't have to open  */
+  /* the full guest profile just to read the notes column.                  */
+  /* ================================================================ */
+  var noteModal = document.createElement('div');
+  noteModal.className = 'pg-modal-overlay';
+  noteModal.id = 'noteModal';
+  document.body.appendChild(noteModal);
+  function openNoteModal(id) {
+    var c = s.customers.find(function (x) { return x.id === id; });
+    if (!c) return;
+    noteModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Notes &mdash; ' + PG.esc(c.name) + '</h3><button class="pg-modal-close" id="noteModalClose">&times;</button></div>' +
+      '<div class="pg-modal-body"><div class="notes-modal-text">' + PG.esc(c.notes || '') + '</div></div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-primary" id="noteModalClose2">Close</button></div>' +
+    '</div>';
+    noteModal.querySelector('#noteModalClose').addEventListener('click', function () { PG.closeModal('noteModal'); });
+    noteModal.querySelector('#noteModalClose2').addEventListener('click', function () { PG.closeModal('noteModal'); });
+    PG.openModal('noteModal');
+  }
 }
 
 if (!CAN_MANAGE) {
