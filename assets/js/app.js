@@ -313,84 +313,94 @@
       reservations: reservations,
       nextResId: 10249,
       // A one-off price typed into a single Price Calendar cell, keyed
-      // "roomTypeId|ratePlanId|date". The most specific of the three pricing
-      // layers (see resolvePrice) — seeded empty; every seeded price below comes
-      // from a named period or the base calendar, so nothing starts out "Manual".
+      // "roomTypeId|ratePlanId|date". The most specific of the pricing layers
+      // (see resolvePrice) — seeded empty, so nothing starts out "Manual".
       rateOverrides: {},
 
-      // Rate Plans are commercial offers attached to a room type; the dates and
-      // money live inside their named Pricing Periods, never on the plan itself
-      // (§6.2/§6.3 — do NOT reintroduce a flat startDate/endDate/price on a plan).
+      // Rate Plans are commercial offers attached to a room type. Each carries its own
+      // BASE PRICE — the default nightly rate used whenever no pricing period covers a
+      // date — and a SCOPE that either sells across the whole room type or narrows to
+      // specific physical rooms. Dates and overrides live in named pricing periods, never
+      // on the plan itself (do NOT reintroduce a flat startDate/endDate on a plan).
       //
-      // Seeding rule that must be preserved: every room type's DEFAULT plan is
-      // priced only from addDays(TODAY,31) onward, i.e. entirely outside the base
-      // `rates` calendar's window. Inside that window the default plan falls
-      // through to Base Price, so PG.rateFor() returns byte-identical numbers to
-      // the pre-rate-plan model and no seeded reservation's total moved. Any new
-      // seed period overlapping the base window would silently reprice the demo.
+      //   scope: "roomType" → every room of plan.roomTypeId
+      //   scope: "rooms"    → only plan.physicalRoomIds (all of that same type)
+      //
+      // The Thu/Fri weekend markup that used to be buried inside the per-date `rates`
+      // calendar is now expressed where an operator can actually see and edit it: a named
+      // "Weekend Premium" pricing period on each default plan. That is the whole point of
+      // this model — a seasonal or weekly price rule should be a named, editable object,
+      // not an invisible per-date number.
       ratePlans: [
-        /* ---- Standard Room ------------------------------------------------ */
-        { id: "rp-std-flex", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Flexible Rate", code: "FLEX-STD",
-          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+        /* ---- Standard Room (base 100) --------------------------------------- */
+        { id: "rp-std-flex", propertyId: PROPERTY_ID, roomTypeId: "std", scope: "roomType", physicalRoomIds: [],
+          name: "Flexible Rate", code: "FLEX-STD", mealPlan: "Room Only", basePrice: 100, currency: "USD",
+          description: "Fully flexible, free cancellation up to 24 hours before arrival.",
           active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:00:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:20:00.000Z",
           periods: [
-            { id: "pp-std-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 110 }, active: true,
+            { id: "pp-std-flex-weekend", name: "Weekend Premium", startDate: addDays(TODAY, -30), endDate: addDays(TODAY, 180),
+              daysOfWeek: [4, 5], mode: "same", prices: { same: 120 }, active: true,
+              createdAt: addDays(TODAY, -60) + "T09:02:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:20:00.000Z" },
+            { id: "pp-std-flex-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 6], mode: "same", prices: { same: 130 }, active: true,
               createdAt: addDays(TODAY, -20) + "T10:00:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:20:00.000Z" }
           ] },
-        { id: "rp-std-nr", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Non-Refundable Rate", code: "NRF-STD",
-          mealPlan: "Room Only", description: "Lower rate in exchange for a non-refundable, non-changeable booking.",
-          active: true, isDefault: false, createdAt: addDays(TODAY, -60) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z",
-          periods: [
-            { id: "pp-std-nr-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 90 }, active: true,
-              createdAt: addDays(TODAY, -30) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z" },
-            { id: "pp-std-nr-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 99 }, active: true,
-              createdAt: addDays(TODAY, -20) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z" }
-          ] },
-        // Demonstrates "Different Price by Day" — Thu/Fri carry the regional weekend markup.
-        { id: "rp-std-bb", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Breakfast Included", code: "BB-STD",
-          mealPlan: "Breakfast Included", description: "Includes full breakfast for all occupants.",
+        // Narrowed scope: this offer is only sold on the ten first-floor Standard rooms.
+        { id: "rp-std-bb", propertyId: PROPERTY_ID, roomTypeId: "std", scope: "rooms",
+          physicalRoomIds: ["std-101","std-102","std-103","std-104","std-105","std-106","std-107","std-108","std-109","std-110"],
+          name: "Breakfast Included", code: "BB-STD", mealPlan: "Breakfast Included", basePrice: 120, currency: "USD",
+          description: "Includes full breakfast for all occupants. First-floor rooms only.",
           active: true, isDefault: false, createdAt: addDays(TODAY, -55) + "T12:00:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:10:00.000Z",
           periods: [
-            { id: "pp-std-bb-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
+            { id: "pp-std-bb-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
               daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "byday",
-              prices: { "0": 120, "1": 120, "2": 120, "3": 120, "4": 145, "5": 145, "6": 125 }, active: true,
+              prices: { "0": 145, "1": 145, "2": 145, "3": 145, "4": 170, "5": 170, "6": 150 }, active: true,
               createdAt: addDays(TODAY, -30) + "T12:00:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:10:00.000Z" }
           ] },
-        // Demonstrates the inactive-plan state: configured, priced, but not bookable.
-        { id: "rp-std-early", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Early Bird Offer", code: "EB-STD",
-          mealPlan: "Room Only", description: "Advance-purchase offer — currently switched off.",
-          active: false, isDefault: false, createdAt: addDays(TODAY, -40) + "T14:00:00.000Z", updatedAt: addDays(TODAY, -25) + "T14:00:00.000Z",
+        { id: "rp-std-nr", propertyId: PROPERTY_ID, roomTypeId: "std", scope: "roomType", physicalRoomIds: [],
+          name: "Non-Refundable Rate", code: "NRF-STD", mealPlan: "Room Only", basePrice: 90, currency: "USD",
+          description: "Lower rate in exchange for a non-refundable, non-changeable booking.",
+          active: true, isDefault: false, createdAt: addDays(TODAY, -60) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z",
           periods: [
-            { id: "pp-std-early-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 85 }, active: true,
-              createdAt: addDays(TODAY, -40) + "T14:00:00.000Z", updatedAt: addDays(TODAY, -25) + "T14:00:00.000Z" }
+            { id: "pp-std-nr-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 115 }, active: true,
+              createdAt: addDays(TODAY, -20) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z" }
           ] },
+        // Demonstrates the inactive-plan state: configured and priced, but not bookable.
+        { id: "rp-std-early", propertyId: PROPERTY_ID, roomTypeId: "std", scope: "roomType", physicalRoomIds: [],
+          name: "Early Bird Offer", code: "EB-STD", mealPlan: "Room Only", basePrice: 85, currency: "USD",
+          description: "Advance-purchase offer — currently switched off.",
+          active: false, isDefault: false, createdAt: addDays(TODAY, -40) + "T14:00:00.000Z", updatedAt: addDays(TODAY, -25) + "T14:00:00.000Z",
+          periods: [] },
 
-        /* ---- Deluxe Room -------------------------------------------------- */
-        { id: "rp-dlx-flex", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Flexible Rate", code: "FLEX-DLX",
-          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+        /* ---- Deluxe Room (base 120) ----------------------------------------- */
+        { id: "rp-dlx-flex", propertyId: PROPERTY_ID, roomTypeId: "dlx", scope: "roomType", physicalRoomIds: [],
+          name: "Flexible Rate", code: "FLEX-DLX", mealPlan: "Room Only", basePrice: 120, currency: "USD",
+          description: "Fully flexible, free cancellation up to 24 hours before arrival.",
           active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:10:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:22:00.000Z",
           periods: [
-            { id: "pp-dlx-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 130 }, active: true,
+            { id: "pp-dlx-flex-weekend", name: "Weekend Premium", startDate: addDays(TODAY, -30), endDate: addDays(TODAY, 180),
+              daysOfWeek: [4, 5], mode: "same", prices: { same: 140 }, active: true,
+              createdAt: addDays(TODAY, -60) + "T09:12:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:22:00.000Z" },
+            { id: "pp-dlx-flex-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 6], mode: "same", prices: { same: 155 }, active: true,
               createdAt: addDays(TODAY, -20) + "T10:05:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:22:00.000Z" }
           ] },
-        { id: "rp-dlx-bb", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Breakfast Included", code: "BB-DLX",
-          mealPlan: "Breakfast Included", description: "Includes full breakfast for all occupants.",
+        { id: "rp-dlx-bb", propertyId: PROPERTY_ID, roomTypeId: "dlx", scope: "roomType", physicalRoomIds: [],
+          name: "Breakfast Included", code: "BB-DLX", mealPlan: "Breakfast Included", basePrice: 140, currency: "USD",
+          description: "Includes full breakfast for all occupants.",
           active: true, isDefault: false, createdAt: addDays(TODAY, -55) + "T12:05:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:12:00.000Z",
           periods: [
-            { id: "pp-dlx-bb-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
+            { id: "pp-dlx-bb-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
               daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "byday",
-              prices: { "0": 140, "1": 140, "2": 140, "3": 140, "4": 165, "5": 165, "6": 150 }, active: true,
+              prices: { "0": 165, "1": 165, "2": 165, "3": 165, "4": 190, "5": 190, "6": 175 }, active: true,
               createdAt: addDays(TODAY, -30) + "T12:05:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:12:00.000Z" }
           ] },
-        // Sun–Thu only. Fri/Sat resolve to Base Price, and once the base calendar
-        // runs out they become a real Missing Price state — the demo case for §6.10.
-        { id: "rp-dlx-corp", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Corporate Rate", code: "CORP-DLX",
-          mealPlan: "Breakfast Included", description: "Negotiated corporate rate. Business nights only (Sunday–Thursday).",
+        // Sun–Thu only AND strict: Fri/Sat resolve to a real Missing Price state.
+        { id: "rp-dlx-corp", propertyId: PROPERTY_ID, roomTypeId: "dlx", scope: "rooms",
+          physicalRoomIds: ["dlx-301","dlx-302","dlx-303","dlx-304"],
+          name: "Corporate Rate", code: "CORP-DLX", mealPlan: "Breakfast Included", basePrice: 105, currency: "USD",
+          description: "Negotiated corporate rate. Business nights only (Sunday–Thursday), four contracted rooms.",
           active: true, isDefault: false, strictPeriodPricing: true,
           createdAt: addDays(TODAY, -45) + "T08:00:00.000Z", updatedAt: addDays(TODAY, -11) + "T09:30:00.000Z",
           periods: [
@@ -399,28 +409,29 @@
               createdAt: addDays(TODAY, -45) + "T08:00:00.000Z", updatedAt: addDays(TODAY, -11) + "T09:30:00.000Z" }
           ] },
 
-        /* ---- Family Room -------------------------------------------------- */
-        { id: "rp-fam-flex", propertyId: PROPERTY_ID, roomTypeId: "fam", name: "Flexible Rate", code: "FLEX-FAM",
-          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+        /* ---- Family Room (base 150) ----------------------------------------- */
+        { id: "rp-fam-flex", propertyId: PROPERTY_ID, roomTypeId: "fam", scope: "roomType", physicalRoomIds: [],
+          name: "Flexible Rate", code: "FLEX-FAM", mealPlan: "Room Only", basePrice: 150, currency: "USD",
+          description: "Fully flexible, free cancellation up to 24 hours before arrival.",
           active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:15:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:25:00.000Z",
           periods: [
-            { id: "pp-fam-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 160 }, active: true,
+            { id: "pp-fam-flex-weekend", name: "Weekend Premium", startDate: addDays(TODAY, -30), endDate: addDays(TODAY, 180),
+              daysOfWeek: [4, 5], mode: "same", prices: { same: 170 }, active: true,
+              createdAt: addDays(TODAY, -60) + "T09:17:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:25:00.000Z" },
+            { id: "pp-fam-flex-summer", name: "The Summer Vacation", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 6], mode: "same", prices: { same: 185 }, active: true,
               createdAt: addDays(TODAY, -20) + "T10:10:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:25:00.000Z" }
           ] },
-        // Two periods on one plan that overlap on DATES but share no weekday —
-        // the legitimate coexistence the overlap rule is written to allow, plus an
-        // expired period so the Expired state is visible out of the box.
-        { id: "rp-fam-weekend", propertyId: PROPERTY_ID, roomTypeId: "fam", name: "Weekend Offer", code: "WKND-FAM",
-          mealPlan: "Breakfast Included", description: "Weekend family package including breakfast.",
+        // Two periods that overlap on DATES but share no weekday — the legitimate
+        // coexistence the overlap rule allows — plus an expired one for that state.
+        { id: "rp-fam-weekend", propertyId: PROPERTY_ID, roomTypeId: "fam", scope: "roomType", physicalRoomIds: [],
+          name: "Weekend Offer", code: "WKND-FAM", mealPlan: "Breakfast Included", basePrice: 165, currency: "USD",
+          description: "Weekend family package including breakfast.",
           active: true, isDefault: false, createdAt: addDays(TODAY, -50) + "T16:00:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z",
           periods: [
             { id: "pp-fam-weekend-premium", name: "Weekend Premium", startDate: TODAY, endDate: addDays(TODAY, 120),
               daysOfWeek: [4, 5, 6], mode: "same", prices: { same: 195 }, active: true,
               createdAt: addDays(TODAY, -50) + "T16:00:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z" },
-            { id: "pp-fam-weekend-midweek", name: "Midweek Family", startDate: TODAY, endDate: addDays(TODAY, 120),
-              daysOfWeek: [0, 1, 2, 3], mode: "same", prices: { same: 165 }, active: true,
-              createdAt: addDays(TODAY, -50) + "T16:05:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z" },
             { id: "pp-fam-weekend-eid", name: "Eid Holiday 2026", startDate: addDays(TODAY, -90), endDate: addDays(TODAY, -80),
               daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 240 }, active: true,
               createdAt: addDays(TODAY, -120) + "T09:00:00.000Z", updatedAt: addDays(TODAY, -95) + "T09:00:00.000Z" }
@@ -449,12 +460,27 @@
       ]
     };
 
-    // Write each seeded reservation item's booked-price snapshot from the resolver
-    // itself rather than hand-typing nightly maps into the literals above — the two
-    // can then never drift apart, and every seeded reservation demonstrates the same
-    // "price is frozen at booking time" guarantee a wizard-created one gets (§6.11).
+    // Booked-price snapshots for the seeded reservations. These are written EXPLICITLY,
+    // at the rates that were in force when each booking was taken — not derived from
+    // today’s rate plans. That is the whole point of a snapshot: a reservation carries
+    // the price it was sold at, and later rate-plan work cannot reach back and change it.
+    // It also means the demo ships with a visible “booked price differs from today’s
+    // price” case, which Reservation Detail surfaces rather than hides.
+    var BOOKED_NIGHTLY = {
+      "RES-10245-itm-1": 120,  // Deluxe, sold at the pre-Weekend-Premium flat rate
+      "RES-10245-itm-2": 150,  // Family, same
+      "RES-10246-itm-1": 130,  // Standard, sold on a since-retired promotional rate
+      "RES-10247-itm-1": 150,
+      "RES-10248-itm-1": 100
+    };
     seed.reservations.forEach(function (res) {
-      res.rooms.forEach(function (room) { snapshotRoomItemPricing(seed, room, res.checkIn, res.checkOut); });
+      res.rooms.forEach(function (room) {
+        var plan = ratePlanById(seed, room.ratePlanId);
+        if (plan) room.ratePlanName = plan.name;
+        var nightly = {};
+        dateRange(res.checkIn, res.checkOut).forEach(function (d) { nightly[d] = BOOKED_NIGHTLY[room.id]; });
+        room.nightly = nightly;
+      });
     });
     return seed;
   }
@@ -479,6 +505,25 @@
         dirty = false;
         Object.keys(fresh).forEach(function (k) {
           if (!(k in state)) { state[k] = fresh[k]; dirty = true; }
+        });
+
+        // Nested migration for rate plans. Top-level backfill cannot help here — the
+        // `ratePlans` key already exists, but its SHAPE changed when plans gained a
+        // scope and their own base price. Without this, a browser holding older state
+        // would render every plan with a blank price and no scope. Only missing fields
+        // are filled; a plan the user actually edited keeps its own values.
+        (state.ratePlans || []).forEach(function (p) {
+          if (!p.scope) { p.scope = (p.physicalRoomIds && p.physicalRoomIds.length) ? "rooms" : "roomType"; dirty = true; }
+          if (!p.physicalRoomIds) { p.physicalRoomIds = []; dirty = true; }
+          if (p.basePrice == null) {
+            // Fall back to whatever the room type charged — the layer these plans used
+            // to resolve against before they carried a price of their own.
+            var rt = (state.roomTypes || []).find(function (r) { return r.id === p.roomTypeId; });
+            p.basePrice = rt ? rt.baseRate : 0;
+            dirty = true;
+          }
+          if (!p.currency) { p.currency = "USD"; dirty = true; }
+          if (!p.periods) { p.periods = []; dirty = true; }
         });
       } catch (e) {
         state = buildSeed();
@@ -633,6 +678,61 @@
     });
   }
 
+  /* Scope — a plan always belongs to ONE room type (that is what keeps the reservation
+     flow and PG.rateFor() unambiguous), and then either sells across every room of that
+     type or is narrowed to specific physical rooms:
+
+       scope: "roomType"  → all rooms of plan.roomTypeId
+       scope: "rooms"     → only plan.physicalRoomIds (all of which belong to that type)
+
+     "Breakfast Included, Rooms 101–110" is the narrowed form. Narrowing never crosses
+     room types, so a room can never be offered a plan priced for a different type. */
+  function planScopeLabel(state, plan) {
+    if (!plan) return "—";
+    var rt = state.roomTypes.find(function (r) { return r.id === plan.roomTypeId; });
+    var rtName = rt ? rt.name : plan.roomTypeId;
+    if (plan.scope !== "rooms") return rtName;
+    var nums = planScopeRooms(state, plan).map(function (r) { return r.roomNumber; });
+    if (!nums.length) return rtName + " — no rooms selected";
+    return "Rooms " + summarizeRoomNumbers(nums);
+  }
+
+  function planScopeRooms(state, plan) {
+    if (!plan) return [];
+    var all = (state.physicalRooms || []).filter(function (r) { return r.roomTypeId === plan.roomTypeId; });
+    if (plan.scope !== "rooms") return all;
+    var ids = plan.physicalRoomIds || [];
+    return all.filter(function (r) { return ids.indexOf(r.id) > -1; });
+  }
+
+  // "101, 102, 103, 107" → "101–103, 107". Contiguous numeric runs collapse so a plan
+  // covering ten rooms reads as a range instead of a wall of numbers.
+  function summarizeRoomNumbers(nums) {
+    var sorted = nums.slice().sort(function (a, b) { return Number(a) - Number(b); });
+    var out = [], runStart = null, prev = null;
+    function flush() {
+      if (runStart == null) return;
+      out.push(runStart === prev ? String(runStart) : runStart + "–" + prev);
+    }
+    sorted.forEach(function (n) {
+      var v = Number(n);
+      if (prev != null && v === Number(prev) + 1) { prev = n; return; }
+      flush(); runStart = n; prev = n;
+    });
+    flush();
+    return out.join(", ");
+  }
+
+  // Which plans may be sold for a SPECIFIC physical room — the room's type's plans,
+  // minus any narrowed plan that does not list this room.
+  function ratePlansForRoom(state, physicalRoomId, activeOnly) {
+    var room = (state.physicalRooms || []).find(function (r) { return r.id === physicalRoomId; });
+    if (!room) return [];
+    return ratePlansForType(state, room.roomTypeId, activeOnly).filter(function (p) {
+      return p.scope !== "rooms" || (p.physicalRoomIds || []).indexOf(physicalRoomId) > -1;
+    });
+  }
+
   // The plan a bare (roomType, date) price question resolves against — the one
   // flagged isDefault, else the first active plan, else the first plan at all.
   function defaultRatePlanFor(state, roomTypeId) {
@@ -707,15 +807,23 @@
       return out;
     }
     // A plan flagged strictPeriodPricing sells ONLY inside its named periods and
-    // never falls back to the room type's base price. That's what makes Missing
-    // Price a real, reachable state rather than a theoretical one: a contracted
-    // plan restricted to Sun–Thu must not quietly sell Friday at the rack rate
-    // just because a base calendar entry happens to exist for that date.
+    // never falls back to a base price. That's what makes Missing Price a real,
+    // reachable state rather than a theoretical one: a contracted plan restricted
+    // to Sun–Thu must not quietly sell Friday at the rack rate.
     if (plan.strictPeriodPricing) return out;
 
+    // Layer 3 — the plan's OWN base price: the default nightly rate used whenever no
+    // pricing period covers the date. This is the number the Rate Plans tab edits.
+    if (plan.basePrice != null && Number(plan.basePrice) > 0) {
+      out.price = Number(plan.basePrice); out.source = "base"; out.label = "Base Price";
+      return out;
+    }
+
+    // Layer 4 — the room type's own per-date calendar, kept as the fallback for a plan
+    // that has never been given a base price of its own.
     var base = basePriceFor(state, roomTypeId, dateStr);
     if (base != null && base > 0) {
-      out.price = base; out.source = "base"; out.label = "Base Price";
+      out.price = base; out.source = "base"; out.label = "Room Type Rate";
     }
     return out;
   }
@@ -754,10 +862,13 @@
 
   // Error prevention (§3): a reservation may never be confirmed against a plan that
   // is inactive, belongs to another room type, or has no price for one of its nights.
-  function validateRatePlanForStay(state, roomTypeId, ratePlanId, checkIn, checkOut) {
+  function validateRatePlanForStay(state, roomTypeId, ratePlanId, checkIn, checkOut, physicalRoomId) {
     var plan = ratePlanById(state, ratePlanId);
     if (!plan) return { ok: false, reason: "This rate plan no longer exists.", missing: [] };
     if (plan.roomTypeId !== roomTypeId) return { ok: false, reason: "This rate plan belongs to a different room type.", missing: [] };
+    if (physicalRoomId && plan.scope === "rooms" && (plan.physicalRoomIds || []).indexOf(physicalRoomId) === -1) {
+      return { ok: false, reason: "“" + plan.name + "” is limited to specific rooms, and this room is not one of them.", missing: [] };
+    }
     if (!plan.active) return { ok: false, reason: "“" + plan.name + "” is inactive and can’t be used for new reservations.", missing: [] };
     var bd = nightlyBreakdown(state, roomTypeId, ratePlanId, checkIn, checkOut);
     if (!bd.complete) {
@@ -1481,21 +1592,16 @@
     return !!allowed && allowed.indexOf(CURRENT_ROLE) > -1;
   }
 
+  /* Navigation grouped by what the user is trying to DO, not by which developer built
+     it: daily room operations, then the reservation pipeline, then money, then reading,
+     then setup, then admin. Availability & Inventory stays in this array carrying
+     hidden:true so its route, files and logic remain fully intact while every access
+     point to it disappears (same mechanism as superAdminOnly, filtered alongside it). */
   var NAV = [
-    { section: "Hotel Management", items: [
+    { section: "Hotel Operations", items: [
       { key: "dashboard", label: "Dashboard", href: "index.html", icon: "grid" },
       { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" },
-      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
-      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
       { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
-      // Renamed from "Rates": this page manages rate plans, named pricing periods,
-      // and per-day prices — "Rates" undersold all three. The route/file name stays
-      // rates.html so every existing deep link and bookmark keeps working.
-      { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
-      // Hidden by product decision: Operations Calendar is now the primary availability/inventory
-      // workspace. The page, its route, and all its logic are fully intact — only nav visibility
-      // is toggled, reusing the same `hidden` mechanism a future prompt can flip back at any time
-      // (same pattern as `superAdminOnly` below, filtered alongside it in renderSidebar).
       { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar", hidden: true }
     ]},
     { section: "Reservations", items: [
@@ -1511,9 +1617,12 @@
       { key: "inventory-reports", label: "Inventory Reports", href: "inventory-reports.html", icon: "chart" },
       { key: "payment-reports", label: "Payment Reports", href: "payment-reports.html", icon: "chart" }
     ]},
-    { section: "Settings", items: [
-      { key: "policies", label: "Hotel Policies", href: "hotel-policies.html", icon: "shield" },
+    { section: "Hotel Configuration", items: [
+      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
+      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
+      { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
       { key: "taxes", label: "Taxes & Fees", href: "taxes-fees.html", icon: "percent" },
+      { key: "policies", label: "Hotel Policies", href: "hotel-policies.html", icon: "shield" },
       { key: "payment-config", label: "Payment Configuration", href: "payment-configuration.html", icon: "settings" }
     ]},
     { section: "Administration", items: [
@@ -1570,7 +1679,11 @@
     edit: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L20 8l-4-4L4 16v4Z"/><path d="m14 6 4 4"/></svg>',
     trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
     dots: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
-    spark: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>'
+    spark: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M13.7 20a1.9 1.9 0 0 1-3.4 0"/></svg>',
+    grip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>',
+    lockClosed: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11"/></svg>',
+    users: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c1.2-3.4 3.9-5 6.5-5s5.3 1.6 6.5 5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6M18 15.4c1.7.7 3 2.2 3.6 4.6"/></svg>'
   };
 
   // Inline an icon at an explicit size. Every functional control in this app should
@@ -1601,7 +1714,7 @@
   }
 
   var CRUMB_LINKS = {
-    "Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
+    "Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Operations": "index.html", "Hotel Configuration": "hotel-profile.html", "Room Types": "room-types.html",
     "Physical Rooms": "physical-rooms.html", "Rate Plans & Pricing": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
     "New Reservation": "new-reservation.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
     "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
@@ -1616,34 +1729,68 @@
       var href = CRUMB_LINKS[c];
       return href ? '<a href="' + href + '">' + esc(c) + "</a>" : esc(c);
     }).join(' <span>/</span> ');
+
+    /* Demo 1's header carries only: context on the left, global search in the middle,
+       and utility icons plus the user on the right. The "+ New Reservation" and
+       "Reset Demo Data" buttons that used to live here were product/demo actions
+       competing with the page's own primary action — New Reservation now belongs to
+       each page's toolbar, and Reset Demo Data moved into the user menu where a
+       destructive demo-only control belongs. */
     var html = '<header class="pg-header">';
     html += '<div class="pg-header-left">';
     html += '<div class="pg-property-ctx" title="Current property — this pilot has a single hotel, so no switcher is shown">' + ICONS.building + '<span>Palestine Grand Hotel</span></div>';
     html += '<div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
     html += '<div class="pg-gsearch">' +
-      '<input class="pg-gsearch-input" id="pg-gsearch-input" placeholder="Search reservations, guests, rooms, payments…" autocomplete="off" aria-label="Global search">' +
+      '<input class="pg-gsearch-input" id="pg-gsearch-input" placeholder="Search reservations, guests, rooms, payments, rate plans…" autocomplete="off" aria-label="Global search">' +
       '<div class="pg-gsearch-panel" id="pg-gsearch-panel"></div>' +
     "</div>";
     html += '<div class="pg-header-right">';
     if (activeKey === "reservations") {
-      html += '<a class="pg-header-btn" href="reservations-ar.html" title="Switch this screen to Arabic (RTL)">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
+      html += '<a class="btn btn-light btn-sm" href="reservations-ar.html" title="Switch this screen to Arabic (RTL)">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
     }
-    html += '<a class="pg-header-btn" href="new-reservation.html">' + ICONS.plus + " New Reservation</a>";
-    html += '<button class="pg-header-btn" id="pg-reset-btn" title="Reset all prototype data back to the seeded demo state">&#8635; Reset Demo Data</button>';
-    html += '<div class="pg-user"><div class="avatar">HA</div><div><div class="u-name">Hotel Admin</div><div class="u-role">Palestine Grand Hotel</div></div></div>';
+    html += '<button class="btn-icon" id="pg-help-btn" aria-label="Help & support" title="Help & support">' + ICONS.info + '</button>';
+    html += '<button class="btn-icon" id="pg-notif-btn" aria-label="Notifications" title="Notifications">' +
+      '<span class="pg-notif-wrap">' + ICONS.bell + '<span class="pg-notif-dot" aria-hidden="true"></span></span></button>';
+    html += '<div class="pg-user" id="pg-user-menu-btn" tabindex="0" role="button" aria-haspopup="menu" aria-expanded="false">' +
+      '<div class="avatar">HA</div>' +
+      '<div class="u-meta"><div class="u-name">Hotel Admin</div><div class="u-role">Palestine Grand Hotel</div></div>' +
+      '<span class="u-chev">' + ICONS.chevronDown + '</span>' +
+      '<div class="pg-user-menu" id="pg-user-menu" role="menu">' +
+        '<div class="um-head"><div class="avatar">HA</div><div><div class="u-name">Hotel Admin</div>' +
+          '<div class="u-role">admin@palestinegrand.com</div></div></div>' +
+        '<a href="permissions.html" role="menuitem">' + ICONS.lock + ' My Permissions</a>' +
+        '<a href="audit.html" role="menuitem">' + ICONS.clock + ' Audit Log</a>' +
+        '<a href="demo-journey.html" role="menuitem">' + ICONS.play + ' Guided Journey Demo</a>' +
+        '<button type="button" id="pg-reset-btn" role="menuitem" class="danger">' + ICONS.refresh + ' Reset Demo Data</button>' +
+      '</div>' +
+    '</div>';
     html += "</div></header>";
     return html;
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Global search — header search box present on every page (rendered by   */
-  /* renderHeader/mount). Searches reservations, guests, physical rooms      */
-  /* (by number or room type name), and payments (by transaction ref) —     */
-  /* grouped, capped per group, and opened via the same detail pages/deep-   */
-  /* link drawers every other cross-page link in this app already uses.     */
-  /* ---------------------------------------------------------------- */
-  var RECENT_SEARCH_KEY = "pg_recent_searches_v1";
-  var GSEARCH_LIMIT = 6;
+  // The header user menu is the only dropdown in the shell, so it wires itself here
+  // rather than every page repeating the open/close/outside-click plumbing.
+  function wireUserMenu() {
+    var btn = document.getElementById("pg-user-menu-btn");
+    var menu = document.getElementById("pg-user-menu");
+    if (!btn || !menu) return;
+    function setOpen(v) {
+      menu.classList.toggle("show", v);
+      btn.setAttribute("aria-expanded", v ? "true" : "false");
+    }
+    btn.addEventListener("click", function (e) {
+      if (e.target.closest(".pg-user-menu")) return; // let menu items act normally
+      setOpen(!menu.classList.contains("show"));
+    });
+    btn.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!menu.classList.contains("show")); }
+      if (e.key === "Escape") setOpen(false);
+    });
+    document.addEventListener("click", function (e) {
+      if (!btn.contains(e.target)) setOpen(false);
+    });
+  }
+
   function globalSearch(state, query) {
     var q = (query || "").trim().toLowerCase();
     if (!q) return { reservations: [], guests: [], rooms: [], payments: [] };
@@ -1811,6 +1958,7 @@
       }
     });
     wireGlobalSearch();
+    wireUserMenu();
     return document.getElementById("pg-page");
   }
 
@@ -2834,6 +2982,10 @@
     rateFor: rateFor,
     basePriceFor: basePriceFor,
     ratePlansForType: ratePlansForType,
+    ratePlansForRoom: ratePlansForRoom,
+    planScopeLabel: planScopeLabel,
+    planScopeRooms: planScopeRooms,
+    summarizeRoomNumbers: summarizeRoomNumbers,
     defaultRatePlanFor: defaultRatePlanFor,
     ratePlanById: ratePlanById,
     periodTimeState: periodTimeState,

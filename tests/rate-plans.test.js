@@ -74,19 +74,26 @@ var PG = loadPG();
 /* ------------------------------------------------------------------ */
 (function testResolutionOrder() {
   var s = PG.getState();
-  // Non-Refundable's "Standard Season" covers today at a flat 90.
-  var period = PG.resolvePrice(s, 'std', 'rp-std-nr', PG.TODAY);
-  assertEqual('period pricing wins over the base calendar', period.price, 90);
+  // "Weekend Premium" covers Thu/Fri on every default plan, at base + 20.
+  var thursday = PG.dateRange(PG.TODAY, PG.addDays(PG.TODAY, 8)).find(function (d) { return PG.dayOfWeek(d) === 4; });
+  var period = PG.resolvePrice(s, 'std', 'rp-std-flex', thursday);
+  assertEqual('period pricing wins over the plan base price', period.price, 120);
   assertEqual('…and is labelled as a period override', period.source, 'period');
-  assertEqual('…and names the period responsible', period.periodName, 'Standard Season');
+  assertEqual('…and names the period responsible', period.periodName, 'Weekend Premium');
 
-  // The default plan has no period covering today, so it falls through to base.
-  var base = PG.resolvePrice(s, 'std', 'rp-std-flex', PG.TODAY);
-  assertEqual('a plan with no covering period falls back to base price', base.source, 'base');
-  assertEqual('…and matches the base calendar exactly', base.price, PG.basePriceFor(s, 'std', PG.TODAY));
+  // A weekday no period covers falls through to the plan's own base price.
+  var wednesday = PG.dateRange(PG.TODAY, PG.addDays(PG.TODAY, 8)).find(function (d) { return PG.dayOfWeek(d) === 3; });
+  var base = PG.resolvePrice(s, 'std', 'rp-std-flex', wednesday);
+  assertEqual('a date no period covers falls back to the plan base price', base.source, 'base');
+  assertEqual('…and matches the plan base price exactly', base.price, PG.ratePlanById(s, 'rp-std-flex').basePrice);
 
-  s.rateOverrides[PG.overrideKey('std', 'rp-std-nr', PG.TODAY)] = 77;
-  var manual = PG.resolvePrice(s, 'std', 'rp-std-nr', PG.TODAY);
+  // Two plans on the same room type, same night, different prices — the whole reason
+  // a price is resolved by (Room Type + Rate Plan + Date) rather than by date alone.
+  assertEqual('a second plan on the same room type prices the same night differently',
+    PG.resolvePrice(s, 'std', 'rp-std-nr', wednesday).price, 90);
+
+  s.rateOverrides[PG.overrideKey('std', 'rp-std-flex', thursday)] = 77;
+  var manual = PG.resolvePrice(s, 'std', 'rp-std-flex', thursday);
   assertEqual('a manual override beats the pricing period', manual.price, 77);
   assertEqual('…and is labelled as a manual override', manual.source, 'manual');
 })();
@@ -97,17 +104,24 @@ var PG = loadPG();
 /* ------------------------------------------------------------------ */
 (function testPricingModes() {
   var s = PG.getState();
-  // "same" mode — Non-Refundable prices every selected day identically.
+  // Flat pricing — Non-Refundable has no period before summer, so every night this
+  // week resolves to the same plan base price.
   var sameDates = PG.dateRange(PG.TODAY, PG.addDays(PG.TODAY, 7));
   var allSame = sameDates.every(function (d) { return PG.resolvePrice(s, 'std', 'rp-std-nr', d).price === 90; });
-  assert('same-price mode applies one price to every selected day', allSame);
+  assert('a plan with no covering period prices every night at its base price', allSame);
 
-  // "byday" mode — Breakfast Included prices Thu/Fri above the rest.
+  // "same" mode inside a period — the summer period applies one price to all its days.
+  var summerSame = PG.dateRange(PG.addDays(PG.TODAY, 35), PG.addDays(PG.TODAY, 42))
+    .every(function (d) { return PG.resolvePrice(s, 'std', 'rp-std-nr', d).price === 115; });
+  assert('same-price mode applies one price to every selected day of its period', summerSame);
+
+  // "byday" mode — Breakfast Included's summer period prices Thu/Fri above the rest.
   var bb = PG.ratePlanById(s, 'rp-std-bb');
-  var thu = sameDates.find(function (d) { return PG.dayOfWeek(d) === 4; });
-  var mon = sameDates.find(function (d) { return PG.dayOfWeek(d) === 1; });
-  assertEqual('per-day mode prices Thursday from its own weekday slot', PG.resolvePrice(s, 'std', bb.id, thu).price, 145);
-  assertEqual('per-day mode prices Monday from its own weekday slot', PG.resolvePrice(s, 'std', bb.id, mon).price, 120);
+  var summer = PG.dateRange(PG.addDays(PG.TODAY, 35), PG.addDays(PG.TODAY, 49));
+  var thu = summer.find(function (d) { return PG.dayOfWeek(d) === 4; });
+  var mon = summer.find(function (d) { return PG.dayOfWeek(d) === 1; });
+  assertEqual('per-day mode prices Thursday from its own weekday slot', PG.resolvePrice(s, 'std', bb.id, thu).price, 170);
+  assertEqual('per-day mode prices Monday from its own weekday slot', PG.resolvePrice(s, 'std', bb.id, mon).price, 145);
 
   // Day-of-week restriction: Corporate is Sun–Thu only.
   var corp = PG.ratePlanById(s, 'rp-dlx-corp');
@@ -165,7 +179,8 @@ var PG = loadPG();
 
   var allDays = { startDate: PG.TODAY, endDate: PG.addDays(PG.TODAY, 10), daysOfWeek: [0, 1, 2, 3, 4, 5, 6], active: true };
   var conflicts = PG.overlappingPeriods(plan, allDays, null);
-  assert('an all-days period conflicts with both existing weekday-split periods', conflicts.length === 2);
+  assert('an all-days period conflicts with the active weekend period', conflicts.length === 1);
+  assertEqual('…and names it', conflicts[0].name, 'Weekend Premium');
 
   var disjointDates = { startDate: PG.addDays(PG.TODAY, 400), endDate: PG.addDays(PG.TODAY, 430), daysOfWeek: [0, 1, 2, 3, 4, 5, 6], active: true };
   assertEqual('a period outside every existing date range does not conflict', PG.overlappingPeriods(plan, disjointDates, null).length, 0);
@@ -185,7 +200,7 @@ var PG = loadPG();
   assertEqual('a period covering today reads as active', byName['Weekend Premium'], 'active');
   assertEqual('a period entirely in the past reads as expired', byName['Eid Holiday 2026'], 'expired');
 
-  var future = PG.ratePlanById(s, 'rp-std-flex').periods[0];
+  var future = PG.ratePlanById(s, 'rp-std-flex').periods.find(function (p) { return p.name === 'The Summer Vacation'; });
   assertEqual('a period entirely in the future reads as upcoming', PG.periodTimeState(future), 'upcoming');
 })();
 
@@ -195,11 +210,11 @@ var PG = loadPG();
 /* ------------------------------------------------------------------ */
 (function testMultiPeriodBreakdown() {
   var s = PG.getState();
-  // Weekend Offer splits the week: Sun–Wed at 165, Thu–Sat at 195.
+  // Weekend Offer splits the week: base price 165 Sun–Wed, Weekend Premium 195 Thu–Sat.
   var start = PG.dateRange(PG.addDays(PG.TODAY, 7), PG.addDays(PG.TODAY, 21))
     .find(function (d) { return PG.dayOfWeek(d) === 3; }); // start on a Wednesday
   var bd = PG.nightlyBreakdown(s, 'fam', 'rp-fam-weekend', start, PG.addDays(start, 4));
-  assertEqual('a stay crossing two periods reports one group per period', bd.groups.length, 2);
+  assertEqual('a stay crossing a period boundary reports one group per price rule', bd.groups.length, 2);
   assert('…each group names its pricing period', bd.groups.every(function (g) { return !!g.label; }));
   assertEqual('…and the nightly prices sum to the stay subtotal',
     bd.subtotal, bd.nights.reduce(function (a, n) { return a + n.price; }, 0));
@@ -288,6 +303,62 @@ var PG = loadPG();
 
   var backwards = { startDate: '2026-09-14', endDate: '2026-09-01', daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
   assertEqual('an inverted date range affects nothing rather than looping', PG.periodAffectedDates(backwards).length, 0);
+})();
+
+/* ------------------------------------------------------------------ */
+/* Test 12 — Rate plan scope: a plan sells across a whole room type, or is */
+/* narrowed to specific physical rooms. (Acceptance scenarios 5 and 6.)    */
+/* ------------------------------------------------------------------ */
+(function testScope() {
+  var s = PG.getState();
+
+  var wide = PG.ratePlanById(s, 'rp-std-flex');
+  assertEqual('a room-type-scoped plan reports the room type as its scope', wide.scope, 'roomType');
+  assertEqual('…and covers every physical room of that type',
+    PG.planScopeRooms(s, wide).length, s.physicalRooms.filter(function (r) { return r.roomTypeId === 'std'; }).length);
+
+  var narrow = PG.ratePlanById(s, 'rp-std-bb');
+  assertEqual('a room-scoped plan reports specific rooms', narrow.scope, 'rooms');
+  assert('…and covers fewer rooms than the whole type',
+    PG.planScopeRooms(s, narrow).length < PG.planScopeRooms(s, wide).length);
+  assert('…and its scope label names the rooms, not the type', /^Rooms /.test(PG.planScopeLabel(s, narrow)));
+
+  // The rooms a narrowed plan lists are the only ones that may be sold on it.
+  var inScope = PG.planScopeRooms(s, narrow)[0];
+  var outOfScope = s.physicalRooms.find(function (r) {
+    return r.roomTypeId === 'std' && (narrow.physicalRoomIds || []).indexOf(r.id) === -1;
+  });
+  assert('a narrowed plan is offered on a room it lists',
+    PG.ratePlansForRoom(s, inScope.id, true).some(function (p) { return p.id === narrow.id; }));
+  assert('a narrowed plan is NOT offered on a room it does not list',
+    !PG.ratePlansForRoom(s, outOfScope.id, true).some(function (p) { return p.id === narrow.id; }));
+
+  // …and the stay validator refuses it for an out-of-scope room.
+  var bad = PG.validateRatePlanForStay(s, 'std', narrow.id, PG.TODAY, PG.addDays(PG.TODAY, 2), outOfScope.id);
+  assert('booking an out-of-scope room on a narrowed plan is refused', bad.ok === false);
+  assert('…with a reason that explains the restriction', /limited to specific rooms/.test(bad.reason));
+
+  var good = PG.validateRatePlanForStay(s, 'std', narrow.id, PG.TODAY, PG.addDays(PG.TODAY, 2), inScope.id);
+  assert('booking an in-scope room on a narrowed plan is allowed', good.ok === true);
+
+  // Contiguous room numbers collapse into ranges for display.
+  assertEqual('room-number ranges collapse', PG.summarizeRoomNumbers(['101','102','103','107']), '101–103, 107');
+  assertEqual('a single room does not become a range', PG.summarizeRoomNumbers(['204']), '204');
+})();
+
+/* ------------------------------------------------------------------ */
+/* Test 13 — Every plan carries its own base price. (Scenario 7.)       */
+/* ------------------------------------------------------------------ */
+(function testBasePrice() {
+  var s = PG.getState();
+  assert('every rate plan has a base price', s.ratePlans.every(function (p) { return typeof p.basePrice === 'number' && p.basePrice > 0; }));
+
+  // Two plans on one room type with different base prices resolve differently on a
+  // date neither has a period for.
+  var plain = PG.dateRange(PG.TODAY, PG.addDays(PG.TODAY, 8)).find(function (d) { return PG.dayOfWeek(d) === 1; });
+  assertEqual('Flexible resolves to its own base price', PG.resolvePrice(s, 'std', 'rp-std-flex', plain).price, 100);
+  assertEqual('Non-Refundable resolves to its own, lower base price', PG.resolvePrice(s, 'std', 'rp-std-nr', plain).price, 90);
+  assertEqual('Breakfast Included resolves to its own, higher base price', PG.resolvePrice(s, 'std', 'rp-std-bb', plain).price, 120);
 })();
 
 /* ------------------------------------------------------------------ */

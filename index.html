@@ -8,16 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
-  .sum-card{background:#fff;border:1px solid var(--pg-border);border-radius:var(--pg-radius);padding:16px 18px;box-shadow:var(--pg-shadow);cursor:pointer;transition:border-color .12s;}
-  .sum-card:hover{border-color:var(--pg-primary);}
-  .sum-card.static{cursor:default;}
-  .sum-card.static:hover{border-color:var(--pg-border);}
-  .sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:20px;}
-  @media (max-width:1300px){.sum-grid{grid-template-columns:repeat(3,1fr);}}
-  .alert-card{display:flex;gap:12px;padding:14px 16px;border:1px solid var(--pg-border);border-radius:8px;margin-bottom:10px;background:#fff;}
-  .alert-card.sev-danger{border-left:4px solid var(--pg-danger);}
-  .alert-card.sev-warning{border-left:4px solid var(--pg-warning);}
-  .alert-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+  /* KPI cards use the shared .kpi component from style.css — only the grid lives here. */
+  .sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:22px;margin-bottom:22px;}
+  @media (max-width:1500px){.sum-grid{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:820px){.sum-grid{grid-template-columns:repeat(2,1fr);}}
+  .alert-card{display:flex;gap:14px;padding:16px 18px;border:1px solid var(--pg-border);border-radius:var(--pg-radius);margin-bottom:12px;background:#fff;}
+  .alert-card.sev-danger{border-inline-start:4px solid var(--pg-danger);}
+  .alert-card.sev-warning{border-inline-start:4px solid var(--pg-warning);}
+  .alert-icon{width:38px;height:38px;border-radius:var(--pg-radius-btn);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .alert-icon.sev-danger{background:var(--pg-danger-light);color:var(--pg-danger);}
   .alert-icon.sev-warning{background:var(--pg-warning-light);color:#a56a00;}
   .alert-body{flex:1;}
@@ -38,7 +36,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("dashboard", ["Hotel Management", "Dashboard"]);
+var page = PG.mount("dashboard", ["Hotel Operations", "Dashboard"]);
 var s = PG.getState();
 var T = PG.TODAY;
 
@@ -78,26 +76,26 @@ active(s.reservations).forEach(function(r){
     var hoursLeft = (expMs-nowMs)/3600000;
     if (hoursLeft>0 && hoursLeft<=6){
       var mins = Math.round(hoursLeft*60);
-      alerts.push({sev:'danger', icon:'&#9200;', title:'Payment Link Expiring', desc: r.id+' — '+cust(r).name+' — expires in '+(mins>=60?Math.round(mins/60)+'h':mins+'m'),
+      alerts.push({sev:'danger', icon:'clock', title:'Payment Link Expiring', desc: r.id+' — '+cust(r).name+' — expires in '+(mins>=60?Math.round(mins/60)+'h':mins+'m'),
         primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
     }
   }
   if (r.paymentStatus==='Failed'){
-    alerts.push({sev:'danger', icon:'&#9888;', title:'Failed Payment Needs Follow-up', desc: r.id+' — '+cust(r).name+' — payment attempt failed',
+    alerts.push({sev:'danger', icon:'alert', title:'Failed Payment Needs Follow-up', desc: r.id+' — '+cust(r).name+' — payment attempt failed',
       primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
   }
   if (r.paymentStatus==='Expired'){
-    alerts.push({sev:'warning', icon:'&#8987;', title:'Payment Link Expired', desc: r.id+' — '+cust(r).name+' — link expired without payment',
+    alerts.push({sev:'warning', icon:'pause', title:'Payment Link Expired', desc: r.id+' — '+cust(r).name+' — link expired without payment',
       primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
   }
   if (r.paymentStatus==='Refund Pending'){
-    alerts.push({sev:'danger', icon:'&#8617;', title:'Refund Pending', desc: r.id+' — '+cust(r).name+' — refund needs to be recorded',
+    alerts.push({sev:'danger', icon:'refresh', title:'Refund Pending', desc: r.id+' — '+cust(r).name+' — refund needs to be recorded',
       primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
   }
   if (r.paymentStatus==='Payment Required'){
     var ageH = (nowMs - new Date(r.createdAt+':00').getTime())/3600000;
     if (ageH>24){
-      alerts.push({sev:'warning', icon:'&#128179;', title:'Payment Link Not Yet Sent', desc: r.id+' — '+cust(r).name+' — payment required for over 24 hours',
+      alerts.push({sev:'warning', icon:'card', title:'Payment Link Not Yet Sent', desc: r.id+' — '+cust(r).name+' — payment required for over 24 hours',
         primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:true, dedupeKey:'payreq-'+r.id});
     }
   }
@@ -106,10 +104,10 @@ PG.dateRange(T, PG.addDays(T,7)).forEach(function(d){
   s.roomTypes.forEach(function(rt){
     var a = PG.computeAvailability(s, rt.id, d);
     if (a.stopSell){
-      alerts.push({sev:'warning', icon:'&#128683;', title:'Room Type Under Stop Sell', desc: rt.name+' — '+PG.fmtDateShort(d)+' — sales are blocked',
+      alerts.push({sev:'warning', icon:'ban', title:'Room Type Under Stop Sell', desc: rt.name+' — '+PG.fmtDateShort(d)+' — sales are blocked',
         primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:true, dedupeKey:'stop-'+rt.id});
     } else if (a.available>0 && a.available<=2){
-      alerts.push({sev:'warning', icon:'&#9888;', title:'Low Availability', desc: rt.name+' — '+PG.fmtDateShort(d)+' — '+a.available+' room'+(a.available===1?'':'s')+' remaining',
+      alerts.push({sev:'warning', icon:'alert', title:'Low Availability', desc: rt.name+' — '+PG.fmtDateShort(d)+' — '+a.available+' room'+(a.available===1?'':'s')+' remaining',
         primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:true, dedupeKey:'low-'+rt.id});
     }
   });
@@ -120,7 +118,7 @@ alerts = alerts.filter(function(a){ if(!a.dedupeKey) return true; if(seenKeys[a.
 s.reservations.filter(function(r){return r.status==='Draft';}).forEach(function(r){
   var ageH = (nowMs - new Date(r.createdAt+':00').getTime())/3600000;
   if (ageH>24){
-    alerts.push({sev:'warning', icon:'&#128221;', title:'Stale Draft Reservation', desc: r.id+' — '+cust(r).name+' — not updated for over 24 hours',
+    alerts.push({sev:'warning', icon:'note', title:'Stale Draft Reservation', desc: r.id+' — '+cust(r).name+' — not updated for over 24 hours',
       primary:{label:'Open Draft', href:'reservation-detail.html?id='+r.id}, dismissable:false});
   }
 });
@@ -138,14 +136,14 @@ s.physicalRooms.forEach(function(room){
     }
   }
   if (conflict){
-    alerts.push({sev:'danger', icon:'&#9888;', title:'Assignment Conflict', desc: 'Room '+room.roomNumber+' has overlapping reservation/block assignments',
+    alerts.push({sev:'danger', icon:'alert', title:'Assignment Conflict', desc: 'Room '+room.roomNumber+' has overlapping reservation/block assignments',
       primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:false});
   }
 });
 // Rooms Out of Order — a quick operational count, dedupe'd into one alert.
 var oooRooms = s.physicalRooms.filter(function(room){ return PG.roomStatusOn(s, room.id, T)==='Out of Order'; });
 if (oooRooms.length){
-  alerts.push({sev:'warning', icon:'&#128295;', title:'Rooms Out of Order', desc: oooRooms.length+' room'+(oooRooms.length===1?'':'s')+' currently out of order: '+oooRooms.map(function(r){return r.roomNumber;}).join(', '),
+  alerts.push({sev:'warning', icon:'wrench', title:'Rooms Out of Order', desc: oooRooms.length+' room'+(oooRooms.length===1?'':'s')+' currently out of order: '+oooRooms.map(function(r){return r.roomNumber;}).join(', '),
     primary:{label:'View Physical Rooms', href:'physical-rooms.html'}, dismissable:true});
 }
 
@@ -153,22 +151,31 @@ var html = '';
 // Header
 html += '<div class="pg-page-head"><div><h1>Overview</h1><div class="sub">Palestine Grand Hotel &middot; Business date '+PG.fmtDate(T)+' &middot; Last refreshed <span id="refreshedAt"></span></div></div>' +
   '<div class="pg-actions">' +
-    '<button class="btn btn-outline" id="refreshBtn">&#8635; Refresh</button>' +
-    '<a class="btn btn-outline" href="operations-calendar.html">Open Operations Calendar</a>' +
-    '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
+    '<button class="btn btn-outline" id="refreshBtn">'+PG.icon('refresh',15)+' Refresh</button>' +
+    '<a class="btn btn-outline" href="operations-calendar.html">'+PG.icon('calendar',15)+' Open Operations Calendar</a>' +
+    '<a class="btn btn-primary" href="new-reservation.html">'+PG.icon('plus',15)+' New Reservation</a>' +
   '</div></div>';
 
-// Summary cards
-function sumCard(id, label, value, note, href){
-  return '<div class="sum-card'+(href?'':' static')+'" '+(href?'onclick="location.href=\''+href+'\'"':'')+'><div class="kpi-label">'+label+'</div><div class="kpi-value" style="font-size:22px;">'+value+'</div><div class="kpi-note">'+note+'</div></div>';
+// KPI cards — icon container, value, label, supporting context. A card is only
+// clickable when it actually leads somewhere useful (section 9).
+function sumCard(id, label, value, note, href, iconName, tone){
+  var inner = '<div class="kpi-ic '+(tone||'')+'">' + PG.icon(iconName||'grid', 20) + '</div>' +
+    '<div class="kpi-value">'+value+'</div>' +
+    '<div class="kpi-label">'+label+'</div>' +
+    '<div class="kpi-note">'+note+'</div>';
+  return href
+    ? '<a class="kpi" href="'+href+'">' + inner + '</a>'
+    : '<div class="kpi">' + inner + '</div>';
 }
+var bookedValueToday = active(s.reservations).filter(function(r){ return r.checkOut > T && r.checkIn <= PG.addDays(T,30); })
+  .reduce(function(a,r){ return a + reservationTotal(r); }, 0);
 html += '<div class="sum-grid">' +
-  sumCard('a1','Arrivals Today', arrivalsToday.length, arrivalsPendingPay.length+' pending payment', 'reservations.html?arrival='+T) +
-  sumCard('a2','Departures Today', departuresToday.length, 'From reservation departure dates', null) +
-  sumCard('a3','Active Stays', activeStays.length, 'Stay dates include today', null) +
-  sumCard('a4','Occupancy Tonight', occPct+'%', bookedTonight+' of '+totalSellableTonight+' rooms committed', null) +
-  sumCard('a5','Pending Payments', pendingPayList.length, PG.fmtMoney(pendingPayAmount)+' outstanding', 'payments.html?status=Payment Required') +
-  sumCard('a6','Available Tonight', availableTonight+' rooms', 'Across '+typesWithAvail+' room type'+(typesWithAvail===1?'':'s'), 'operations-calendar.html') +
+  sumCard('a1','Occupancy Tonight', occPct+'%', bookedTonight+' of '+totalSellableTonight+' rooms committed', 'operations-calendar.html', 'trend', '') +
+  sumCard('a2','Arrivals Today', arrivalsToday.length, arrivalsPendingPay.length+' pending payment', 'reservations.html?arrival='+T, 'logIn', 'green') +
+  sumCard('a3','Departures Today', departuresToday.length, 'From reservation departure dates', null, 'logOut', 'purple') +
+  sumCard('a4','Available Rooms', availableTonight, 'Tonight, across '+typesWithAvail+' room type'+(typesWithAvail===1?'':'s'), 'physical-rooms.html', 'door', 'gray') +
+  sumCard('a5','Pending Payments', pendingPayList.length, PG.fmtMoney(pendingPayAmount)+' outstanding', 'payments.html?status=Payment Required', 'card', 'amber') +
+  sumCard('a6','Booked Value', PG.fmtMoney(bookedValueToday), 'Active stays, next 30 days', 'reservation-reports.html', 'money', 'green') +
 '</div>';
 
 // Attention Required
@@ -253,10 +260,10 @@ page.innerHTML = html;
 
 function renderAlerts(){
   var box = document.getElementById('alertsBody');
-  if (!alerts.length){ box.innerHTML = '<div class="empty-state"><div class="ic">&#10003;</div>Nothing needs attention right now.</div>'; return; }
+  if (!alerts.length){ box.innerHTML = '<div class="empty-state"><div class="ic">'+PG.icon('check',26)+'</div><strong>All clear</strong>Nothing needs attention right now.</div>'; return; }
   box.innerHTML = alerts.map(function(a, i){
     return '<div class="alert-card sev-'+a.sev+'" data-i="'+i+'">' +
-      '<div class="alert-icon sev-'+a.sev+'">'+a.icon+'</div>' +
+      '<div class="alert-icon sev-'+a.sev+'">'+PG.icon(a.icon,17)+'</div>' +
       '<div class="alert-body"><div class="alert-title">'+a.title+'</div><div class="alert-desc">'+a.desc+'</div>' +
         '<div class="alert-actions"><a class="btn btn-outline btn-sm" href="'+a.primary.href+'">'+a.primary.label+'</a>' +
         (a.dismissable ? '<button class="btn btn-light btn-sm dismiss-alert" data-i="'+i+'">Dismiss</button>' : '') +

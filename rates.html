@@ -8,123 +8,167 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
-  /* Toolbar — search first, then chips, then the segmented range control. */
+  /* Search-first toolbar: search, then chips, then advanced/sort. Never a row of selects. */
   .rp-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
-  .rp-toolbar .grow{flex:1 1 220px;min-width:200px;}
-  .rp-datenav{display:inline-flex;align-items:center;gap:6px;}
-  .rp-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--pg-border);
-    background:#fff;border-radius:6px;color:var(--pg-gray-700);cursor:pointer;}
-  .rp-iconbtn:hover{border-color:var(--pg-gray-400);background:var(--pg-gray-100);}
-  .rp-meta{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--pg-gray-600);margin:12px 0 16px;}
-  .rp-meta strong{color:var(--pg-gray-900);}
+  .rp-toolbar .grow{flex:1 1 260px;min-width:220px;}
+  .rp-chiprow{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:14px;}
+  .rp-chiprow .lbl{font-size:12.5px;font-weight:600;color:var(--pg-gray-500);}
+  .rp-applied{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px;}
 
-  /* ---- Price matrix ---- */
-  /* A fixed-height, two-axis scroll region — the same pattern the Operations Calendar
-     uses. Sticky offsets are relative to THIS box, not the page, so the date header and
-     the rate-plan column both pin correctly and the page body never scrolls sideways. */
-  .pm-wrap{position:relative;overflow:auto;height:calc(100vh - 430px);min-height:340px;}
-  /* Narrow widths: the toolbar stacks and eats vertical space, so give the matrix its
-     own taller box rather than letting it compress into an unreadable strip (§12). */
-  @media (max-width:900px){ .pm-wrap{height:calc(100vh - 300px);min-height:300px;} }
-  .pm{border-collapse:separate;border-spacing:0;width:100%;min-width:760px;}
-  .pm th,.pm td{border-bottom:1px solid var(--pg-border);border-right:1px solid var(--pg-border);padding:8px 10px;font-size:12px;text-align:center;white-space:nowrap;}
-  .pm thead th{position:sticky;top:0;z-index:15;background:var(--pg-gray-100);font-weight:600;}
-  .pm-corner{position:sticky;inset-inline-start:0;z-index:22!important;background:var(--pg-gray-100);text-align:start!important;min-width:210px;}
-  .pm-datehead{min-width:82px;}
-  .pm-datehead .dow{display:block;font-size:10px;color:var(--pg-gray-500);font-weight:500;margin-top:1px;}
-  .pm-datehead.today{background:var(--pg-primary-light);color:var(--pg-primary);}
-  .pm-datehead.weekend{background:#f3f4f8;}
-  .pm-group td{position:sticky;inset-inline-start:0;z-index:12;background:var(--pg-gray-200);text-align:start;
-    font-weight:700;font-size:12px;color:var(--pg-gray-800);}
-  .pm-group .rt-sub{font-weight:500;color:var(--pg-gray-600);margin-inline-start:8px;font-size:11.5px;}
-  .pm-plancell{position:sticky;inset-inline-start:0;z-index:10;background:#fff;text-align:start!important;min-width:210px;}
-  .pm-plancell .pn{font-weight:700;font-size:12.8px;display:flex;align-items:center;gap:6px;}
-  .pm-plancell .ps{font-size:11px;color:var(--pg-gray-500);margin-top:2px;}
-  .pm-cell{cursor:pointer;min-width:82px;position:relative;}
-  .pm-cell:hover{background:var(--pg-primary-light);}
-  .pm-cell.today{box-shadow:inset 0 0 0 1px #b9dcff;}
-  .pm-cell.weekend{background:#fcfcfd;}
-  .pm-cell.weekend:hover{background:var(--pg-primary-light);}
-  .pm-cell:focus-visible{outline:2px solid var(--pg-primary);outline-offset:-2px;}
-  .pm-price{font-weight:700;font-size:13px;color:var(--pg-gray-900);}
-  .pm-src{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin-top:2px;}
-  .src-base{color:var(--pg-gray-500);}
-  .src-period{color:var(--pg-primary);}
-  .src-manual{color:#a56a00;}
-  .src-missing{color:var(--pg-danger);}
-  .pm-price.missing{color:var(--pg-danger);font-size:11.5px;font-weight:700;}
-  .pm-row.inactive .pm-price,.pm-row.inactive .pm-src{opacity:.45;}
-  .pm-row.inactive .pm-plancell{background:var(--pg-gray-100);}
+  /* --- Identity cell shared by both tables --- */
+  .ent{display:flex;align-items:center;gap:11px;min-width:0;}
+  .ent-ic{width:36px;height:36px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .ent-ic.plan{background:var(--pg-primary-light);color:var(--pg-primary);}
+  .ent-ic.period{background:var(--pg-info-light);color:var(--pg-info);}
+  .ent-ic.period.expired{background:var(--pg-gray-200);color:var(--pg-gray-500);}
+  .ent-main{min-width:0;}
+  .ent-name{font-weight:600;font-size:13.5px;color:var(--pg-gray-900);cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;}
+  .ent-name:hover{color:var(--pg-primary);}
+  .ent-sub{font-size:12px;color:var(--pg-gray-500);margin-top:2px;overflow:hidden;text-overflow:ellipsis;}
+  .price-cell{font-weight:600;color:var(--pg-gray-900);font-variant-numeric:tabular-nums;}
+  .price-delta{font-size:11.5px;font-weight:600;margin-top:2px;}
+  .price-delta.up{color:#0BB463;}
+  .price-delta.down{color:var(--pg-danger);}
 
-  .rp-legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--pg-gray-600);margin-top:12px;}
-  .rp-legend .li{display:flex;align-items:center;gap:5px;}
+  /* --- Drawer internals --- */
+  .scope-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;}
+  .scope-chip{display:inline-flex;align-items:center;gap:6px;background:var(--pg-gray-100);
+    border:1px solid var(--pg-border);border-radius:var(--pg-radius-sm);padding:5px 6px 5px 10px;
+    font-size:12px;font-weight:600;color:var(--pg-gray-700);}
+  .scope-chip .x{border:none;background:none;color:var(--pg-gray-400);cursor:pointer;
+    font-size:15px;line-height:1;padding:0 3px;}
+  .scope-chip .x:hover{color:var(--pg-danger);}
+  .scope-room-list{max-height:230px;overflow-y:auto;border:1px solid var(--pg-border);
+    border-radius:var(--pg-radius-btn);margin-top:10px;}
+  .scope-room{display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px dashed var(--pg-gray-200);cursor:pointer;}
+  .scope-room:last-child{border-bottom:none;}
+  .scope-room:hover{background:var(--pg-gray-100);}
+  .scope-room.disabled{opacity:.5;cursor:not-allowed;background:var(--pg-gray-100);}
+  .scope-room input{width:16px;height:16px;accent-color:var(--pg-primary);flex-shrink:0;}
+  .scope-room .rn{font-weight:600;font-size:13px;color:var(--pg-gray-900);}
+  .scope-room .rm{font-size:11.5px;color:var(--pg-gray-500);}
+  .scope-summary{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;
+    background:var(--pg-gray-100);border-radius:var(--pg-radius-btn);font-size:12.5px;margin-top:10px;}
+  .scope-summary strong{color:var(--pg-gray-900);}
 
-  /* ---- Day-of-week + price grid in the period editor ---- */
-  .dow-grid{display:flex;gap:6px;flex-wrap:wrap;}
-  .dow-chip{border:1px solid var(--pg-border);background:#fff;border-radius:6px;padding:6px 11px;font-size:12px;font-weight:600;
-    color:var(--pg-gray-700);cursor:pointer;user-select:none;font-family:var(--pg-font);}
-  .dow-chip.active{border-color:var(--pg-primary);background:var(--pg-primary-light);color:var(--pg-primary);}
-  .dow-chip:focus-visible{outline:2px solid var(--pg-primary);outline-offset:1px;}
-  .byday-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-  @media (max-width:760px){.byday-grid{grid-template-columns:repeat(2,1fr);}}
+  .price-input-wrap{display:flex;align-items:stretch;gap:0;max-width:280px;}
+  .price-input-wrap .cur-pre{display:inline-flex;align-items:center;padding:0 12px;background:var(--pg-gray-100);
+    border:1px solid var(--pg-border-strong);border-right:none;border-radius:var(--pg-radius-btn) 0 0 var(--pg-radius-btn);
+    font-size:12.5px;font-weight:600;color:var(--pg-gray-600);}
+  .price-input-wrap .form-control{border-radius:0;}
+  .price-input-wrap .unit{display:inline-flex;align-items:center;padding:0 12px;background:var(--pg-gray-100);
+    border:1px solid var(--pg-border-strong);border-left:none;border-radius:0 var(--pg-radius-btn) var(--pg-radius-btn) 0;
+    font-size:12.5px;color:var(--pg-gray-600);white-space:nowrap;}
+  html[dir="rtl"] .price-input-wrap .cur-pre{border-right:1px solid var(--pg-border-strong);border-left:none;
+    border-radius:0 var(--pg-radius-btn) var(--pg-radius-btn) 0;}
+  html[dir="rtl"] .price-input-wrap .unit{border-left:1px solid var(--pg-border-strong);border-right:none;
+    border-radius:var(--pg-radius-btn) 0 0 var(--pg-radius-btn);}
+
+  .dow-grid{display:flex;gap:7px;flex-wrap:wrap;}
+  .dow-chip{border:1px solid var(--pg-border-strong);background:#fff;border-radius:var(--pg-radius-btn);
+    padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--pg-gray-600);cursor:pointer;
+    user-select:none;font-family:var(--pg-font);min-width:50px;text-align:center;transition:all .12s;}
+  .dow-chip:hover{border-color:var(--pg-gray-400);}
+  .dow-chip.active{border-color:var(--pg-primary);background:var(--pg-primary);color:#fff;}
+  .dow-chip:focus-visible{outline:2px solid var(--pg-primary);outline-offset:2px;}
+  .byday-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;}
   .byday-grid .form-group{margin-bottom:0;}
   .byday-grid .form-group.off{opacity:.4;}
-  .copy-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
-  .preview-box{border:1px solid var(--pg-border);border-radius:8px;padding:12px 14px;background:var(--pg-gray-100);font-size:12.5px;}
-  .preview-box .pv-line{display:flex;justify-content:space-between;gap:12px;padding:3px 0;}
-  .preview-box .pv-line span:last-child{font-weight:700;color:var(--pg-gray-900);}
+  .byday-grid .form-label{font-size:12px;}
+  .copy-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;}
 
-  /* ---- Rate plan worklist ---- */
-  .rpl-group-head{background:var(--pg-gray-200);font-weight:700;font-size:12px;color:var(--pg-gray-800);}
-  /* Give the identity columns room so plan and period names read on one line. */
-  #rplBody td:first-child{min-width:210px;}
-  #rplBody td:nth-child(2){min-width:110px;}
-  #rplBody td:nth-child(3),#rplBody td:nth-child(4){min-width:150px;}
-  .rpl-name{font-weight:700;font-size:13.5px;color:var(--pg-primary);cursor:pointer;}
-  .rpl-name:hover{text-decoration:underline;}
-  .rpl-sub{font-size:11px;color:var(--pg-gray-500);margin-top:2px;}
-  .period-row{border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
-  .period-row.expired{background:var(--pg-gray-100);}
-  .period-row-top{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-  .period-row-top .pnm{font-weight:700;font-size:13px;}
-  .period-row .pmeta{font-size:11.5px;color:var(--pg-gray-600);margin-top:4px;}
-  .cell-pop-row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:5px 0;}
-  .cell-pop-row span:last-child{font-weight:700;}
+  .preview-box{border:1px solid var(--pg-border);border-radius:var(--pg-radius-btn);
+    background:var(--pg-gray-100);font-size:12.5px;overflow:hidden;}
+  .preview-box .pv-line{display:flex;justify-content:space-between;gap:14px;padding:8px 13px;
+    border-bottom:1px dashed var(--pg-gray-300);}
+  .preview-box .pv-line:last-child{border-bottom:none;}
+  .preview-box .pv-line > span:first-child{color:var(--pg-gray-600);}
+  .preview-box .pv-line > span:last-child{font-weight:600;color:var(--pg-gray-900);text-align:end;}
+  .preview-box .pv-line.total{background:#fff;font-size:13.5px;}
+
+  /* --- Price calendar modal --- */
+  .pcm-wrap{overflow:auto;max-height:54vh;border:1px solid var(--pg-border);border-radius:var(--pg-radius-btn);}
+  .pcm{border-collapse:separate;border-spacing:0;width:100%;min-width:640px;}
+  .pcm th,.pcm td{padding:9px 10px;font-size:12px;text-align:center;white-space:nowrap;
+    border-bottom:1px dashed var(--pg-gray-200);border-right:1px solid var(--pg-border);}
+  .pcm thead th{position:sticky;top:0;z-index:5;background:var(--pg-gray-100);font-weight:600;
+    color:var(--pg-gray-600);font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+  .pcm thead th.today{background:var(--pg-primary-light);color:var(--pg-primary);}
+  .pcm .pcm-plan{position:sticky;inset-inline-start:0;z-index:4;background:#fff;text-align:start;min-width:190px;}
+  .pcm thead .pcm-plan{z-index:6;background:var(--pg-gray-100);}
+  .pcm td.cell{cursor:pointer;}
+  .pcm td.cell:hover{background:var(--pg-primary-light);}
+  .pcm .amt{font-weight:600;color:var(--pg-gray-900);font-variant-numeric:tabular-nums;}
+  .pcm .amt.missing{color:var(--pg-danger);font-size:11px;}
+  .pcm .src{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin-top:2px;}
+  .src-base{color:var(--pg-gray-500);}
+  .src-period{color:var(--pg-primary);}
+  .src-manual{color:#A56A00;}
+  .src-missing{color:var(--pg-danger);}
+  .pcm-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--pg-gray-600);margin-top:14px;}
 </style>
 </head>
 <body>
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("rates", ["Hotel Management", "Rate Plans & Pricing"]);
+var page = PG.mount("rates", ["Hotel Configuration", "Rate Plans & Pricing"]);
 var CAN_VIEW = PG.hasPermission('view_rates');
 var CAN_MANAGE = PG.hasPermission('manage_rates');
 var DOW_LABELS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 var DOW_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-var WEEKEND_DOW = [4,5]; // Thu/Fri — the regional weekend this property prices against
+var WEEKEND_DOW = [4,5];              // Thu/Fri — this property's regional weekend
+var CURRENCY = 'USD';
 var s = PG.getState();
 
 var qp = new URLSearchParams(location.search);
 var ui = {
-  tab: qp.get('plan') ? 'plans' : (qp.get('tab') || 'calendar'),
-  roomType: 'all',
-  planStatus: 'all',
+  tab: (qp.get('tab') === 'periods') ? 'periods' : 'plans',
   search: '',
-  from: PG.TODAY,
-  span: 14,
-  lastRefreshed: new Date()
+  planStatus: 'all',      // all | active | inactive
+  planScope:  'all',      // all | roomType | rooms
+  periodState:'all',      // all | upcoming | active | expired
+  roomType:   'all',
+  ratePlan:   'all',
+  sort: 'name'
 };
 
+/* ================================================================== */
+/* Shared helpers                                                      */
+/* ================================================================== */
 function rtName(id){ var rt = s.roomTypes.find(function(r){return r.id===id;}); return rt ? rt.name : id; }
 function planById(id){ return PG.ratePlanById(s, id); }
-function periodById(planId, periodId){
-  var p = planById(planId); if (!p) return null;
-  return (p.periods||[]).find(function(x){return x.id===periodId;}) || null;
+function newId(p){ return p + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function money(v){ return v == null ? '—' : PG.fmtMoney(v); }
+
+// Every pricing period in the property, flattened and carrying its owning plan — the
+// Pricing Periods tab is a view over these, not over the plans.
+function allPeriods(){
+  var out = [];
+  s.ratePlans.forEach(function(p){
+    (p.periods||[]).forEach(function(pp){ out.push({ plan: p, period: pp, state: PG.periodTimeState(pp) }); });
+  });
+  return out;
 }
-function newId(prefix){ return prefix + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-function timeStateBadge(st){
-  var map = { active:['badge-green','Active'], upcoming:['badge-blue','Upcoming'], expired:['badge-gray','Expired'], inactive:['badge-gray','Inactive'] };
-  var m = map[st] || map.inactive;
+function periodRef(planId, periodId){
+  var p = planById(planId); if (!p) return null;
+  return (p.periods||[]).find(function(x){ return x.id===periodId; }) || null;
+}
+function periodNights(pp){ return PG.periodAffectedDates(pp).length; }
+function periodPriceLabel(pp){
+  if (pp.mode === 'byday'){
+    var vals = (pp.daysOfWeek||[]).map(function(d){ return (pp.prices||{})[String(d)]; })
+      .filter(function(v){ return v != null && v !== ''; }).map(Number);
+    if (!vals.length) return null;
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    return lo === hi ? money(lo) : money(lo) + ' – ' + money(hi);
+  }
+  return (pp.prices||{}).same != null ? money(Number(pp.prices.same)) : null;
+}
+function stateBadge(st){
+  var m = { active:['badge-green','Active'], upcoming:['badge-blue','Upcoming'],
+            expired:['badge-gray','Expired'], inactive:['badge-gray','Switched off'] }[st] || ['badge-gray','—'];
   return '<span class="badge '+m[0]+'"><span class="badge-dot"></span>'+m[1]+'</span>';
 }
 function planStatusBadge(p){
@@ -132,165 +176,84 @@ function planStatusBadge(p){
     ? '<span class="badge badge-green"><span class="badge-dot"></span>Active</span>'
     : '<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>';
 }
-// Which plans a reservation currently depends on — a plan referenced by a booking
-// can be deactivated but never deleted, so no reservation is left pointing at nothing.
 function reservationsUsingPlan(planId){
   return s.reservations.filter(function(r){
     return (r.rooms||[]).some(function(rm){ return rm.ratePlanId === planId; });
   });
 }
-function planPriceRange(p){
-  var vals = [];
-  (p.periods||[]).forEach(function(pp){
-    if (pp.active === false) return;
-    if (pp.mode === 'byday'){
-      (pp.daysOfWeek||[]).forEach(function(d){ var v = (pp.prices||{})[String(d)]; if (v != null && v !== '') vals.push(Number(v)); });
-    } else if (pp.prices && pp.prices.same != null && pp.prices.same !== '') vals.push(Number(pp.prices.same));
-  });
-  if (!vals.length) return null;
-  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
-  return min === max ? PG.fmtMoney(min) : PG.fmtMoney(min) + ' – ' + PG.fmtMoney(max);
-}
-// "Current" means the period actually governing TODAY — matching on weekday as well as
-// dates. A plan split into Weekend Premium (Thu–Sat) and Midweek Family (Sun–Wed) has
-// both in an active date range, but only one prices tonight; naming the wrong one next
-// to tonight's price is exactly the kind of unexplained number §3 exists to prevent.
+// The period actually governing TODAY — matching weekday as well as dates, so the
+// "current period" named next to a price is the one that produced it.
 function currentPeriodOf(p){
-  var periods = p.periods || [];
-  return periods.find(function(pp){ return PG.periodCoversDate(pp, PG.TODAY); })
-    || periods.find(function(pp){ return PG.periodTimeState(pp) === 'active'; })
-    || null;
+  var ps = p.periods || [];
+  return ps.find(function(pp){ return PG.periodCoversDate(pp, PG.TODAY); })
+    || ps.find(function(pp){ return PG.periodTimeState(pp) === 'active'; }) || null;
 }
-function nextPeriodOf(p){
-  return (p.periods||[]).filter(function(pp){ return PG.periodTimeState(pp) === 'upcoming'; })
-    .sort(function(a,b){ return a.startDate < b.startDate ? -1 : 1; })[0] || null;
+function ensureEl(id, cls){
+  var el = document.getElementById(id);
+  if (el) return el;
+  el = document.createElement('div'); el.className = cls; el.id = id;
+  document.body.appendChild(el);
+  return el;
 }
-function visiblePlans(){
-  return s.ratePlans.filter(function(p){
-    if (ui.roomType !== 'all' && p.roomTypeId !== ui.roomType) return false;
-    if (ui.planStatus === 'active' && !p.active) return false;
-    if (ui.planStatus === 'inactive' && p.active) return false;
-    if (ui.search){
-      var hay = (p.name + ' ' + (p.code||'') + ' ' + (p.periods||[]).map(function(x){return x.name;}).join(' ')).toLowerCase();
-      if (hay.indexOf(ui.search.toLowerCase()) === -1) return false;
-    }
-    return true;
-  });
+function drawer(id){ return ensureEl(id, 'pg-drawer-overlay'); }
+function modal(id){ return ensureEl(id, 'pg-modal-overlay'); }
+function emptyRow(cols, icon, title, sub){
+  return '<tr><td colspan="'+cols+'"><div class="empty-state"><div class="ic">' + PG.icon(icon,28) + '</div>' +
+    '<strong>' + title + '</strong>' + sub + '</div></td></tr>';
 }
-function activeFilterChips(){
-  var out = [];
-  if (ui.roomType !== 'all') out.push({key:'roomType', label:'Room Type', value: rtName(ui.roomType)});
-  if (ui.planStatus !== 'all') out.push({key:'planStatus', label:'Status', value: ui.planStatus === 'active' ? 'Active' : 'Inactive'});
-  if (ui.search) out.push({key:'search', label:'Search', value: ui.search});
-  return out;
+function describePeriod(pp){
+  if (!pp) return null;
+  var days = (pp.daysOfWeek||[]).length===7 ? 'all days' : (pp.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join('/');
+  return PG.fmtDateShort(pp.startDate) + '–' + PG.fmtDateShort(pp.endDate) + ', ' + days + ', ' +
+    (pp.mode==='byday' ? 'per-day pricing' : (periodPriceLabel(pp) || 'unpriced') + '/night');
 }
 
 /* ================================================================== */
-/* Page shell                                                          */
+/* Page shell — exactly two underline tabs                             */
 /* ================================================================== */
 function renderShell(){
+  s = PG.getState();
+  var planCount = s.ratePlans.length;
+  var periodCount = allPeriods().length;
+  var onPlans = ui.tab === 'plans';
+
   var html = '';
-  html += '<div class="pg-page-head"><div><h1>Rate Plans &amp; Pricing</h1>' +
-    '<div class="sub">Commercial rate plans per room type, priced through named pricing periods</div></div>' +
-    (CAN_MANAGE ? '<div class="pg-actions">' +
-      '<button class="btn btn-outline" id="addPeriodBtn">' + PG.icon('plus',15) + ' Add Pricing Period</button>' +
-      '<button class="btn btn-primary" id="addPlanBtn">' + PG.icon('plus',15) + ' Add Rate Plan</button>' +
+  html += '<div class="pg-page-head"><div>' +
+      '<h1>' + (onPlans ? 'Rate Plans' : 'Pricing Periods') + '</h1>' +
+      '<div class="sub">' + (onPlans
+        ? 'Create pricing plans and assign them to room types or specific physical rooms.'
+        : 'Override rate-plan prices for named date ranges.') + '</div>' +
+    '</div>' +
+    (CAN_MANAGE ? '<div class="pg-actions">' + (onPlans
+      ? '<button class="btn btn-primary" id="addPlanBtn">' + PG.icon('plus',16) + ' Add Rate Plan</button>'
+      : '<button class="btn btn-primary" id="addPeriodBtn">' + PG.icon('plus',16) + ' Add Pricing Period</button>') +
     '</div>' : '') +
   '</div>';
 
   html += '<div class="pg-tabs" role="tablist">' +
-    '<button class="pg-tab' + (ui.tab==='calendar'?' active':'') + '" role="tab" aria-selected="' + (ui.tab==='calendar') + '" data-tab="calendar">Price Calendar</button>' +
-    '<button class="pg-tab' + (ui.tab==='plans'?' active':'') + '" role="tab" aria-selected="' + (ui.tab==='plans') + '" data-tab="plans">Rate Plans</button>' +
+    '<button class="pg-tab' + (onPlans?' active':'') + '" role="tab" aria-selected="' + onPlans + '" data-tab="plans">' +
+      PG.icon('tag',16) + ' Rate Plans <span class="tab-count">' + planCount + '</span></button>' +
+    '<button class="pg-tab' + (!onPlans?' active':'') + '" role="tab" aria-selected="' + !onPlans + '" data-tab="periods">' +
+      PG.icon('calendar',16) + ' Pricing Periods <span class="tab-count">' + periodCount + '</span></button>' +
   '</div>';
 
   html += '<div id="rpBody"></div>';
   page.innerHTML = html;
 
-  page.querySelectorAll('.pg-tab').forEach(function(t){
-    t.addEventListener('click', function(){ ui.tab = t.dataset.tab; renderShell(); });
+  page.querySelectorAll('.pg-tab').forEach(function(tb){
+    tb.addEventListener('click', function(){ ui.tab = tb.dataset.tab; ui.search=''; renderShell(); });
   });
   if (CAN_MANAGE){
-    document.getElementById('addPlanBtn').addEventListener('click', function(){ location.href = 'rate-plan-form.html'; });
-    document.getElementById('addPeriodBtn').addEventListener('click', function(){ openPeriodPicker(); });
+    var ap = document.getElementById('addPlanBtn');
+    if (ap) ap.addEventListener('click', function(){ openPlanEditor(null); });
+    var pb = document.getElementById('addPeriodBtn');
+    if (pb) pb.addEventListener('click', function(){ openPeriodEditor(null, null); });
   }
-  if (ui.tab === 'calendar') renderCalendarTab(); else renderPlansTab();
+  onPlans ? renderPlansTab() : renderPeriodsTab();
 }
-
-/* Shared filter bar used by both tabs — one control set, one mental model. */
-function filterBarHtml(includeDateNav){
-  var rtChips = [{value:'all', label:'All Room Types'}].concat(s.roomTypes.map(function(rt){
-    return { value: rt.id, label: rt.name, count: PG.ratePlansForType(s, rt.id).length };
-  }));
-  var statusChips = [{value:'all',label:'All'},{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}];
-
-  var html = '<div class="card"><div class="card-body">';
-  html += '<div class="rp-toolbar">';
-  html += '<div class="grow pg-searchwrap"><span class="ic">' + PG.icon('search',15) + '</span>' +
-    '<input class="form-control" id="rpSearch" type="search" placeholder="Search rate plans and pricing periods…" ' +
-    'aria-label="Search rate plans and pricing periods" value="' + PG.esc(ui.search) + '"></div>';
-  if (includeDateNav){
-    html += '<div class="rp-datenav">' +
-      '<button class="rp-iconbtn ic-dir" id="calPrev" aria-label="Previous period" title="Previous period">' + PG.icon('chevronLeft',16) + '</button>' +
-      '<button class="btn btn-light btn-sm" id="calToday">Today</button>' +
-      '<button class="rp-iconbtn ic-dir" id="calNext" aria-label="Next period" title="Next period">' + PG.icon('chevronRight',16) + '</button>' +
-      '<input type="date" class="form-control" id="calFrom" value="' + ui.from + '" aria-label="Calendar start date" style="width:150px;">' +
-    '</div>';
-    html += PG.segmented('span', [
-      {value:'7', label:'7 Days'}, {value:'14', label:'14 Days'}, {value:'30', label:'30 Days'}
-    ], String(ui.span), {ariaLabel:'Date range length'});
-  }
-  html += '</div>';
-
-  html += '<div style="margin-top:12px;">' + PG.filterChips('roomType', rtChips, ui.roomType, {ariaLabel:'Filter by room type'}) + '</div>';
-  html += '<div style="margin-top:8px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">' +
-    '<span class="text-sm muted" style="font-weight:600;">Plan status</span>' +
-    PG.filterChips('planStatus', statusChips, ui.planStatus, {ariaLabel:'Filter by plan status'}) + '</div>';
-
-  var applied = activeFilterChips();
-  if (applied.length){
-    html += '<div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">' +
-      '<span class="text-sm muted">' + applied.length + ' active filter' + (applied.length===1?'':'s') + '</span>' +
-      PG.appliedChips(applied) +
-      '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button></div>';
-  }
-  html += '</div></div>';
-  return html;
-}
-
-function wireFilterBar(includeDateNav){
-  var search = document.getElementById('rpSearch');
-  var t = null;
-  search.addEventListener('input', function(){
-    clearTimeout(t);
-    t = setTimeout(function(){ ui.search = search.value.trim(); rerenderBody(true); }, 200);
-  });
-  PG.wireChips(page, 'roomType', function(v){ ui.roomType = v; rerenderBody(); });
-  PG.wireChips(page, 'planStatus', function(v){ ui.planStatus = v; rerenderBody(); });
-  var clear = document.getElementById('clearFilters');
-  if (clear) clear.addEventListener('click', function(){
-    ui.roomType='all'; ui.planStatus='all'; ui.search=''; rerenderBody();
-  });
-  page.querySelectorAll('[data-remove-filter]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var k = btn.dataset.removeFilter;
-      if (k==='roomType') ui.roomType='all';
-      else if (k==='planStatus') ui.planStatus='all';
-      else if (k==='search') ui.search='';
-      rerenderBody();
-    });
-  });
-  if (includeDateNav){
-    PG.wireSegmented(page, 'span', function(v){ ui.span = +v; rerenderBody(); });
-    document.getElementById('calPrev').addEventListener('click', function(){ ui.from = PG.addDays(ui.from, -ui.span); rerenderBody(); });
-    document.getElementById('calNext').addEventListener('click', function(){ ui.from = PG.addDays(ui.from, ui.span); rerenderBody(); });
-    document.getElementById('calToday').addEventListener('click', function(){ ui.from = PG.TODAY; rerenderBody(); });
-    document.getElementById('calFrom').addEventListener('change', function(){ ui.from = this.value; rerenderBody(); });
-  }
-}
-// Re-renders only the tab body, keeping caret position in the search box when the
-// change came from typing.
-function rerenderBody(keepFocus){
-  if (ui.tab === 'calendar') renderCalendarTab(); else renderPlansTab();
+function rerender(keepFocus){
+  s = PG.getState();
+  ui.tab === 'plans' ? renderPlansTab() : renderPeriodsTab();
   if (keepFocus){
     var el = document.getElementById('rpSearch');
     if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
@@ -298,278 +261,253 @@ function rerenderBody(keepFocus){
 }
 
 /* ================================================================== */
-/* Price Calendar tab                                                  */
+/* TAB 1 — Rate Plans                                                  */
 /* ================================================================== */
-function renderCalendarTab(){
-  s = PG.getState();
-  var days = PG.dateRange(ui.from, PG.addDays(ui.from, ui.span));
-  var plans = visiblePlans();
-
-  var html = filterBarHtml(true);
-
-  html += '<div class="rp-meta">' +
-    '<span>Showing <strong>' + PG.fmtDateShort(days[0]) + ' – ' + PG.fmtDateShort(days[days.length-1]) + '</strong></span>' +
-    '<span><strong>' + plans.length + '</strong> rate plan' + (plans.length===1?'':'s') + ' across <strong>' +
-      (ui.roomType==='all' ? s.roomTypes.length : 1) + '</strong> room type' + ((ui.roomType==='all' && s.roomTypes.length!==1)?'s':'') + '</span>' +
-    '<span>Last refreshed <strong>' + ui.lastRefreshed.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '</strong></span>' +
-    '<button class="btn btn-light btn-sm" id="calRefresh">' + PG.icon('refresh',14) + ' Refresh</button>' +
-  '</div>';
-
-  html += '<div class="card"><div class="card-body no-pad"><div class="pm-wrap"><table class="pm" id="pmTable"></table></div></div></div>';
-
-  html += '<div class="rp-legend">' +
-    '<div class="li"><span class="pm-src src-base">BASE</span> Room type base price (no period covers this date)</div>' +
-    '<div class="li"><span class="pm-src src-period">PERIOD</span> Priced by a named pricing period</div>' +
-    '<div class="li"><span class="pm-src src-manual">MANUAL</span> One-off price set on this cell</div>' +
-    '<div class="li"><span class="pm-src src-missing">NO PRICE</span> Not bookable on this date</div>' +
-  '</div>';
-  html += '<div class="pg-lightweight-note">A price resolves as <strong>Manual Override → Pricing Period → Base Price</strong>. Every cell shows which of the three produced its number, so no figure on this page is unexplained. Click any cell to open the rate plan and pricing period behind it.</div>';
-
-  document.getElementById('rpBody').innerHTML = html;
-  wireFilterBar(true);
-  document.getElementById('calRefresh').addEventListener('click', function(){
-    ui.lastRefreshed = new Date(); rerenderBody(); PG.toast('Price calendar refreshed.', 'success');
+function visiblePlans(){
+  var list = s.ratePlans.filter(function(p){
+    if (ui.planStatus==='active' && !p.active) return false;
+    if (ui.planStatus==='inactive' && p.active) return false;
+    if (ui.planScope==='roomType' && p.scope==='rooms') return false;
+    if (ui.planScope==='rooms' && p.scope!=='rooms') return false;
+    if (ui.roomType!=='all' && p.roomTypeId!==ui.roomType) return false;
+    if (ui.search){
+      var hay = (p.name+' '+(p.code||'')+' '+(p.description||'')+' '+PG.planScopeLabel(s,p)).toLowerCase();
+      if (hay.indexOf(ui.search.toLowerCase())===-1) return false;
+    }
+    return true;
   });
-
-  // ---- matrix ----
-  var thead = '<thead><tr><th class="pm-corner">Rate Plan</th>' + days.map(function(d){
-    var cls = 'pm-datehead' + (d===PG.TODAY ? ' today' : '') + (WEEKEND_DOW.indexOf(PG.dayOfWeek(d))>-1 ? ' weekend' : '');
-    return '<th class="'+cls+'" scope="col">' + PG.fmtDateShort(d) + '<span class="dow">' + PG.weekdayOf(d) + (d===PG.TODAY?' · Today':'') + '</span></th>';
-  }).join('') + '</tr></thead>';
-
-  var body = '';
-  var typeIds = ui.roomType === 'all' ? s.roomTypes.map(function(rt){return rt.id;}) : [ui.roomType];
-  var anyRows = false;
-  typeIds.forEach(function(rtId){
-    var rtPlans = plans.filter(function(p){ return p.roomTypeId === rtId; });
-    if (!rtPlans.length) return;
-    anyRows = true;
-    var rt = s.roomTypes.find(function(r){return r.id===rtId;});
-    body += '<tr class="pm-group"><td colspan="' + (days.length+1) + '">' + PG.esc(rt.name) +
-      '<span class="rt-sub">' + rtPlans.length + ' rate plan' + (rtPlans.length===1?'':'s') +
-      ' · base ' + PG.fmtMoney(rt.baseRate) + '/night</span></td></tr>';
-    rtPlans.forEach(function(p){
-      body += '<tr class="pm-row' + (p.active ? '' : ' inactive') + '">' +
-        '<td class="pm-plancell"><div class="pn">' + PG.esc(p.name) +
-          (p.isDefault ? ' <span class="badge badge-blue" title="Used when a price is asked for without naming a plan">Default</span>' : '') +
-          (p.active ? '' : ' <span class="badge badge-gray">Inactive</span>') +
-        '</div><div class="ps">' + PG.esc(p.mealPlan) + (p.code ? ' · ' + PG.esc(p.code) : '') + '</div></td>';
-      days.forEach(function(d){
-        var r = PG.resolvePrice(s, rtId, p.id, d);
-        var cls = 'pm-cell' + (d===PG.TODAY ? ' today' : '') + (WEEKEND_DOW.indexOf(PG.dayOfWeek(d))>-1 ? ' weekend' : '');
-        var srcCls = 'src-' + r.source;
-        var srcLabel = { base:'Base', period:'Period', manual:'Manual', missing:'No price' }[r.source];
-        var aria = p.name + ', ' + PG.fmtDate(d) + ', ' +
-          (r.price==null ? 'no price' : PG.fmtMoney(r.price) + ', ' + r.label + (r.periodName ? ', ' + r.periodName : ''));
-        body += '<td class="'+cls+'" tabindex="0" role="button" data-rt="'+rtId+'" data-plan="'+p.id+'" data-date="'+d+'" ' +
-          'aria-label="'+PG.esc(aria)+'"' + (r.periodName ? ' title="'+PG.esc(r.periodName)+'"' : '') + '>' +
-          '<div class="pm-price'+(r.price==null?' missing':'')+'">' + (r.price==null ? 'No price' : PG.fmtMoney(r.price)) + '</div>' +
-          '<div class="pm-src '+srcCls+'">' + srcLabel + '</div>' +
-        '</td>';
-      });
-      body += '</tr>';
-    });
-  });
-  if (!anyRows){
-    body = '<tr><td colspan="' + (days.length+1) + '"><div class="empty-state"><div class="ic">' + PG.icon('tag',30) + '</div>' +
-      'No rate plans match these filters.<br><span class="text-sm">Clear the filters, or add a rate plan for this room type.</span></div></td></tr>';
-  }
-  document.getElementById('pmTable').innerHTML = thead + '<tbody>' + body + '</tbody>';
-
-  document.getElementById('pmTable').querySelectorAll('.pm-cell').forEach(function(td){
-    function open(){ openCellDrawer(td.dataset.rt, td.dataset.plan, td.dataset.date); }
-    td.addEventListener('click', open);
-    td.addEventListener('keydown', function(e){ if (e.key==='Enter' || e.key===' '){ e.preventDefault(); open(); } });
-  });
+  var cmp = { name:function(a,b){ return a.name<b.name?-1:1; },
+              price:function(a,b){ return (b.basePrice||0)-(a.basePrice||0); },
+              updated:function(a,b){ return (b.updatedAt||'')<(a.updatedAt||'')?-1:1; } }[ui.sort];
+  return list.sort(cmp);
 }
 
-/* ================================================================== */
-/* Price cell → explains the number, then routes to the right editor.  */
-/* §6.5: clicking a cell must open the rate plan and pricing period    */
-/* behind it — never leave the user hunting for where a price came from.*/
-/* ================================================================== */
-var cellDrawer = null;
-function ensureDrawer(id){
-  var el = document.getElementById(id);
-  if (el) return el;
-  el = document.createElement('div');
-  el.className = 'pg-drawer-overlay';
-  el.id = id;
-  document.body.appendChild(el);
-  return el;
-}
-function openCellDrawer(rtId, planId, dateStr){
-  s = PG.getState();
-  var plan = planById(planId);
-  var r = PG.resolvePrice(s, rtId, planId, dateStr);
-  var base = PG.basePriceFor(s, rtId, dateStr);
-  cellDrawer = ensureDrawer('rpCellDrawer');
-
-  var rows =
-    '<div class="cell-pop-row"><span>Room Type</span><span>' + PG.esc(rtName(rtId)) + '</span></div>' +
-    '<div class="cell-pop-row"><span>Rate Plan</span><span>' + PG.esc(plan.name) + (plan.active?'':' (inactive)') + '</span></div>' +
-    '<div class="cell-pop-row"><span>Date</span><span>' + PG.fmtDate(dateStr) + ' · ' + PG.weekdayOf(dateStr) + '</span></div>' +
-    '<div class="cell-pop-row"><span>Pricing Period</span><span>' + (r.periodName ? PG.esc(r.periodName) : '—') + '</span></div>' +
-    '<div class="cell-pop-row"><span>Price Source</span><span class="src-'+r.source+'">' + r.label + '</span></div>' +
-    '<div class="cell-pop-row"><span>Room type base price</span><span>' + PG.fmtMoney(base) + '</span></div>' +
-    '<div class="cell-pop-row" style="border-top:1px solid var(--pg-border);margin-top:6px;padding-top:10px;font-size:14px;">' +
-      '<span>Price on this date</span><span>' + (r.price==null ? '<span class="src-missing">No price</span>' : PG.fmtMoney(r.price)) + '</span></div>';
-
-  var actions = '';
-  if (CAN_MANAGE){
-    if (r.periodId) actions += '<button class="btn btn-primary" id="cdEditPeriod">' + PG.icon('edit',15) + ' Edit “' + PG.esc(r.periodName) + '”</button>';
-    else actions += '<button class="btn btn-primary" id="cdAddPeriod">' + PG.icon('plus',15) + ' Add Pricing Period</button>';
-  }
-
-  cellDrawer.innerHTML = '<div class="pg-drawer" style="max-width:460px;">' +
-    '<div class="pg-drawer-header"><div><h3>Price Detail</h3>' +
-      '<div class="muted text-sm">' + PG.esc(plan.name) + ' · ' + PG.fmtDateShort(dateStr) + '</div></div>' +
-      '<button class="pg-modal-close" id="cdClose" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
-    '<div class="pg-drawer-body">' +
-      '<div class="preview-box" style="margin-bottom:16px;">' + rows + '</div>' +
-      (r.source==='missing'
-        ? '<div class="help-note help-note-danger">' + PG.icon('alert',16) + '<div>This rate plan has no price for this date, so it can’t be sold on ' + PG.fmtDateShort(dateStr) + '. Add a pricing period that covers this weekday, or set a one-off price below.</div></div>'
-        : r.source==='base'
-          ? '<div class="help-note">' + PG.icon('info',16) + '<div>No pricing period on this plan covers this date, so it falls back to the room type’s base price.</div></div>'
-          : r.source==='manual'
-            ? '<div class="help-note help-note-warning">' + PG.icon('info',16) + '<div>A one-off price was set directly on this cell. It overrides “' + PG.esc((r.periodName||'the pricing period')) + '” and every other rule for this date only.</div></div>'
-            : '') +
-      (CAN_MANAGE ? '<div class="form-group" style="margin-top:16px;"><label class="form-label" for="cdManual">One-off price for this date <span class="opt">(optional)</span></label>' +
-        '<input type="number" min="0.01" step="0.01" class="form-control" id="cdManual" value="' +
-        ((s.rateOverrides||{})[PG.overrideKey(rtId,planId,dateStr)] != null ? (s.rateOverrides||{})[PG.overrideKey(rtId,planId,dateStr)] : '') + '" placeholder="Leave empty to use the rule above">' +
-        '<div class="form-hint">Applies to this one date and this one rate plan. Use a pricing period for anything recurring.</div></div>' : '') +
-      '<div id="cdStatus" role="status" aria-live="polite"></div>' +
-    '</div>' +
-    (CAN_MANAGE ? '<div class="pg-drawer-footer">' +
-      (r.source==='manual' ? '<button class="btn btn-outline" id="cdClearManual">Remove one-off price</button>' : '<span></span>') +
-      '<div style="display:flex;gap:8px;">' + actions +
-      '<button class="btn btn-primary" id="cdSaveManual">Save Price</button></div></div>' : '') +
-  '</div>';
-
-  document.getElementById('cdClose').addEventListener('click', function(){ PG.closeModal('rpCellDrawer'); });
-  if (CAN_MANAGE){
-    var editBtn = document.getElementById('cdEditPeriod');
-    if (editBtn) editBtn.addEventListener('click', function(){
-      PG.closeModal('rpCellDrawer'); openPeriodEditor(planId, r.periodId);
-    });
-    var addBtn = document.getElementById('cdAddPeriod');
-    if (addBtn) addBtn.addEventListener('click', function(){
-      PG.closeModal('rpCellDrawer'); openPeriodEditor(planId, null, { startDate: dateStr, endDate: dateStr });
-    });
-    document.getElementById('cdSaveManual').addEventListener('click', function(){
-      var raw = document.getElementById('cdManual').value.trim();
-      var st = PG.getState();
-      st.rateOverrides = st.rateOverrides || {};
-      var key = PG.overrideKey(rtId, planId, dateStr);
-      var prev = st.rateOverrides[key];
-      if (!raw){
-        if (prev == null){ PG.toast('Nothing to save — no one-off price was entered.', 'warning'); return; }
-        delete st.rateOverrides[key];
-      } else {
-        var val = parseFloat(raw);
-        if (!(val > 0)){
-          document.getElementById('cdStatus').innerHTML = '<div class="help-note help-note-danger">' + PG.icon('alert',16) + '<div>Enter a price greater than 0.</div></div>';
-          return;
-        }
-        st.rateOverrides[key] = Math.round(val*100)/100;
-      }
-      PG.setState(st);
-      PG.addAudit('Rate Changed',
-        plan.name + ' (' + rtName(rtId) + ') — one-off price for ' + PG.fmtDateShort(dateStr) + ' ' +
-          (raw ? 'set to ' + PG.fmtMoney(parseFloat(raw)) : 'removed') + '.', null,
-        { module:'Rate Plans & Pricing', recordId: PG.overrideKey(rtId, planId, dateStr),
-          previousValue: prev != null ? prev : 'none', newValue: raw ? parseFloat(raw) : 'none' });
-      PG.toast(raw ? 'One-off price saved.' : 'One-off price removed.', 'success');
-      PG.closeModal('rpCellDrawer');
-      s = PG.getState(); rerenderBody();
-    });
-    var clearBtn = document.getElementById('cdClearManual');
-    if (clearBtn) clearBtn.addEventListener('click', function(){
-      document.getElementById('cdManual').value = '';
-      document.getElementById('cdSaveManual').click();
-    });
-  }
-  PG.openModal('rpCellDrawer');
-}
-
-/* ================================================================== */
-/* Rate Plans tab — worklist grouped by room type                      */
-/* ================================================================== */
 function renderPlansTab(){
-  s = PG.getState();
   var plans = visiblePlans();
-  var html = filterBarHtml(false);
+  var applied = [];
+  if (ui.roomType!=='all') applied.push({key:'roomType', label:'Room Type', value: rtName(ui.roomType)});
+  if (ui.search) applied.push({key:'search', label:'Search', value: ui.search});
 
-  html += '<div class="rp-meta"><span><strong>' + plans.length + '</strong> rate plan' + (plans.length===1?'':'s') + ' shown</span></div>';
+  var html = '<div class="card"><div class="card-body">';
+  html += '<div class="rp-toolbar">' +
+    '<div class="grow pg-searchwrap"><span class="ic">' + PG.icon('search',15) + '</span>' +
+      '<input class="form-control" id="rpSearch" type="search" placeholder="Search rate plans…" ' +
+      'aria-label="Search rate plans" value="' + PG.esc(ui.search) + '"></div>' +
+    '<button class="btn btn-outline btn-sm" id="advBtn">' + PG.icon('filter',15) + ' Advanced Filters' +
+      (ui.roomType!=='all' ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">1</span>' : '') + '</button>' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<span class="text-sm muted">Sort</span>' +
+      PG.segmented('planSort', [{value:'name',label:'Name'},{value:'price',label:'Price'},{value:'updated',label:'Updated'}], ui.sort, {ariaLabel:'Sort rate plans'}) +
+    '</div>' +
+  '</div>';
+  html += '<div class="rp-chiprow"><span class="lbl">Status</span>' +
+    PG.filterChips('planStatus', [{value:'all',label:'All'},{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}], ui.planStatus, {ariaLabel:'Filter by status'}) +
+    '<span class="lbl" style="margin-inline-start:10px;">Scope</span>' +
+    PG.filterChips('planScope', [{value:'all',label:'All'},{value:'roomType',label:'Room Types'},{value:'rooms',label:'Specific Rooms'}], ui.planScope, {ariaLabel:'Filter by scope'}) +
+  '</div>';
+  if (applied.length){
+    html += '<div class="rp-applied"><span class="text-sm muted">' + applied.length + ' filter' + (applied.length===1?'':'s') + ' applied</span>' +
+      PG.appliedChips(applied) + '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button></div>';
+  }
+  html += '</div></div>';
 
   html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-    '<th scope="col">Rate Plan</th><th scope="col">Room Type</th><th scope="col">Current Pricing Period</th>' +
-    '<th scope="col">Next Upcoming</th><th class="num" scope="col">Price Range</th><th scope="col">Status</th>' +
-    '<th scope="col">Last Updated</th><th scope="col"><span class="sr-only">Actions</span></th>' +
-  '</tr></thead><tbody id="rplBody"></tbody></table></div></div></div>';
-
-  html += '<div class="pg-lightweight-note">A rate plan is a commercial offer attached to a room type; its dates and prices live inside named pricing periods, so an entire season can be edited as one unit instead of date by date.</div>';
+    '<th scope="col">Rate Plan</th><th scope="col">Applies To</th><th class="num" scope="col">Base Price</th>' +
+    '<th scope="col">Current Period</th><th scope="col">Status</th><th scope="col">Last Updated</th>' +
+    '<th scope="col"><span class="sr-only">Actions</span></th>' +
+  '</tr></thead><tbody id="plansBody"></tbody></table></div></div></div>';
 
   document.getElementById('rpBody').innerHTML = html;
-  wireFilterBar(false);
+  wireToolbar();
 
-  var body = '';
-  var typeIds = ui.roomType === 'all' ? s.roomTypes.map(function(rt){return rt.id;}) : [ui.roomType];
-  var any = false;
-  typeIds.forEach(function(rtId){
-    var rtPlans = plans.filter(function(p){ return p.roomTypeId === rtId; });
-    if (!rtPlans.length) return;
-    any = true;
-    body += '<tr class="rpl-group-head"><td colspan="8">' + PG.esc(rtName(rtId)) + ' — ' + rtPlans.length + ' rate plan' + (rtPlans.length===1?'':'s') + '</td></tr>';
-    rtPlans.forEach(function(p){
-      var cur = currentPeriodOf(p), nxt = nextPeriodOf(p), range = planPriceRange(p);
-      body += '<tr>' +
-        '<td><div class="rpl-name" data-view="'+p.id+'" role="button" tabindex="0">' + PG.esc(p.name) +
-            (p.isDefault ? ' <span class="badge badge-blue">Default</span>' : '') + '</div>' +
-          '<div class="rpl-sub">' + PG.esc(p.mealPlan) + (p.code ? ' · ' + PG.esc(p.code) : '') +
-            ' · ' + (p.periods||[]).length + ' period' + ((p.periods||[]).length===1?'':'s') + '</div></td>' +
-        '<td>' + PG.esc(rtName(p.roomTypeId)) + '</td>' +
-        '<td>' + (cur ? '<div style="font-weight:600;">' + PG.esc(cur.name) + '</div><div class="rpl-sub">' +
-            PG.fmtDateShort(cur.startDate) + ' – ' + PG.fmtDateShort(cur.endDate) + '</div>'
-          : '<span class="muted text-sm">No period covers today</span>') + '</td>' +
-        '<td>' + (nxt ? '<div style="font-weight:600;">' + PG.esc(nxt.name) + '</div><div class="rpl-sub">from ' +
-            PG.fmtDateShort(nxt.startDate) + '</div>' : '<span class="muted text-sm">—</span>') + '</td>' +
-        '<td class="num">' + (range || '<span class="muted text-sm">Not priced</span>') + '</td>' +
-        '<td>' + planStatusBadge(p) + '</td>' +
-        '<td class="text-sm">' + (p.updatedAt ? PG.fmtDateShort(p.updatedAt.slice(0,10)) : '—') + '</td>' +
-        '<td style="text-align:end;">' + rowMenu(p) + '</td>' +
-      '</tr>';
-    });
-  });
-  if (!any){
-    body = '<tr><td colspan="8"><div class="empty-state"><div class="ic">' + PG.icon('tag',30) + '</div>' +
-      'No rate plans match these filters.' + (CAN_MANAGE ? '<br><span class="text-sm">Clear the filters, or add a rate plan.</span>' : '') + '</div></td></tr>';
-  }
-  document.getElementById('rplBody').innerHTML = body;
-  wirePlanRows();
+  var body = plans.map(function(p){
+    var cur = currentPeriodOf(p);
+    var scopeRooms = PG.planScopeRooms(s,p).length;
+    return '<tr>' +
+      '<td><div class="ent"><span class="ent-ic plan">' + PG.icon('tag',18) + '</span><div class="ent-main">' +
+        '<span class="ent-name" data-view="'+p.id+'" role="button" tabindex="0">' + PG.esc(p.name) +
+          (p.isDefault ? ' <span class="badge badge-blue">Default</span>' : '') + '</span>' +
+        '<div class="ent-sub">' + PG.esc(p.mealPlan) + (p.code ? ' · ' + PG.esc(p.code) : '') +
+          ' · ' + (p.periods||[]).length + ' pricing period' + ((p.periods||[]).length===1?'':'s') + '</div>' +
+      '</div></div></td>' +
+      '<td><div style="font-weight:600;color:var(--pg-gray-900);">' + PG.esc(PG.planScopeLabel(s,p)) + '</div>' +
+        '<div class="ent-sub">' + PG.esc(rtName(p.roomTypeId)) + ' · ' + scopeRooms + ' room' + (scopeRooms===1?'':'s') + '</div></td>' +
+      '<td class="num"><div class="price-cell">' + money(p.basePrice) + '</div>' +
+        '<div class="ent-sub">' + CURRENCY + ' / night</div></td>' +
+      '<td>' + (cur ? '<div style="font-weight:600;color:var(--pg-gray-900);">' + PG.esc(cur.name) + '</div>' +
+          '<div class="ent-sub">' + PG.fmtDateShort(cur.startDate) + ' – ' + PG.fmtDateShort(cur.endDate) + '</div>'
+        : '<span class="muted text-sm">Base price applies</span>') + '</td>' +
+      '<td>' + planStatusBadge(p) + '</td>' +
+      '<td class="text-sm muted">' + (p.updatedAt ? PG.fmtDateShort(p.updatedAt.slice(0,10)) : '—') + '</td>' +
+      '<td style="text-align:end;">' + planRowMenu(p) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  document.getElementById('plansBody').innerHTML = body || emptyRow(7, 'tag',
+    'No rate plans match these filters',
+    CAN_MANAGE ? 'Clear the filters, or add a rate plan to start selling this room type.' : 'Clear the filters to see all rate plans.');
+  wireRows();
 }
 
-function rowMenu(p){
-  var items = '<button type="button" data-act="view" data-id="'+p.id+'">View Details</button>';
+function planRowMenu(p){
+  var items = '<button type="button" data-act="view" data-id="'+p.id+'">' + PG.icon('info',15) + ' View Details</button>';
   if (CAN_MANAGE){
-    items += '<a href="rate-plan-form.html?id='+p.id+'">Edit Rate Plan</a>' +
-      '<button type="button" data-act="addperiod" data-id="'+p.id+'">Add Pricing Period</button>' +
-      '<button type="button" data-act="duplicate" data-id="'+p.id+'">Duplicate Rate Plan</button>' +
-      '<button type="button" data-act="toggle" data-id="'+p.id+'">' + (p.active ? 'Deactivate' : 'Activate') + '</button>';
-    // Deletion is offered only when nothing depends on the plan; otherwise the menu
-    // says why, rather than presenting an action that would be refused on click.
+    items += '<button type="button" data-act="edit" data-id="'+p.id+'">' + PG.icon('edit',15) + ' Edit Rate Plan</button>' +
+      '<button type="button" data-act="addperiod" data-id="'+p.id+'">' + PG.icon('calendar',15) + ' Add Pricing Period</button>' +
+      '<button type="button" data-act="calendar" data-id="'+p.id+'">' + PG.icon('grid',15) + ' View Price Calendar</button>' +
+      '<button type="button" data-act="duplicate" data-id="'+p.id+'">' + PG.icon('copy',15) + ' Duplicate</button>' +
+      '<button type="button" data-act="toggle" data-id="'+p.id+'">' + PG.icon(p.active?'pause':'check',15) + ' ' + (p.active?'Deactivate':'Activate') + '</button>';
     var deps = reservationsUsingPlan(p.id);
     items += deps.length
-      ? '<button type="button" disabled title="' + deps.length + ' reservation(s) were booked on this plan">Delete (in use)</button>'
-      : '<button type="button" class="danger" data-act="delete" data-id="'+p.id+'">Delete Rate Plan</button>';
+      ? '<button type="button" disabled title="' + deps.length + ' reservation(s) were booked on this plan">' + PG.icon('trash',15) + ' Delete (in use)</button>'
+      : '<button type="button" class="danger" data-act="delete" data-id="'+p.id+'">' + PG.icon('trash',15) + ' Delete Rate Plan</button>';
   }
   return '<div class="more-wrap"><button class="more-btn" aria-label="Actions for ' + PG.esc(p.name) + '" aria-haspopup="menu">' +
     PG.icon('dots',16) + '</button><div class="more-menu" role="menu">' + items + '</div></div>';
 }
 
-function wirePlanRows(){
-  page.querySelectorAll('.rpl-name').forEach(function(el){
-    function go(){ openPlanDrawer(el.dataset.view); }
+/* ================================================================== */
+/* TAB 2 — Pricing Periods                                             */
+/* ================================================================== */
+function visiblePeriods(){
+  return allPeriods().filter(function(x){
+    if (ui.periodState!=='all' && x.state!==ui.periodState) return false;
+    if (ui.roomType!=='all' && x.plan.roomTypeId!==ui.roomType) return false;
+    if (ui.ratePlan!=='all' && x.plan.id!==ui.ratePlan) return false;
+    if (ui.search){
+      var hay = (x.period.name + ' ' + x.plan.name + ' ' + PG.planScopeLabel(s, x.plan)).toLowerCase();
+      if (hay.indexOf(ui.search.toLowerCase())===-1) return false;
+    }
+    return true;
+  }).sort(function(a,b){ return a.period.startDate < b.period.startDate ? -1 : 1; });
+}
+
+function renderPeriodsTab(){
+  var rows = visiblePeriods();
+  var applied = [];
+  if (ui.roomType!=='all') applied.push({key:'roomType', label:'Room Type', value: rtName(ui.roomType)});
+  if (ui.ratePlan!=='all') applied.push({key:'ratePlan', label:'Rate Plan', value: (planById(ui.ratePlan)||{}).name || '—'});
+  if (ui.search) applied.push({key:'search', label:'Search', value: ui.search});
+
+  var counts = {};
+  allPeriods().forEach(function(x){ counts[x.state] = (counts[x.state]||0)+1; });
+  var advCount = applied.filter(function(a){return a.key!=='search';}).length;
+
+  var html = '<div class="card"><div class="card-body">';
+  html += '<div class="rp-toolbar">' +
+    '<div class="grow pg-searchwrap"><span class="ic">' + PG.icon('search',15) + '</span>' +
+      '<input class="form-control" id="rpSearch" type="search" placeholder="Search by period name or rate plan…" ' +
+      'aria-label="Search pricing periods" value="' + PG.esc(ui.search) + '"></div>' +
+    '<button class="btn btn-outline btn-sm" id="advBtn">' + PG.icon('filter',15) + ' Advanced Filters' +
+      (advCount ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">' + advCount + '</span>' : '') + '</button>' +
+  '</div>';
+  html += '<div class="rp-chiprow"><span class="lbl">Status</span>' +
+    PG.filterChips('periodState', [
+      {value:'all',label:'All'},
+      {value:'upcoming',label:'Upcoming', count: counts.upcoming||0},
+      {value:'active',label:'Active', count: counts.active||0},
+      {value:'expired',label:'Expired', count: counts.expired||0}
+    ], ui.periodState, {ariaLabel:'Filter by period status'}) + '</div>';
+  if (applied.length){
+    html += '<div class="rp-applied"><span class="text-sm muted">' + applied.length + ' filter' + (applied.length===1?'':'s') + ' applied</span>' +
+      PG.appliedChips(applied) + '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button></div>';
+  }
+  html += '</div></div>';
+
+  html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+    '<th scope="col">Pricing Period</th><th scope="col">Rate Plan</th><th scope="col">Applies To</th>' +
+    '<th scope="col">Date Range</th><th class="num" scope="col">Price</th><th class="num" scope="col">Nights</th>' +
+    '<th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th>' +
+  '</tr></thead><tbody id="periodsBody"></tbody></table></div></div></div>';
+
+  html += '<div class="pg-lightweight-note">A pricing period overrides an existing rate plan’s base price for a named date range — it never creates a new plan. Reservations already booked keep the price they were sold at.</div>';
+
+  document.getElementById('rpBody').innerHTML = html;
+  wireToolbar();
+
+  var body = rows.map(function(x){
+    var pp = x.period, p = x.plan;
+    var price = periodPriceLabel(pp);
+    var delta = (pp.mode==='same' && (pp.prices||{}).same != null && p.basePrice)
+      ? Number(pp.prices.same) - Number(p.basePrice) : null;
+    return '<tr>' +
+      '<td><div class="ent"><span class="ent-ic period' + (x.state==='expired'?' expired':'') + '">' + PG.icon('calendar',18) + '</span><div class="ent-main">' +
+        '<span class="ent-name" data-editperiod="'+p.id+'|'+pp.id+'" role="button" tabindex="0">' + PG.esc(pp.name) + '</span>' +
+        '<div class="ent-sub">' + ((pp.daysOfWeek||[]).length===7 ? 'All days'
+          : (pp.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join(', ')) +
+          ' · ' + (pp.mode==='byday' ? 'Per-day pricing' : 'One price') + '</div>' +
+      '</div></div></td>' +
+      '<td><div style="font-weight:600;color:var(--pg-gray-900);">' + PG.esc(p.name) + '</div>' +
+        '<div class="ent-sub">Base ' + money(p.basePrice) + '</div></td>' +
+      '<td><div style="font-weight:600;color:var(--pg-gray-900);">' + PG.esc(PG.planScopeLabel(s,p)) + '</div>' +
+        '<div class="ent-sub">' + PG.esc(rtName(p.roomTypeId)) + '</div></td>' +
+      '<td class="text-sm">' + PG.fmtDateShort(pp.startDate) + ' – ' + PG.fmtDateShort(pp.endDate) + '</td>' +
+      '<td class="num"><div class="price-cell">' + (price || '<span class="src-missing">Not priced</span>') + '</div>' +
+        (delta != null && delta !== 0
+          ? '<div class="price-delta ' + (delta>0?'up':'down') + '">' + (delta>0?'+':'−') + money(Math.abs(delta)) + ' vs base</div>'
+          : '<div class="ent-sub">' + CURRENCY + ' / night</div>') + '</td>' +
+      '<td class="num">' + periodNights(pp) + '</td>' +
+      '<td>' + stateBadge(x.state) + '</td>' +
+      '<td style="text-align:end;">' + periodRowMenu(p, pp) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  document.getElementById('periodsBody').innerHTML = body || emptyRow(8, 'calendar',
+    'No pricing periods match these filters',
+    CAN_MANAGE ? 'Rate plans without a pricing period simply sell at their base price.' : 'Clear the filters to see all pricing periods.');
+  wireRows();
+}
+
+function periodRowMenu(p, pp){
+  var items = '<button type="button" data-act="viewperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('info',15) + ' View Rate Plan</button>';
+  if (CAN_MANAGE){
+    items = '<button type="button" data-act="editperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('edit',15) + ' Edit Period</button>' +
+      '<button type="button" data-act="dupperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('copy',15) + ' Duplicate Period</button>' +
+      items +
+      '<button type="button" data-act="toggleperiod" data-id="'+p.id+'|'+pp.id+'">' +
+        PG.icon(pp.active===false?'check':'pause',15) + ' ' + (pp.active===false?'Reactivate':'Deactivate') + '</button>' +
+      '<button type="button" class="danger" data-act="delperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('trash',15) + ' Delete Period</button>';
+  }
+  return '<div class="more-wrap"><button class="more-btn" aria-label="Actions for ' + PG.esc(pp.name) + '" aria-haspopup="menu">' +
+    PG.icon('dots',16) + '</button><div class="more-menu" role="menu">' + items + '</div></div>';
+}
+
+/* ================================================================== */
+/* Toolbar + row wiring (shared by both tabs)                          */
+/* ================================================================== */
+function wireToolbar(){
+  var search = document.getElementById('rpSearch'), timer = null;
+  search.addEventListener('input', function(){
+    clearTimeout(timer);
+    timer = setTimeout(function(){ ui.search = search.value.trim(); rerender(true); }, 200);
+  });
+  PG.wireChips(page, 'planStatus',  function(v){ ui.planStatus = v; rerender(); });
+  PG.wireChips(page, 'planScope',   function(v){ ui.planScope = v; rerender(); });
+  PG.wireChips(page, 'periodState', function(v){ ui.periodState = v; rerender(); });
+  PG.wireSegmented(page, 'planSort', function(v){ ui.sort = v; rerender(); });
+  var clear = document.getElementById('clearFilters');
+  if (clear) clear.addEventListener('click', function(){
+    ui.roomType='all'; ui.ratePlan='all'; ui.search=''; rerender();
+  });
+  page.querySelectorAll('[data-remove-filter]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var k=b.dataset.removeFilter;
+      if (k==='search') ui.search=''; else ui[k]='all';
+      rerender();
+    });
+  });
+  document.getElementById('advBtn').addEventListener('click', openAdvancedFilters);
+}
+
+function wireRows(){
+  page.querySelectorAll('.ent-name').forEach(function(el){
+    function go(){
+      if (el.dataset.view) openPlanDrawer(el.dataset.view);
+      else if (el.dataset.editperiod){
+        var parts = el.dataset.editperiod.split('|');
+        CAN_MANAGE ? openPeriodEditor(parts[0], parts[1]) : openPlanDrawer(parts[0]);
+      }
+    }
     el.addEventListener('click', go);
     el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();go();} });
   });
@@ -582,275 +520,438 @@ function wirePlanRows(){
       if (!wasOpen) menu.classList.add('show');
     });
   });
-  document.addEventListener('click', function(){
-    document.querySelectorAll('.more-menu.show').forEach(function(m){ m.classList.remove('show'); });
-  });
   page.querySelectorAll('[data-act]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      var id = btn.dataset.id, act = btn.dataset.act;
+      var act = btn.dataset.act, id = btn.dataset.id, parts = id.split('|');
       if (act==='view') openPlanDrawer(id);
+      else if (act==='edit') openPlanEditor(id);
       else if (act==='addperiod') openPeriodEditor(id, null);
+      else if (act==='calendar') openPriceCalendar(id);
       else if (act==='duplicate') duplicatePlan(id);
       else if (act==='toggle') togglePlan(id);
       else if (act==='delete') confirmDeletePlan(id);
+      else if (act==='viewperiod') openPlanDrawer(parts[0]);
+      else if (act==='editperiod') openPeriodEditor(parts[0], parts[1]);
+      else if (act==='dupperiod') duplicatePeriod(parts[0], parts[1]);
+      else if (act==='toggleperiod') togglePeriod(parts[0], parts[1]);
+      else if (act==='delperiod') confirmDeletePeriod(parts[0], parts[1]);
     });
   });
 }
+document.addEventListener('click', function(){
+  document.querySelectorAll('.more-menu.show').forEach(function(m){ m.classList.remove('show'); });
+});
 
-function togglePlan(id){
-  var st = PG.getState();
-  var p = st.ratePlans.find(function(x){return x.id===id;});
-  var prev = p.active;
-  p.active = !p.active;
-  p.updatedAt = PG.nowIso();
-  PG.setState(st);
-  PG.addAudit(p.active ? 'Rate Plan Activated' : 'Rate Plan Deactivated',
-    p.name + ' (' + rtName(p.roomTypeId) + ') was ' + (p.active ? 'activated' : 'deactivated') + '.' +
-    (p.active ? '' : ' Existing reservations booked on it keep their booked price.'), null,
-    { module:'Rate Plans & Pricing', recordId:id, previousValue: prev ? 'Active' : 'Inactive', newValue: p.active ? 'Active' : 'Inactive' });
-  PG.toast('Rate plan ' + (p.active ? 'activated' : 'deactivated') + '.', 'success');
-  s = PG.getState(); rerenderBody();
-}
-
-function duplicatePlan(id){
-  var st = PG.getState();
-  var src = st.ratePlans.find(function(x){return x.id===id;});
-  var copy = JSON.parse(JSON.stringify(src));
-  copy.id = newId('rp');
-  copy.name = src.name + ' (Copy)';
-  copy.code = src.code ? src.code + '-C' : null;
-  copy.isDefault = false; // never two defaults on one room type
-  copy.active = false;    // a copy starts switched off so it can't sell before review
-  copy.createdAt = PG.nowIso();
-  copy.updatedAt = PG.nowIso();
-  (copy.periods||[]).forEach(function(pp){ pp.id = newId('pp'); });
-  st.ratePlans.push(copy);
-  PG.setState(st);
-  PG.addAudit('Rate Plan Created', copy.name + ' duplicated from ' + src.name + ' (' + rtName(src.roomTypeId) + '), created inactive with ' + (copy.periods||[]).length + ' pricing period(s).', null,
-    { module:'Rate Plans & Pricing', recordId: copy.id, newValue: copy.name });
-  PG.toast('Rate plan duplicated — review and activate it when ready.', 'success');
-  s = PG.getState(); rerenderBody();
-}
-
-function confirmDeletePlan(id){
-  var p = planById(id);
-  var deps = reservationsUsingPlan(id);
-  var m = ensureModal('rpDeleteModal');
-  m.innerHTML = '<div class="pg-modal" style="max-width:460px;">' +
-    '<div class="pg-modal-header"><h3>Delete Rate Plan</h3>' +
-      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpDeleteModal\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
-    '<div class="pg-modal-body">' +
-      (deps.length
-        ? '<div class="help-note help-note-danger">' + PG.icon('alert',16) + '<div><strong>' + deps.length + ' reservation' + (deps.length===1?'':'s') +
-            '</strong> were booked on “' + PG.esc(p.name) + '”. Deleting it would leave them pointing at a plan that no longer exists. Deactivate it instead — it will stop being offered for new reservations while existing ones keep their booked price.</div></div>'
-        : '<p class="text-sm">Permanently delete <strong>' + PG.esc(p.name) + '</strong> (' + PG.esc(rtName(p.roomTypeId)) + ') and its ' +
-          (p.periods||[]).length + ' pricing period' + ((p.periods||[]).length===1?'':'s') + '?</p>' +
-          '<div class="help-note help-note-warning">' + PG.icon('alert',16) + '<div>This can’t be undone. No reservation currently uses this plan, so nothing on the books is affected.</div></div>') +
+/* Advanced filters — the lower-frequency dimensions, in a drawer, reported back as
+   removable chips so nothing set here becomes invisible state. */
+function openAdvancedFilters(){
+  var d = drawer('rpAdvDrawer');
+  d.innerHTML = '<div class="pg-drawer">' +
+    '<div class="pg-drawer-header"><h3>Advanced Filters</h3>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpAdvDrawer\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+    '<div class="pg-drawer-body">' +
+      '<div class="form-group"><label class="form-label">Room Type</label><div id="advRt"></div></div>' +
+      (ui.tab==='periods' ? '<div class="form-group"><label class="form-label">Rate Plan</label><div id="advPlan"></div></div>' : '') +
     '</div>' +
-    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'rpDeleteModal\')">Cancel</button>' +
-      (deps.length ? '' : '<button class="btn btn-danger" id="rpDelConfirm">Delete Rate Plan</button>') + '</div>' +
+    '<div class="pg-drawer-footer"><button class="btn btn-light" id="advClear">Clear</button>' +
+      '<button class="btn btn-primary" id="advApply">Apply Filters</button></div>' +
   '</div>';
-  if (!deps.length){
-    document.getElementById('rpDelConfirm').addEventListener('click', function(){
-      var st = PG.getState();
-      var idx = st.ratePlans.findIndex(function(x){return x.id===id;});
-      var removed = st.ratePlans[idx];
-      st.ratePlans.splice(idx,1);
-      PG.setState(st);
-      PG.addAudit('Rate Plan Deleted', removed.name + ' (' + rtName(removed.roomTypeId) + ') was permanently deleted.', null,
-        { module:'Rate Plans & Pricing', recordId:id, previousValue: removed.name, newValue:'deleted' });
-      PG.toast('Rate plan deleted.', 'success');
-      PG.closeModal('rpDeleteModal');
-      s = PG.getState(); rerenderBody();
-    });
-  }
-  PG.openModal('rpDeleteModal');
-}
-
-function ensureModal(id){
-  var el = document.getElementById(id);
-  if (el) return el;
-  el = document.createElement('div');
-  el.className = 'pg-modal-overlay';
-  el.id = id;
-  document.body.appendChild(el);
-  return el;
+  var pending = { roomType: ui.roomType, ratePlan: ui.ratePlan };
+  PG.renderCombobox(document.getElementById('advRt'), {
+    placeholder:'All room types', ariaLabel:'Room type', value: ui.roomType==='all'?null:ui.roomType,
+    items: [{id:'all', label:'All room types', sub:'No room-type filter'}].concat(s.roomTypes.map(function(rt){
+      return {id:rt.id, label:rt.name, sub: PG.ratePlansForType(s,rt.id).length + ' rate plans · base ' + money(rt.baseRate)};
+    })),
+    onSelect: function(id){ pending.roomType = id; }
+  });
+  var pc = document.getElementById('advPlan');
+  if (pc) PG.renderCombobox(pc, {
+    placeholder:'All rate plans', ariaLabel:'Rate plan', value: ui.ratePlan==='all'?null:ui.ratePlan,
+    items: [{id:'all', label:'All rate plans', sub:'No plan filter'}].concat(s.ratePlans.map(function(p){
+      return {id:p.id, label:p.name, sub: rtName(p.roomTypeId) + ' · ' + PG.planScopeLabel(s,p) + ' · base ' + money(p.basePrice)};
+    })),
+    onSelect: function(id){ pending.ratePlan = id; }
+  });
+  document.getElementById('advClear').addEventListener('click', function(){
+    ui.roomType='all'; ui.ratePlan='all'; PG.closeModal('rpAdvDrawer'); rerender();
+  });
+  document.getElementById('advApply').addEventListener('click', function(){
+    ui.roomType = pending.roomType || 'all'; ui.ratePlan = pending.ratePlan || 'all';
+    PG.closeModal('rpAdvDrawer'); rerender();
+  });
+  PG.openModal('rpAdvDrawer');
 }
 
 /* ================================================================== */
-/* Rate plan detail drawer (§6.6)                                      */
+/* Rate Plan editor drawer — Basic information / Target scope / Base   */
+/* price. The SAME drawer serves Add and Edit.                         */
+/* ================================================================== */
+function openPlanEditor(planId){
+  s = PG.getState();
+  var existing = planId ? planById(planId) : null;
+  var deps = existing ? reservationsUsingPlan(existing.id) : [];
+  var d = drawer('rpPlanEditor');
+
+  var draft = existing ? {
+    name: existing.name, code: existing.code || '', description: existing.description || '',
+    active: !!existing.active, isDefault: !!existing.isDefault, strict: !!existing.strictPeriodPricing,
+    roomTypeId: existing.roomTypeId, scope: existing.scope || 'roomType',
+    physicalRoomIds: (existing.physicalRoomIds||[]).slice(),
+    mealPlan: existing.mealPlan, basePrice: existing.basePrice
+  } : {
+    name:'', code:'', description:'', active:true, isDefault:false, strict:false,
+    roomTypeId: s.roomTypes[0].id, scope:'roomType', physicalRoomIds:[],
+    mealPlan: s.mealPlans[0], basePrice: s.roomTypes[0].baseRate
+  };
+
+  function roomsOfType(){
+    return s.physicalRooms.filter(function(r){ return r.roomTypeId === draft.roomTypeId; })
+      .sort(function(a,b){ return Number(a.roomNumber) - Number(b.roomNumber); });
+  }
+  // An inactive or non-sellable room can never be a plan target — offering it would
+  // create a plan that prices a room the property cannot actually sell.
+  function roomSelectable(r){ return r.isActive && r.isSellable; }
+
+  function scopeSection(){
+    if (draft.scope !== 'rooms'){
+      var n = roomsOfType().length;
+      return '<div class="form-group"><label class="form-label">Room Type <span class="req">*</span></label>' +
+        '<div id="peRt"></div>' + (deps.length
+          ? '<div class="form-hint">Locked — ' + deps.length + ' reservation(s) are booked on this plan.</div>'
+          : '<div class="form-hint">This plan will be sellable on every room of this type.</div>') + '</div>' +
+        '<div class="scope-summary"><span>Rooms covered</span><strong>' + n + ' ' + PG.esc(rtName(draft.roomTypeId)) + ' room' + (n===1?'':'s') + '</strong></div>';
+    }
+    var rooms = roomsOfType();
+    var picked = rooms.filter(function(r){ return draft.physicalRoomIds.indexOf(r.id)>-1; });
+    return '<div class="form-group"><label class="form-label">Room Type <span class="req">*</span></label><div id="peRt"></div>' +
+      '<div class="form-hint">Specific rooms are always chosen from within one room type, so a plan can never price a room it was not built for.</div></div>' +
+      '<div class="form-group"><label class="form-label">Physical Rooms <span class="req">*</span></label>' +
+      '<div class="scope-room-list" id="peRooms">' + rooms.map(function(r){
+        var ok = roomSelectable(r);
+        var on = draft.physicalRoomIds.indexOf(r.id)>-1;
+        return '<label class="scope-room' + (ok?'':' disabled') + '">' +
+          '<input type="checkbox" value="'+r.id+'"' + (on?' checked':'') + (ok?'':' disabled') + '>' +
+          '<span><span class="rn">Room ' + PG.esc(r.roomNumber) + '</span> ' +
+          '<span class="rm">· Floor ' + r.floor + ' · ' + PG.esc(r.bedConfiguration) +
+          (ok ? '' : ' · ' + (r.isActive ? 'not sellable' : 'inactive')) + '</span></span></label>';
+      }).join('') + '</div>' +
+      '<div class="scope-chips" id="peChips">' + (picked.length
+        ? picked.map(function(r){ return '<span class="scope-chip">Room ' + PG.esc(r.roomNumber) +
+            '<button type="button" class="x" data-unpick="'+r.id+'" aria-label="Remove room ' + PG.esc(r.roomNumber) + '">&times;</button></span>'; }).join('')
+        : '<span class="text-sm muted">No rooms selected yet.</span>') + '</div></div>' +
+      '<div class="scope-summary"><span>Rooms covered</span><strong>' + picked.length + ' of ' + rooms.length + '</strong></div>';
+  }
+
+  function paint(){
+    d.innerHTML = '<div class="pg-drawer pg-drawer-wide">' +
+      '<div class="pg-drawer-header"><div><h3>' + (existing ? 'Edit Rate Plan' : 'Add Rate Plan') + '</h3>' +
+        '<div class="muted text-sm">' + (existing ? PG.esc(existing.name) : 'A commercial offer, priced per night') + '</div></div>' +
+        '<button class="pg-modal-close" onclick="PG.closeModal(\'rpPlanEditor\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+      '<div class="pg-drawer-body">' +
+
+        '<div class="drawer-section">' +
+          '<div class="drawer-section-title">' + PG.icon('note',15) + ' Basic information</div>' +
+          '<div class="form-group"><label class="form-label" for="pe-name">Rate Plan Name <span class="req">*</span></label>' +
+            '<input class="form-control" id="pe-name" value="'+PG.esc(draft.name)+'" placeholder="e.g. Breakfast Included">' +
+            '<div class="form-hint">Name the offer, not a season — date ranges belong to pricing periods.</div></div>' +
+          '<div class="grid-2" style="margin-bottom:0;gap:14px;">' +
+            '<div class="form-group"><label class="form-label" for="pe-code">Internal Code <span class="opt">(optional)</span></label>' +
+              '<input class="form-control" id="pe-code" value="'+PG.esc(draft.code)+'" placeholder="e.g. BB-STD"></div>' +
+            '<div class="form-group"><label class="form-label">Meal Plan</label><div id="pe-meal"></div></div>' +
+          '</div>' +
+          '<div class="form-group"><label class="form-label" for="pe-desc">Description <span class="opt">(optional)</span></label>' +
+            '<textarea class="form-control" id="pe-desc" rows="2" placeholder="Short summary of what this offer includes">'+PG.esc(draft.description)+'</textarea></div>' +
+          '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Status</label>' +
+            '<label class="pg-switch"><input type="checkbox" id="pe-active"' + (draft.active?' checked':'') + '><span class="track"></span>' +
+            '<span class="text-sm">Active — available for new reservations</span></label></div>' +
+        '</div>' +
+
+        '<div class="drawer-section">' +
+          '<div class="drawer-section-title">' + PG.icon('door',15) + ' Target scope</div>' +
+          '<div class="form-group">' +
+            PG.segmented('peScope', [{value:'roomType',label:'Room Type'},{value:'rooms',label:'Specific Physical Rooms'}], draft.scope, {ariaLabel:'Target scope'}) +
+          '</div>' +
+          '<div id="peScopeBody">' + scopeSection() + '</div>' +
+        '</div>' +
+
+        '<div class="drawer-section">' +
+          '<div class="drawer-section-title">' + PG.icon('money',15) + ' Base price</div>' +
+          '<div class="form-group"><label class="form-label" for="pe-base">Amount <span class="req">*</span></label>' +
+            '<div class="price-input-wrap"><span class="cur-pre">' + CURRENCY + '</span>' +
+            '<input type="number" min="0.01" step="0.01" class="form-control" id="pe-base" value="'+(draft.basePrice!=null?draft.basePrice:'')+'">' +
+            '<span class="unit">/ night</span></div></div>' +
+          '<div class="help-note">' + PG.icon('info',16) + '<div>This is the default nightly price for this plan. ' +
+            '<strong>Pricing Periods can override this base price for selected dates.</strong></div></div>' +
+          '<div class="form-group" style="margin-top:18px;"><label class="form-label">Dates no pricing period covers</label>' +
+            PG.segmented('peStrict', [{value:'0',label:'Sell at base price'},{value:'1',label:'Not sellable'}], draft.strict?'1':'0', {ariaLabel:'Behavior outside pricing periods'}) +
+            '<div class="form-hint">“Not sellable” shows <strong>No price</strong> instead of quietly selling — use it for contracted plans limited to specific days.</div></div>' +
+          '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Default plan for this room type</label>' +
+            '<label class="pg-switch"><input type="checkbox" id="pe-default"' + (draft.isDefault?' checked':'') + '><span class="track"></span>' +
+            '<span class="text-sm">Use this plan when a price is requested without naming one</span></label>' +
+            '<div class="form-hint">Exactly one per room type — turning this on moves the flag off whichever plan holds it.</div></div>' +
+        '</div>' +
+
+        '<div id="peStatus" role="status" aria-live="polite"></div>' +
+      '</div>' +
+      '<div class="pg-drawer-footer">' +
+        '<button class="btn btn-light" onclick="PG.closeModal(\'rpPlanEditor\')">Cancel</button>' +
+        '<button class="btn btn-primary" id="peSave">' + (existing ? 'Save Changes' : 'Create Rate Plan') + '</button>' +
+      '</div>' +
+    '</div>';
+
+    PG.renderCombobox(document.getElementById('peRt'), {
+      placeholder:'Select a room type', ariaLabel:'Room type', value: draft.roomTypeId,
+      items: s.roomTypes.map(function(rt){
+        return { id:rt.id, label:rt.name,
+          sub: s.physicalRooms.filter(function(r){return r.roomTypeId===rt.id;}).length + ' physical rooms · base ' + money(rt.baseRate),
+          disabled: deps.length>0, reason: deps.length ? 'Locked while reservations are booked on this plan' : null };
+      }),
+      onSelect: function(id){ draft.roomTypeId = id; draft.physicalRoomIds = []; paint(); }
+    });
+    PG.renderManagedSelect(document.getElementById('pe-meal'), {
+      value: draft.mealPlan,
+      getList: function(){ return PG.getState().mealPlans; },
+      setList: function(list){ var st=PG.getState(); st.mealPlans=list; PG.setState(st); },
+      onChange: function(v){ draft.mealPlan = v; },
+      placeholder: 'e.g. All Inclusive'
+    });
+    document.getElementById('pe-name').addEventListener('input', function(){ draft.name=this.value; });
+    document.getElementById('pe-code').addEventListener('input', function(){ draft.code=this.value; });
+    document.getElementById('pe-desc').addEventListener('input', function(){ draft.description=this.value; });
+    document.getElementById('pe-base').addEventListener('input', function(){ draft.basePrice=this.value; });
+    document.getElementById('pe-active').addEventListener('change', function(){ draft.active=this.checked; });
+    document.getElementById('pe-default').addEventListener('change', function(){ draft.isDefault=this.checked; });
+    PG.wireSegmented(d, 'peScope', function(v){ draft.scope=v; paint(); });
+    PG.wireSegmented(d, 'peStrict', function(v){ draft.strict = v==='1'; });
+
+    var roomBox = document.getElementById('peRooms');
+    if (roomBox) roomBox.addEventListener('change', function(e){
+      var cb = e.target.closest('input[type=checkbox]'); if (!cb) return;
+      var i = draft.physicalRoomIds.indexOf(cb.value);
+      if (cb.checked && i===-1) draft.physicalRoomIds.push(cb.value);
+      if (!cb.checked && i>-1) draft.physicalRoomIds.splice(i,1);
+      paint();
+    });
+    d.querySelectorAll('[data-unpick]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var i = draft.physicalRoomIds.indexOf(b.dataset.unpick);
+        if (i>-1) draft.physicalRoomIds.splice(i,1);
+        paint();
+      });
+    });
+
+    document.getElementById('peSave').addEventListener('click', function(){ savePlan(this); });
+  }
+
+  function savePlan(btn){
+    var status = document.getElementById('peStatus');
+    var errs = [];
+    if (!draft.name.trim()) errs.push('A rate plan name is required.');
+    var dupe = s.ratePlans.some(function(p){
+      return p.id !== (existing?existing.id:null) && p.roomTypeId === draft.roomTypeId &&
+        p.name.trim().toLowerCase() === draft.name.trim().toLowerCase();
+    });
+    if (dupe) errs.push('Another rate plan on this room type already uses this name.');
+    if (!(Number(draft.basePrice) > 0)) errs.push('Enter a base price greater than 0.');
+    if (draft.scope==='rooms' && !draft.physicalRoomIds.length) errs.push('Select at least one physical room for this plan.');
+    if (errs.length){
+      status.innerHTML = '<div class="help-note help-note-danger" style="margin-top:6px;">' + PG.icon('alert',16) +
+        '<div>' + errs.map(PG.esc).join('<br>') + '</div></div>';
+      return;
+    }
+    status.innerHTML = '';
+    btn.disabled = true; btn.textContent = 'Saving…';
+    setTimeout(function(){
+      try {
+        var st = PG.getState();
+        var prev = null;
+        if (draft.isDefault){
+          st.ratePlans.forEach(function(p){
+            if (p.roomTypeId === draft.roomTypeId && (!existing || p.id !== existing.id)) p.isDefault = false;
+          });
+        }
+        var target;
+        if (existing){
+          target = st.ratePlans.find(function(p){ return p.id===existing.id; });
+          if (!target) throw new Error('This rate plan no longer exists.');
+          prev = target.name + ' · base ' + money(target.basePrice) + ' · ' + PG.planScopeLabel(st, target);
+        } else {
+          target = { id: newId('rp'), propertyId: st.hotel.propertyCode, periods: [], createdAt: PG.nowIso() };
+          st.ratePlans.push(target);
+        }
+        target.name = draft.name.trim();
+        target.code = draft.code.trim() || null;
+        target.description = draft.description.trim();
+        target.roomTypeId = draft.roomTypeId;
+        target.scope = draft.scope;
+        target.physicalRoomIds = draft.scope==='rooms' ? draft.physicalRoomIds.slice() : [];
+        target.mealPlan = draft.mealPlan;
+        target.basePrice = Math.round(Number(draft.basePrice)*100)/100;
+        target.currency = CURRENCY;
+        target.active = draft.active;
+        target.isDefault = draft.isDefault;
+        target.strictPeriodPricing = draft.strict;
+        target.updatedAt = PG.nowIso();
+        PG.setState(st);
+
+        var after = target.name + ' · base ' + money(target.basePrice) + ' · ' + PG.planScopeLabel(st, target);
+        PG.addAudit(existing ? 'Rate Plan Updated' : 'Rate Plan Created',
+          target.name + ' (' + rtName(target.roomTypeId) + ') — ' + PG.planScopeLabel(st, target) +
+          ', base ' + money(target.basePrice) + ' / night, ' + (target.active?'active':'inactive') +
+          '. Reservations already booked keep their booked price.', null,
+          { module:'Rate Plans & Pricing', recordId: target.id, previousValue: prev, newValue: after });
+
+        PG.toast(existing ? 'Rate plan updated.' : 'Rate plan created.', 'success');
+        PG.closeModal('rpPlanEditor');
+        s = PG.getState(); renderShell();
+      } catch(e){
+        btn.disabled = false; btn.textContent = existing ? 'Save Changes' : 'Create Rate Plan';
+        status.innerHTML = '<div class="help-note help-note-danger" style="margin-top:6px;">' + PG.icon('alert',16) +
+          '<div>Couldn’t save — ' + PG.esc(e.message) + ' Nothing was changed.</div></div>';
+        PG.toast('Couldn’t save the rate plan.', 'danger');
+      }
+    }, 400);
+  }
+
+  paint();
+  PG.openModal('rpPlanEditor');
+}
+
+/* ================================================================== */
+/* Rate Plan details drawer                                            */
 /* ================================================================== */
 function openPlanDrawer(planId){
   s = PG.getState();
   var p = planById(planId);
   if (!p) return;
-  var d = ensureDrawer('rpPlanDrawer');
+  var d = drawer('rpPlanDrawer');
   var cur = currentPeriodOf(p);
-  var todayPrice = PG.resolvePrice(s, p.roomTypeId, p.id, PG.TODAY);
+  var today = PG.resolvePrice(s, p.roomTypeId, p.id, PG.TODAY);
+  var periods = (p.periods||[]).slice().sort(function(a,b){ return a.startDate<b.startDate?-1:1; });
+  var groups = [
+    ['Active', periods.filter(function(x){return PG.periodTimeState(x)==='active';})],
+    ['Upcoming', periods.filter(function(x){return PG.periodTimeState(x)==='upcoming';})],
+    ['Switched off', periods.filter(function(x){return PG.periodTimeState(x)==='inactive';})],
+    ['Expired', periods.filter(function(x){return PG.periodTimeState(x)==='expired';})]
+  ];
 
   function periodCard(pp){
-    var st = PG.periodTimeState(pp);
-    var priceText = pp.mode==='byday'
-      ? (pp.daysOfWeek||[]).map(function(dw){
-          var v=(pp.prices||{})[String(dw)];
-          return DOW_SHORT[dw] + ' ' + (v!=null&&v!=='' ? PG.fmtMoney(Number(v)) : '—');
-        }).join(' · ')
-      : ((pp.prices||{}).same != null ? PG.fmtMoney(Number(pp.prices.same)) + ' / night' : 'Not priced');
-    return '<div class="period-row' + (st==='expired'?' expired':'') + '">' +
-      '<div class="period-row-top"><div class="pnm">' + PG.esc(pp.name) + '</div>' + timeStateBadge(st) + '</div>' +
-      '<div class="pmeta">' + PG.fmtDateShort(pp.startDate) + ' – ' + PG.fmtDateShort(pp.endDate) + ' · ' +
-        ((pp.daysOfWeek||[]).length === 7 ? 'All days' : (pp.daysOfWeek||[]).map(function(dw){return DOW_SHORT[dw];}).join(', ')) + '</div>' +
-      '<div class="pmeta" style="color:var(--pg-gray-800);font-weight:600;">' + priceText + '</div>' +
-      (CAN_MANAGE ? '<div style="margin-top:8px;display:flex;gap:8px;">' +
-        '<button class="btn btn-light btn-sm" data-editperiod="'+pp.id+'">' + PG.icon('edit',14) + ' Edit Period</button>' +
-        '<button class="btn btn-light btn-sm" data-dupperiod="'+pp.id+'">' + PG.icon('copy',14) + ' Duplicate</button>' +
-      '</div>' : '') +
+    return '<div class="scope-summary" style="flex-direction:column;align-items:stretch;gap:6px;margin-top:8px;">' +
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">' +
+        '<strong>' + PG.esc(pp.name) + '</strong>' + stateBadge(PG.periodTimeState(pp)) + '</div>' +
+      '<div class="text-sm muted">' + PG.fmtDateShort(pp.startDate) + ' – ' + PG.fmtDateShort(pp.endDate) + ' · ' +
+        ((pp.daysOfWeek||[]).length===7 ? 'All days' : (pp.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join(', ')) +
+        ' · ' + (periodPriceLabel(pp) || 'Not priced') + ' · ' + periodNights(pp) + ' nights</div>' +
+      (CAN_MANAGE ? '<div style="display:flex;gap:8px;margin-top:4px;">' +
+        '<button class="btn btn-light btn-sm" data-editp="'+pp.id+'">' + PG.icon('edit',14) + ' Edit</button>' +
+        '<button class="btn btn-light btn-sm" data-dupp="'+pp.id+'">' + PG.icon('copy',14) + ' Duplicate</button></div>' : '') +
     '</div>';
   }
 
-  var periods = (p.periods||[]).slice().sort(function(a,b){ return a.startDate < b.startDate ? -1 : 1; });
-  var upcoming = periods.filter(function(x){return PG.periodTimeState(x)==='upcoming';});
-  var active = periods.filter(function(x){return PG.periodTimeState(x)==='active';});
-  var expired = periods.filter(function(x){return PG.periodTimeState(x)==='expired';});
-  var inactive = periods.filter(function(x){return PG.periodTimeState(x)==='inactive';});
+  var activity = s.audit.filter(function(a){ return a.recordId===p.id || (a.details||'').indexOf(p.name)>-1; }).slice(0,6);
 
-  d.innerHTML = '<div class="pg-drawer" style="max-width:520px;">' +
+  d.innerHTML = '<div class="pg-drawer">' +
     '<div class="pg-drawer-header"><div><h3>' + PG.esc(p.name) + '</h3>' +
-      '<div class="muted text-sm">' + PG.esc(rtName(p.roomTypeId)) + ' · ' + PG.esc(p.mealPlan) + (p.code ? ' · ' + PG.esc(p.code) : '') + '</div></div>' +
-      '<button class="pg-modal-close" id="pdClose" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
+      '<div class="muted text-sm">' + PG.esc(rtName(p.roomTypeId)) + ' · ' + PG.esc(p.mealPlan) + (p.code?' · '+PG.esc(p.code):'') + '</div></div>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpPlanDrawer\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
     '<div class="pg-drawer-body">' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' + planStatusBadge(p) +
-        (p.isDefault ? '<span class="badge badge-blue"><span class="badge-dot"></span>Default plan for this room type</span>' : '') +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">' + planStatusBadge(p) +
+        (p.isDefault ? '<span class="badge badge-blue"><span class="badge-dot"></span>Default plan</span>' : '') +
         (p.strictPeriodPricing ? '<span class="badge badge-yellow"><span class="badge-dot"></span>Sells only inside its periods</span>' : '') +
       '</div>' +
-      (p.description ? '<p class="text-sm" style="color:var(--pg-gray-700);">' + PG.esc(p.description) + '</p>' : '') +
-      '<div class="preview-box" style="margin:14px 0 18px;">' +
-        '<div class="cell-pop-row"><span>Price today (' + PG.fmtDateShort(PG.TODAY) + ')</span><span>' +
-          (todayPrice.price==null ? '<span class="src-missing">No price</span>' : PG.fmtMoney(todayPrice.price)) + '</span></div>' +
-        '<div class="cell-pop-row"><span>Source</span><span class="src-'+todayPrice.source+'">' + todayPrice.label + '</span></div>' +
-        '<div class="cell-pop-row"><span>Current pricing period</span><span>' + (cur ? PG.esc(cur.name) : '—') + '</span></div>' +
-        '<div class="cell-pop-row"><span>Price range</span><span>' + (planPriceRange(p) || '—') + '</span></div>' +
+      (p.description ? '<p class="text-sm" style="color:var(--pg-gray-700);margin:0 0 18px;">' + PG.esc(p.description) + '</p>' : '') +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('door',15) + ' Scope</div>' +
+        '<div class="preview-box">' +
+          '<div class="pv-line"><span>Applies to</span><span>' + PG.esc(PG.planScopeLabel(s,p)) + '</span></div>' +
+          '<div class="pv-line"><span>Room type</span><span>' + PG.esc(rtName(p.roomTypeId)) + '</span></div>' +
+          '<div class="pv-line"><span>Rooms covered</span><span>' + PG.planScopeRooms(s,p).length + '</span></div>' +
+        '</div></div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('money',15) + ' Pricing</div>' +
+        '<div class="preview-box">' +
+          '<div class="pv-line"><span>Base price</span><span>' + money(p.basePrice) + ' / night</span></div>' +
+          '<div class="pv-line"><span>Current pricing period</span><span>' + (cur ? PG.esc(cur.name) : 'None — base price applies') + '</span></div>' +
+          '<div class="pv-line total"><span>Price today (' + PG.fmtDateShort(PG.TODAY) + ')</span><span>' +
+            (today.price==null ? '<span class="src-missing">No price</span>' : money(today.price) + ' <span class="text-sm muted">(' + today.label + ')</span>') + '</span></div>' +
+        '</div></div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('calendar',15) + ' Pricing periods</div>' +
+        (periods.length ? groups.filter(function(g){return g[1].length;}).map(function(g){
+          return '<div class="form-label" style="margin-top:12px;">' + g[0] + '</div>' + g[1].map(periodCard).join('');
+        }).join('')
+        : '<div class="empty-state" style="padding:26px 12px;"><div class="ic">' + PG.icon('calendar',26) + '</div>' +
+          '<strong>No pricing periods</strong>This plan sells at its base price on every date.</div>') +
       '</div>' +
-      (active.length ? '<div class="form-label">Active Pricing Periods</div>' + active.map(periodCard).join('') : '') +
-      (upcoming.length ? '<div class="form-label" style="margin-top:14px;">Upcoming Pricing Periods</div>' + upcoming.map(periodCard).join('') : '') +
-      (inactive.length ? '<div class="form-label" style="margin-top:14px;">Switched-Off Pricing Periods</div>' + inactive.map(periodCard).join('') : '') +
-      (expired.length ? '<div class="form-label" style="margin-top:14px;">Expired Pricing Periods</div>' + expired.map(periodCard).join('') : '') +
-      (!periods.length ? '<div class="empty-state" style="padding:30px 12px;"><div class="ic">' + PG.icon('calendar',28) + '</div>' +
-        'No pricing periods yet.<br><span class="text-sm">Until one is added, this plan falls back to the room type’s base price.</span></div>' : '') +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('clock',15) + ' Activity</div>' +
+        (activity.length ? '<div class="preview-box">' + activity.map(function(a){
+          return '<div class="pv-line"><span>' + PG.esc(a.action) + '<br><span class="text-sm muted">' + PG.fmtDateShort(a.ts.slice(0,10)) + ' · ' + PG.esc(a.actor) + '</span></span>' +
+            '<span class="text-sm" style="font-weight:400;color:var(--pg-gray-600);max-width:55%;">' + PG.esc((a.details||'').slice(0,90)) + '</span></div>';
+        }).join('') + '</div>' : '<div class="text-sm muted">No recorded changes yet.</div>') +
+      '</div>' +
     '</div>' +
     '<div class="pg-drawer-footer">' +
-      '<a class="btn btn-light" href="rates.html?tab=calendar">View Price Calendar</a>' +
+      '<button class="btn btn-light" id="pdCal">' + PG.icon('grid',15) + ' Price Calendar</button>' +
       (CAN_MANAGE ? '<div style="display:flex;gap:8px;">' +
-        '<a class="btn btn-outline" href="rate-plan-form.html?id='+p.id+'">Edit Rate Plan</a>' +
-        '<button class="btn btn-primary" id="pdAddPeriod">' + PG.icon('plus',15) + ' Add Pricing Period</button></div>' : '') +
+        '<button class="btn btn-outline" id="pdEdit">' + PG.icon('edit',15) + ' Edit</button>' +
+        '<button class="btn btn-primary" id="pdAddPeriod">' + PG.icon('plus',15) + ' Add Period</button></div>' : '') +
     '</div>' +
   '</div>';
 
-  document.getElementById('pdClose').addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); });
+  document.getElementById('pdCal').addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); openPriceCalendar(p.id); });
   if (CAN_MANAGE){
-    document.getElementById('pdAddPeriod').addEventListener('click', function(){
-      PG.closeModal('rpPlanDrawer'); openPeriodEditor(p.id, null);
-    });
-    d.querySelectorAll('[data-editperiod]').forEach(function(b){
-      b.addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); openPeriodEditor(p.id, b.dataset.editperiod); });
-    });
-    d.querySelectorAll('[data-dupperiod]').forEach(function(b){
-      b.addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); duplicatePeriod(p.id, b.dataset.dupperiod); });
-    });
+    document.getElementById('pdEdit').addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); openPlanEditor(p.id); });
+    document.getElementById('pdAddPeriod').addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); openPeriodEditor(p.id, null); });
+    d.querySelectorAll('[data-editp]').forEach(function(b){ b.addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); openPeriodEditor(p.id, b.dataset.editp); }); });
+    d.querySelectorAll('[data-dupp]').forEach(function(b){ b.addEventListener('click', function(){ PG.closeModal('rpPlanDrawer'); duplicatePeriod(p.id, b.dataset.dupp); }); });
   }
   PG.openModal('rpPlanDrawer');
 }
 
-/* Duplicating a period opens the editor pre-filled and shifted past the original,
-   so "same prices, next season" is a rename + date tweak rather than a retype. */
-function duplicatePeriod(planId, periodId){
-  var src = periodById(planId, periodId);
-  if (!src) return;
-  var len = PG.dateRange(src.startDate, PG.addDays(src.endDate,1)).length;
-  openPeriodEditor(planId, null, {
-    name: src.name + ' (Copy)',
-    startDate: PG.addDays(src.endDate, 1),
-    endDate: PG.addDays(src.endDate, len),
-    daysOfWeek: (src.daysOfWeek||[]).slice(),
-    mode: src.mode,
-    prices: JSON.parse(JSON.stringify(src.prices||{}))
-  });
-}
-
-/* When "Add Pricing Period" is clicked from the page header there's no plan in
-   context yet — ask which one first, using the same combobox pattern as everywhere else. */
-function openPeriodPicker(){
-  var m = ensureModal('rpPickPlanModal');
-  m.innerHTML = '<div class="pg-modal" style="max-width:440px;">' +
-    '<div class="pg-modal-header"><h3>Add Pricing Period</h3>' +
-      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpPickPlanModal\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
-    '<div class="pg-modal-body">' +
-      '<div class="form-group"><label class="form-label">Rate Plan</label><div id="ppPlanCbx"></div>' +
-      '<div class="form-hint">A pricing period always belongs to one rate plan on one room type.</div></div>' +
-    '</div>' +
-    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'rpPickPlanModal\')">Cancel</button>' +
-      '<button class="btn btn-primary" id="ppPickGo" disabled>Continue</button></div>' +
-  '</div>';
-  var chosen = null;
-  PG.renderCombobox(document.getElementById('ppPlanCbx'), {
-    placeholder: 'Search rate plans…',
-    ariaLabel: 'Rate plan',
-    items: s.ratePlans.map(function(p){
-      return { id: p.id, label: p.name, sub: rtName(p.roomTypeId) + ' · ' + p.mealPlan + (p.active ? '' : ' · inactive'),
-        badge: p.isDefault ? '<span class="badge badge-blue">Default</span>' : '' };
-    }),
-    onSelect: function(id){ chosen = id; document.getElementById('ppPickGo').disabled = false; }
-  });
-  document.getElementById('ppPickGo').addEventListener('click', function(){
-    PG.closeModal('rpPickPlanModal');
-    openPeriodEditor(chosen, null);
-  });
-  PG.openModal('rpPickPlanModal');
-}
-
 /* ================================================================== */
-/* Pricing Period editor (§6.7) — the SAME editor for create and edit.  */
-/* Name, dates, weekdays, pricing mode, prices, live preview, overlap   */
-/* detection, then an explicit confirmation naming how many nights move.*/
+/* Pricing Period editor drawer                                        */
+/* Name → Rate Plan → Scope preview → Dates → Mode → Price → Review    */
 /* ================================================================== */
 function openPeriodEditor(planId, periodId, prefill){
   s = PG.getState();
-  var plan = planById(planId);
-  if (!plan){ PG.toast('That rate plan no longer exists.', 'danger'); return; }
-  var existing = periodId ? periodById(planId, periodId) : null;
-  var isEdit = !!existing;
+  var existing = (planId && periodId) ? periodRef(planId, periodId) : null;
+  var d = drawer('rpPeriodEditor');
 
-  // Working copy — nothing is written to state until Save succeeds, so Cancel and
-  // a failed save both leave the original period exactly as it was.
   var draft = existing ? JSON.parse(JSON.stringify(existing)) : {
-    id: null,
-    name: (prefill && prefill.name) || '',
-    startDate: (prefill && prefill.startDate) || PG.TODAY,
-    endDate: (prefill && prefill.endDate) || PG.addDays(PG.TODAY, 30),
-    daysOfWeek: (prefill && prefill.daysOfWeek) || [0,1,2,3,4,5,6],
-    mode: (prefill && prefill.mode) || 'same',
-    prices: (prefill && prefill.prices) || {},
-    active: true
+    id:null, name:(prefill&&prefill.name)||'', startDate:(prefill&&prefill.startDate)||PG.TODAY,
+    endDate:(prefill&&prefill.endDate)||PG.addDays(PG.TODAY,30),
+    daysOfWeek:(prefill&&prefill.daysOfWeek)||[0,1,2,3,4,5,6],
+    mode:(prefill&&prefill.mode)||'same', prices:(prefill&&prefill.prices)||{}, active:true
   };
+  var selectedPlanId = planId || null;
 
-  var m = ensureModal('rpPeriodModal');
+  function plan(){ return selectedPlanId ? planById(selectedPlanId) : null; }
 
   function pricesForm(){
+    var p = plan();
+    var basePrice = p ? p.basePrice : null;
     if (draft.mode === 'same'){
-      return '<div class="form-group"><label class="form-label" for="ppSame">Price for every selected day</label>' +
-        '<input type="number" min="0.01" step="0.01" class="form-control" id="ppSame" style="max-width:220px;" value="' +
-        (draft.prices.same != null ? draft.prices.same : '') + '" placeholder="e.g. 120"></div>' +
-        '<div class="form-hint">One price, applied to all ' + draft.daysOfWeek.length + ' selected day' + (draft.daysOfWeek.length===1?'':'s') + ' across the whole date range.</div>';
+      return '<div class="form-group" style="margin-bottom:0;"><label class="form-label" for="ppSame">Price for the entire period <span class="req">*</span></label>' +
+        '<div class="price-input-wrap"><span class="cur-pre">' + CURRENCY + '</span>' +
+        '<input type="number" min="0.01" step="0.01" class="form-control" id="ppSame" value="' +
+        (draft.prices.same != null ? draft.prices.same : '') + '" placeholder="' + (basePrice != null ? basePrice : 'e.g. 130') + '">' +
+        '<span class="unit">/ night</span></div>' +
+        '<div class="form-hint">Applied to every selected night in the range.</div></div>';
     }
     var html = '<div class="copy-row">' +
-      '<button type="button" class="btn btn-light btn-sm" data-copy="first">Copy first day’s price to all</button>' +
-      '<button type="button" class="btn btn-light btn-sm" data-copy="weekday">Copy to weekdays (Sat–Wed)</button>' +
-      '<button type="button" class="btn btn-light btn-sm" data-copy="weekend">Copy to weekend (Thu–Fri)</button>' +
-      '<button type="button" class="btn btn-light btn-sm" data-copy="clear">Clear prices</button>' +
+      '<button type="button" class="btn btn-light btn-sm" data-copy="first">' + PG.icon('copy',14) + ' Copy first to all</button>' +
+      '<button type="button" class="btn btn-light btn-sm" data-copy="weekday">Apply to weekdays</button>' +
+      '<button type="button" class="btn btn-light btn-sm" data-copy="weekend">Apply to weekend</button>' +
+      '<button type="button" class="btn btn-light btn-sm" data-copy="clear">Clear</button>' +
     '</div><div class="byday-grid">';
     for (var i=0;i<7;i++){
-      var on = draft.daysOfWeek.indexOf(i) > -1;
-      html += '<div class="form-group' + (on?'':' off') + '"><label class="form-label" for="ppD'+i+'">' + DOW_SHORT[i] + '</label>' +
+      var on = draft.daysOfWeek.indexOf(i)>-1;
+      html += '<div class="form-group' + (on?'':' off') + '"><label class="form-label" for="ppD'+i+'">' + DOW_LABELS[i] + '</label>' +
         '<input type="number" min="0.01" step="0.01" class="form-control byday-input" id="ppD'+i+'" data-dow="'+i+'"' +
         (on?'':' disabled') + ' value="' + (draft.prices[String(i)] != null ? draft.prices[String(i)] : '') + '" placeholder="—"></div>';
     }
@@ -858,258 +959,555 @@ function openPeriodEditor(planId, periodId, prefill){
   }
 
   function validate(){
+    var p = plan();
     var errs = [];
+    if (!p) errs.push('Select the rate plan this period should override.');
     if (!draft.name.trim()) errs.push('Give this pricing period a name — that name is how it will be found and edited later.');
     if (!draft.startDate || !draft.endDate) errs.push('Both a start date and an end date are required.');
-    else if (draft.endDate < draft.startDate) errs.push('The end date can’t be before the start date.');
+    else if (draft.endDate <= draft.startDate) errs.push('The end date must be after the start date.');
     if (!draft.daysOfWeek.length) errs.push('Select at least one day of the week.');
 
-    var priced = 0, negative = false;
-    if (draft.mode === 'same'){
+    var priced = 0, bad = false;
+    if (draft.mode==='same'){
       var v = draft.prices.same;
-      if (v != null && v !== ''){ if (Number(v) > 0) priced++; else negative = true; }
+      if (v != null && v !== ''){ if (Number(v) > 0) priced++; else bad = true; }
     } else {
-      draft.daysOfWeek.forEach(function(d){
-        var x = draft.prices[String(d)];
-        if (x != null && x !== ''){ if (Number(x) > 0) priced++; else negative = true; }
+      draft.daysOfWeek.forEach(function(dw){
+        var x = draft.prices[String(dw)];
+        if (x != null && x !== ''){ if (Number(x) > 0) priced++; else bad = true; }
       });
     }
-    if (negative) errs.push('Prices must be greater than 0.');
+    if (bad) errs.push('Prices must be greater than 0.');
     if (!priced) errs.push('Enter at least one valid price.');
 
-    var overlaps = PG.overlappingPeriods(plan, draft, existing ? existing.id : null);
-    return { errors: errs, overlaps: overlaps, ok: errs.length === 0 && overlaps.length === 0 };
+    var overlaps = p ? PG.overlappingPeriods(p, draft, existing ? existing.id : null) : [];
+    return { errors: errs, overlaps: overlaps, ok: errs.length===0 && overlaps.length===0 };
   }
 
-  function renderPreview(){
-    var v = validate();
-    var dates = PG.periodAffectedDates(draft);
-    var box = document.getElementById('ppPreview');
-    var saveBtn = document.getElementById('ppSave');
+  function renderReview(){
+    var p = plan(), v = validate(), dates = PG.periodAffectedDates(draft);
+    var box = document.getElementById('ppReview'), save = document.getElementById('ppSave');
 
     var lines = '';
+    lines += '<div class="pv-line"><span>Pricing period</span><span>' + (draft.name.trim() ? PG.esc(draft.name) : '—') + '</span></div>';
+    lines += '<div class="pv-line"><span>Rate plan</span><span>' + (p ? PG.esc(p.name) : '—') + '</span></div>';
+    lines += '<div class="pv-line"><span>Applies to</span><span>' + (p ? PG.esc(PG.planScopeLabel(s,p)) : '—') + '</span></div>';
     lines += '<div class="pv-line"><span>Date range</span><span>' +
-      (draft.startDate && draft.endDate && draft.endDate >= draft.startDate
+      (draft.startDate && draft.endDate && draft.endDate > draft.startDate
         ? PG.fmtDateShort(draft.startDate) + ' – ' + PG.fmtDateShort(draft.endDate) : '—') + '</span></div>';
     lines += '<div class="pv-line"><span>Days of week</span><span>' +
-      (draft.daysOfWeek.length === 7 ? 'All days' : draft.daysOfWeek.slice().sort().map(function(d){return DOW_SHORT[d];}).join(', ') || '—') + '</span></div>';
+      (draft.daysOfWeek.length===7 ? 'All days' : draft.daysOfWeek.slice().sort().map(function(x){return DOW_SHORT[x];}).join(', ') || '—') + '</span></div>';
     lines += '<div class="pv-line"><span>Nights affected</span><span>' + dates.length + '</span></div>';
-    if (draft.mode === 'same'){
-      lines += '<div class="pv-line"><span>Price per night</span><span>' +
-        (draft.prices.same ? PG.fmtMoney(Number(draft.prices.same)) : '—') + '</span></div>';
+    lines += '<div class="pv-line"><span>Base price</span><span>' + (p ? money(p.basePrice) : '—') + '</span></div>';
+
+    if (draft.mode==='same'){
+      var np = draft.prices.same ? Number(draft.prices.same) : null;
+      lines += '<div class="pv-line total"><span>New price</span><span>' + (np ? money(np) + ' / night' : '—') + '</span></div>';
+      if (np && p && p.basePrice){
+        var diff = np - Number(p.basePrice);
+        if (diff !== 0){
+          lines += '<div class="pv-line"><span>Difference from base</span><span class="price-delta ' + (diff>0?'up':'down') + '">' +
+            (diff>0?'+':'−') + money(Math.abs(diff)) + (diff>0?' higher':' lower') + '</span></div>';
+        }
+      }
     } else {
-      draft.daysOfWeek.slice().sort().forEach(function(d){
-        var x = draft.prices[String(d)];
-        lines += '<div class="pv-line"><span>' + DOW_LABELS[d] + '</span><span>' +
-          (x != null && x !== '' ? PG.fmtMoney(Number(x)) : '<span class="src-missing">No price</span>') + '</span></div>';
+      draft.daysOfWeek.slice().sort().forEach(function(dw){
+        var x = draft.prices[String(dw)];
+        lines += '<div class="pv-line"><span>' + DOW_LABELS[dw] + '</span><span>' +
+          (x != null && x !== '' ? money(Number(x)) : '<span class="src-missing">No price</span>') + '</span></div>';
       });
     }
-    lines += '<div class="pv-line" style="border-top:1px solid var(--pg-border);margin-top:6px;padding-top:8px;"><span>Period state</span><span>' +
-      timeStateBadge(PG.periodTimeState(draft)) + '</span></div>';
+    lines += '<div class="pv-line"><span>Period state</span><span>' + stateBadge(PG.periodTimeState(draft)) + '</span></div>';
 
     var msg = '';
     if (v.overlaps.length){
-      msg += '<div class="help-note help-note-danger" style="margin-top:12px;">' + PG.icon('alert',16) + '<div><strong>Overlaps another active pricing period.</strong><br>' +
+      msg += '<div class="help-note help-note-danger" style="margin-top:14px;">' + PG.icon('alert',16) +
+        '<div><strong>Overlaps another active pricing period on this plan.</strong><br>' +
         v.overlaps.map(function(o){
-          return PG.esc(o.name) + ' (' + PG.fmtDateShort(o.startDate) + ' – ' + PG.fmtDateShort(o.endDate) + ', ' +
-            ((o.daysOfWeek||[]).length===7 ? 'all days' : (o.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join(', ')) + ')';
+          return PG.esc(o.name) + ' — ' + PG.fmtDateShort(o.startDate) + ' – ' + PG.fmtDateShort(o.endDate) + ', ' +
+            ((o.daysOfWeek||[]).length===7 ? 'all days' : (o.daysOfWeek||[]).map(function(x){return DOW_SHORT[x];}).join(', '));
         }).join('<br>') +
         '<br><span class="text-sm">This plan has no period priority, so two periods can’t both claim the same night. Narrow the dates or the weekdays to resolve it.</span></div></div>';
     }
     if (v.errors.length){
-      msg += '<div class="help-note help-note-warning" style="margin-top:12px;">' + PG.icon('info',16) + '<div>' + v.errors.map(PG.esc).join('<br>') + '</div></div>';
+      msg += '<div class="help-note help-note-warning" style="margin-top:14px;">' + PG.icon('info',16) +
+        '<div>' + v.errors.map(PG.esc).join('<br>') + '</div></div>';
     }
-    if (v.ok && isEdit && dates.length){
-      msg += '<div class="help-note" style="margin-top:12px;">' + PG.icon('info',16) + '<div>Saving updates <strong>' + dates.length +
-        ' night' + (dates.length===1?'':'s') + '</strong> of pricing on “' + PG.esc(plan.name) + '”. Reservations already booked keep the price they were booked at.</div></div>';
+    if (v.ok && dates.length){
+      var affected = p ? s.reservations.filter(function(r){
+        return r.status !== 'Cancelled' && (r.rooms||[]).some(function(rm){ return rm.ratePlanId===p.id; }) &&
+          r.checkOut > draft.startDate && r.checkIn <= draft.endDate;
+      }).length : 0;
+      msg += '<div class="help-note" style="margin-top:14px;">' + PG.icon('info',16) +
+        '<div>Saving changes <strong>' + dates.length + ' night' + (dates.length===1?'':'s') + '</strong> of pricing on “' + PG.esc(p.name) + '”.' +
+        (affected ? ' <strong>' + affected + ' existing reservation' + (affected===1?'':'s') + '</strong> fall in this range — they keep the price they were booked at; this is shown for information only.' :
+          ' No existing reservation is affected.') + '</div></div>';
     }
     box.innerHTML = lines + msg;
-    saveBtn.disabled = !v.ok;
+    save.disabled = !v.ok;
   }
 
-  function paintBody(){
+  function paintPrices(){
     document.getElementById('ppPrices').innerHTML = pricesForm();
     wirePrices();
-    renderPreview();
+    renderReview();
   }
-
+  function paintScope(){
+    var p = plan();
+    document.getElementById('ppScope').innerHTML = p
+      ? '<div class="preview-box">' +
+          '<div class="pv-line"><span>Room type</span><span>' + PG.esc(rtName(p.roomTypeId)) + '</span></div>' +
+          '<div class="pv-line"><span>Applies to</span><span>' + PG.esc(PG.planScopeLabel(s,p)) + '</span></div>' +
+          '<div class="pv-line"><span>Rooms affected</span><span>' + PG.planScopeRooms(s,p).length + '</span></div>' +
+          '<div class="pv-line"><span>Current base price</span><span>' + money(p.basePrice) + ' / night</span></div>' +
+          '<div class="pv-line"><span>Plan status</span><span>' + (p.active ? 'Active' : 'Inactive') + '</span></div>' +
+          ((p.periods||[]).length ? '<div class="pv-line"><span>Existing periods</span><span>' +
+            (p.periods||[]).map(function(x){return PG.esc(x.name);}).join(', ') + '</span></div>' : '') +
+        '</div>'
+      : '<div class="text-sm muted">Select a rate plan to see what this period will affect.</div>';
+  }
   function wirePrices(){
     var same = document.getElementById('ppSame');
-    if (same) same.addEventListener('input', function(){ draft.prices.same = this.value; renderPreview(); });
-    m.querySelectorAll('.byday-input').forEach(function(inp){
-      inp.addEventListener('input', function(){ draft.prices[inp.dataset.dow] = inp.value; renderPreview(); });
+    if (same) same.addEventListener('input', function(){ draft.prices.same = this.value; renderReview(); });
+    d.querySelectorAll('.byday-input').forEach(function(inp){
+      inp.addEventListener('input', function(){ draft.prices[inp.dataset.dow] = inp.value; renderReview(); });
     });
-    m.querySelectorAll('[data-copy]').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        var kind = btn.dataset.copy;
-        if (kind === 'clear'){ draft.prices = {}; paintBody(); return; }
-        var sorted = draft.daysOfWeek.slice().sort();
-        var srcVal = kind === 'first' ? draft.prices[String(sorted[0])]
-          : kind === 'weekday' ? (draft.prices[String(sorted.find(function(d){return WEEKEND_DOW.indexOf(d)===-1;}))])
-          : (draft.prices[String(sorted.find(function(d){return WEEKEND_DOW.indexOf(d)>-1;}))]);
-        if (srcVal == null || srcVal === ''){ PG.toast('Enter one price first, then copy it across.', 'warning'); return; }
-        var targets = kind === 'first' ? sorted
-          : kind === 'weekday' ? sorted.filter(function(d){ return WEEKEND_DOW.indexOf(d) === -1; })
-          : sorted.filter(function(d){ return WEEKEND_DOW.indexOf(d) > -1; });
-        targets.forEach(function(d){ draft.prices[String(d)] = srcVal; });
-        paintBody();
+    d.querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var kind = b.dataset.copy, sorted = draft.daysOfWeek.slice().sort();
+        if (kind==='clear'){ draft.prices = {}; paintPrices(); return; }
+        var srcDay = kind==='first' ? sorted[0]
+          : kind==='weekday' ? sorted.find(function(x){ return WEEKEND_DOW.indexOf(x)===-1; })
+          : sorted.find(function(x){ return WEEKEND_DOW.indexOf(x)>-1; });
+        var val = draft.prices[String(srcDay)];
+        if (val == null || val === ''){ PG.toast('Enter one price first, then copy it across.', 'warn'); return; }
+        var targets = kind==='first' ? sorted
+          : kind==='weekday' ? sorted.filter(function(x){ return WEEKEND_DOW.indexOf(x)===-1; })
+          : sorted.filter(function(x){ return WEEKEND_DOW.indexOf(x)>-1; });
+        targets.forEach(function(x){ draft.prices[String(x)] = val; });
+        paintPrices();
       });
     });
   }
 
-  m.innerHTML = '<div class="pg-modal" style="max-width:620px;">' +
-    '<div class="pg-modal-header"><div><h3>' + (isEdit ? 'Edit Pricing Period' : 'Add Pricing Period') + '</h3>' +
-      '<div class="muted text-sm">' + PG.esc(plan.name) + ' · ' + PG.esc(rtName(plan.roomTypeId)) + '</div></div>' +
-      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpPeriodModal\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
-    '<div class="pg-modal-body">' +
-      '<div class="form-group"><label class="form-label" for="ppName">Period Name <span class="req">*</span></label>' +
-        '<input class="form-control" id="ppName" value="' + PG.esc(draft.name) + '" placeholder="e.g. Summer Season 2027, Eid Holiday, Weekend Premium">' +
-        '<div class="form-hint">Name it for the operational period it represents — this is how you’ll find and edit the whole period later, without remembering its dates.</div></div>' +
-      '<div class="grid-2">' +
-        '<div class="form-group"><label class="form-label" for="ppStart">Start Date <span class="req">*</span></label>' +
-          '<input type="date" class="form-control" id="ppStart" value="' + draft.startDate + '"></div>' +
-        '<div class="form-group"><label class="form-label" for="ppEnd">End Date <span class="req">*</span></label>' +
-          '<input type="date" class="form-control" id="ppEnd" value="' + draft.endDate + '"></div>' +
+  d.innerHTML = '<div class="pg-drawer pg-drawer-wide">' +
+    '<div class="pg-drawer-header"><div><h3>' + (existing ? 'Edit Pricing Period' : 'Add Pricing Period') + '</h3>' +
+      '<div class="muted text-sm">Override a rate plan’s base price for a named date range</div></div>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpPeriodEditor\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+    '<div class="pg-drawer-body">' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('note',15) + ' Pricing period</div>' +
+        '<div class="form-group"><label class="form-label" for="ppName">Pricing Period Name <span class="req">*</span></label>' +
+          '<input class="form-control" id="ppName" value="'+PG.esc(draft.name)+'" placeholder="e.g. The Summer Vacation, Eid Holiday, Winter Season">' +
+          '<div class="form-hint">Name the operational period. This name stays visible wherever the period appears, so it can be found and edited later without remembering its dates.</div></div>' +
+        '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Rate Plan <span class="req">*</span></label>' +
+          '<div id="ppPlan"></div>' +
+          '<div class="form-hint">A pricing period always modifies an existing rate plan — it never creates one.</div></div>' +
       '</div>' +
-      '<div class="form-group"><label class="form-label">Days of Week <span class="req">*</span></label>' +
-        '<div class="dow-grid" id="ppDow">' + DOW_SHORT.map(function(lbl,i){
-          var on = draft.daysOfWeek.indexOf(i) > -1;
-          return '<button type="button" class="dow-chip' + (on?' active':'') + '" data-dow="'+i+'" aria-pressed="'+on+'">' + lbl + '</button>';
-        }).join('') + '</div>' +
-        '<div class="form-hint">Only the selected weekdays are priced by this period. Unselected days fall through to another period or the base price.</div></div>' +
-      '<div class="form-group"><label class="form-label">Pricing Mode</label>' +
-        PG.segmented('ppMode', [
-          {value:'same', label:'Same Price for Selected Days'},
-          {value:'byday', label:'Different Price by Day'}
-        ], draft.mode, {ariaLabel:'Pricing mode'}) + '</div>' +
-      '<div id="ppPrices"></div>' +
-      '<div class="form-label" style="margin-top:16px;">Preview</div>' +
-      '<div class="preview-box" id="ppPreview" role="status" aria-live="polite"></div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('door',15) + ' Scope preview</div>' +
+        '<div id="ppScope"></div></div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('calendar',15) + ' Date range</div>' +
+        '<div class="grid-2" style="margin-bottom:14px;gap:14px;">' +
+          '<div class="form-group" style="margin-bottom:0;"><label class="form-label" for="ppStart">Start Date <span class="req">*</span></label>' +
+            '<input type="date" class="form-control" id="ppStart" value="'+draft.startDate+'"></div>' +
+          '<div class="form-group" style="margin-bottom:0;"><label class="form-label" for="ppEnd">End Date <span class="req">*</span></label>' +
+            '<input type="date" class="form-control" id="ppEnd" value="'+draft.endDate+'"></div>' +
+        '</div>' +
+        '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Days of Week <span class="req">*</span></label>' +
+          '<div class="dow-grid" id="ppDow">' + DOW_SHORT.map(function(lbl,i){
+            var on = draft.daysOfWeek.indexOf(i)>-1;
+            return '<button type="button" class="dow-chip'+(on?' active':'')+'" data-dow="'+i+'" aria-pressed="'+on+'">'+lbl+'</button>';
+          }).join('') + '</div>' +
+          '<div class="form-hint">Only the selected weekdays are repriced. Unselected days keep the plan’s base price.</div></div>' +
+      '</div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('money',15) + ' Pricing</div>' +
+        '<div class="form-group">' + PG.segmented('ppMode', [
+            {value:'same', label:'Same Price for Entire Period'},
+            {value:'byday', label:'Different Price by Day'}
+          ], draft.mode, {ariaLabel:'Pricing mode'}) + '</div>' +
+        '<div id="ppPrices"></div>' +
+      '</div>' +
+
+      '<div class="drawer-section">' +
+        '<div class="drawer-section-title">' + PG.icon('check',15) + ' Review and impact</div>' +
+        '<div class="preview-box" id="ppReview" role="status" aria-live="polite"></div></div>' +
     '</div>' +
-    '<div class="pg-modal-footer">' +
-      '<button class="btn btn-light" onclick="PG.closeModal(\'rpPeriodModal\')">Cancel</button>' +
-      '<button class="btn btn-primary" id="ppSave" disabled>' + (isEdit ? 'Save Changes' : 'Create Pricing Period') + '</button>' +
+    '<div class="pg-drawer-footer">' +
+      '<button class="btn btn-light" onclick="PG.closeModal(\'rpPeriodEditor\')">Cancel</button>' +
+      '<button class="btn btn-primary" id="ppSave" disabled>' + (existing ? 'Save Changes' : 'Create Pricing Period') + '</button>' +
     '</div>' +
   '</div>';
 
-  document.getElementById('ppName').addEventListener('input', function(){ draft.name = this.value; renderPreview(); });
-  document.getElementById('ppStart').addEventListener('change', function(){ draft.startDate = this.value; renderPreview(); });
-  document.getElementById('ppEnd').addEventListener('change', function(){ draft.endDate = this.value; renderPreview(); });
+  PG.renderCombobox(document.getElementById('ppPlan'), {
+    placeholder:'Search rate plans…', ariaLabel:'Rate plan', value: selectedPlanId,
+    items: s.ratePlans.map(function(p){
+      return { id:p.id, label:p.name,
+        sub: rtName(p.roomTypeId) + ' · ' + PG.planScopeLabel(s,p) + ' · base ' + money(p.basePrice) + (p.active?'':' · inactive'),
+        badge: p.isDefault ? '<span class="badge badge-blue">Default</span>' : '' };
+    }),
+    onSelect: function(id){ selectedPlanId = id; paintScope(); renderReview(); }
+  });
+  document.getElementById('ppName').addEventListener('input', function(){ draft.name=this.value; renderReview(); });
+  document.getElementById('ppStart').addEventListener('change', function(){ draft.startDate=this.value; renderReview(); });
+  document.getElementById('ppEnd').addEventListener('change', function(){ draft.endDate=this.value; renderReview(); });
   document.getElementById('ppDow').addEventListener('click', function(e){
     var chip = e.target.closest('.dow-chip'); if (!chip) return;
-    var d = +chip.dataset.dow, i = draft.daysOfWeek.indexOf(d);
-    if (i > -1) draft.daysOfWeek.splice(i,1); else draft.daysOfWeek.push(d);
+    var dw = +chip.dataset.dow, i = draft.daysOfWeek.indexOf(dw);
+    if (i>-1) draft.daysOfWeek.splice(i,1); else draft.daysOfWeek.push(dw);
     chip.classList.toggle('active');
     chip.setAttribute('aria-pressed', chip.classList.contains('active'));
-    paintBody();
+    paintPrices();
   });
-  PG.wireSegmented(m, 'ppMode', function(v){ draft.mode = v; paintBody(); });
-  paintBody();
+  PG.wireSegmented(d, 'ppMode', function(v){ draft.mode=v; paintPrices(); });
+  paintScope(); paintPrices();
 
   document.getElementById('ppSave').addEventListener('click', function(){
-    var v = validate();
-    if (!v.ok) return;
-    var btn = this;
-    btn.disabled = true;
-    btn.innerHTML = 'Saving…';
-    // A beat so the in-button saving state is actually visible — matching the
-    // single-loading-indicator-per-action rule used elsewhere in this prototype.
+    var v = validate(); if (!v.ok) return;
+    var btn = this; btn.disabled = true; btn.textContent = 'Saving…';
     setTimeout(function(){
       try {
         var st = PG.getState();
-        var target = st.ratePlans.find(function(x){return x.id===planId;});
-        if (!target) throw new Error('This rate plan no longer exists.');
-        // Revalidate against fresh state — another tab may have added an
-        // overlapping period since this editor opened.
+        var target = st.ratePlans.find(function(p){ return p.id===selectedPlanId; });
+        if (!target) throw new Error('That rate plan no longer exists.');
+        // Revalidate against fresh state — another tab may have added an overlap.
         var recheck = PG.overlappingPeriods(target, draft, existing ? existing.id : null);
-        if (recheck.length) throw new Error('“' + recheck[0].name + '” now overlaps these dates. Reopen the editor and adjust.');
+        if (recheck.length) throw new Error('“' + recheck[0].name + '” now overlaps these dates.');
 
         var clean = {
-          id: draft.id || newId('pp'),
-          name: draft.name.trim(),
-          startDate: draft.startDate,
-          endDate: draft.endDate,
+          id: draft.id || newId('pp'), name: draft.name.trim(),
+          startDate: draft.startDate, endDate: draft.endDate,
           daysOfWeek: draft.daysOfWeek.slice().sort(function(a,b){return a-b;}),
-          mode: draft.mode,
-          prices: {},
-          active: draft.active !== false,
-          createdAt: existing ? existing.createdAt : PG.nowIso(),
-          updatedAt: PG.nowIso()
+          mode: draft.mode, prices: {}, active: draft.active !== false,
+          createdAt: existing ? existing.createdAt : PG.nowIso(), updatedAt: PG.nowIso()
         };
-        if (draft.mode === 'same') clean.prices.same = Math.round(Number(draft.prices.same)*100)/100;
-        else clean.daysOfWeek.forEach(function(d){
-          var x = draft.prices[String(d)];
-          if (x != null && x !== '') clean.prices[String(d)] = Math.round(Number(x)*100)/100;
+        if (draft.mode==='same') clean.prices.same = Math.round(Number(draft.prices.same)*100)/100;
+        else clean.daysOfWeek.forEach(function(dw){
+          var x = draft.prices[String(dw)];
+          if (x != null && x !== '') clean.prices[String(dw)] = Math.round(Number(x)*100)/100;
         });
 
         target.periods = target.periods || [];
-        var prevDesc = null;
+        var prev = null;
         if (existing){
-          var idx = target.periods.findIndex(function(x){return x.id===existing.id;});
-          prevDesc = describePeriod(target.periods[idx]);
+          var idx = target.periods.findIndex(function(x){ return x.id===existing.id; });
+          if (idx === -1) throw new Error('That pricing period no longer exists.');
+          prev = describePeriod(target.periods[idx]);
           target.periods[idx] = clean;
-        } else {
-          target.periods.push(clean);
-        }
+        } else target.periods.push(clean);
         target.updatedAt = PG.nowIso();
         PG.setState(st);
 
         var nights = PG.periodAffectedDates(clean).length;
         PG.addAudit(existing ? 'Pricing Period Updated' : 'Pricing Period Created',
-          '“' + clean.name + '” on ' + target.name + ' (' + rtName(target.roomTypeId) + ') — ' +
-          describePeriod(clean) + '. ' + nights + ' night' + (nights===1?'':'s') + ' affected. ' +
-          'Existing reservations keep their booked price.', null,
-          { module:'Rate Plans & Pricing', recordId: clean.id,
-            previousValue: prevDesc, newValue: describePeriod(clean) });
+          '“' + clean.name + '” on ' + target.name + ' (' + PG.planScopeLabel(st, target) + ') — ' + describePeriod(clean) +
+          '. ' + nights + ' night' + (nights===1?'':'s') + ' affected. Existing reservations keep their booked price.', null,
+          { module:'Rate Plans & Pricing', recordId: clean.id, previousValue: prev, newValue: describePeriod(clean) });
 
         PG.toast(existing ? 'Pricing period updated.' : 'Pricing period created.', 'success');
-        PG.closeModal('rpPeriodModal');
-        s = PG.getState();
-        rerenderBody();
+        PG.closeModal('rpPeriodEditor');
+        s = PG.getState(); renderShell();
       } catch(e){
-        btn.disabled = false;
-        btn.innerHTML = isEdit ? 'Save Changes' : 'Create Pricing Period';
-        document.getElementById('ppPreview').innerHTML +=
-          '<div class="help-note help-note-danger" style="margin-top:12px;">' + PG.icon('alert',16) +
+        btn.disabled = false; btn.textContent = existing ? 'Save Changes' : 'Create Pricing Period';
+        document.getElementById('ppReview').innerHTML +=
+          '<div class="help-note help-note-danger" style="margin-top:14px;">' + PG.icon('alert',16) +
           '<div>Couldn’t save — ' + PG.esc(e.message) + ' Nothing was changed.</div></div>';
         PG.toast('Couldn’t save the pricing period.', 'danger');
       }
     }, 400);
   });
 
-  PG.openModal('rpPeriodModal');
-}
-
-function describePeriod(pp){
-  if (!pp) return null;
-  var days = (pp.daysOfWeek||[]).length === 7 ? 'all days' : (pp.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join('/');
-  var price = pp.mode === 'byday'
-    ? 'per-day pricing'
-    : ((pp.prices||{}).same != null ? PG.fmtMoney(Number(pp.prices.same)) + '/night' : 'unpriced');
-  return PG.fmtDateShort(pp.startDate) + '–' + PG.fmtDateShort(pp.endDate) + ', ' + days + ', ' + price;
+  PG.openModal('rpPeriodEditor');
 }
 
 /* ================================================================== */
-/* Boot — permission gate LAST, so nothing above it can run for a user  */
-/* who shouldn't see this page (and so hoisting can't bite, per the     */
-/* pattern every other gated page here uses).                           */
+/* Price Calendar — opened from a plan, showing where each price came   */
+/* from. Not a top-level tab: it answers "why is this night this price" */
+/* about a plan you are already looking at.                             */
+/* ================================================================== */
+function openPriceCalendar(planId){
+  s = PG.getState();
+  var focus = planById(planId);
+  var m = modal('rpCalModal');
+  var span = 14, from = PG.TODAY;
+
+  function paint(){
+    var days = PG.dateRange(from, PG.addDays(from, span));
+    var plans = PG.ratePlansForType(s, focus.roomTypeId);
+    var head = '<thead><tr><th class="pcm-plan">Rate Plan</th>' + days.map(function(d){
+      return '<th class="' + (d===PG.TODAY?'today':'') + '">' + PG.fmtDateShort(d) + '<br>' + PG.weekdayOf(d) + '</th>';
+    }).join('') + '</tr></thead>';
+    var body = '<tbody>' + plans.map(function(p){
+      return '<tr' + (p.id===focus.id ? ' style="background:var(--pg-primary-light);"' : '') + '>' +
+        '<td class="pcm-plan"><div style="font-weight:600;">' + PG.esc(p.name) + '</div>' +
+        '<div class="ent-sub">' + PG.esc(PG.planScopeLabel(s,p)) + ' · base ' + money(p.basePrice) + '</div></td>' +
+        days.map(function(d){
+          var r = PG.resolvePrice(s, p.roomTypeId, p.id, d);
+          var lbl = { base:'Base', period:'Period', manual:'Manual', missing:'No price' }[r.source];
+          return '<td class="cell" data-plan="'+p.id+'" data-date="'+d+'" title="' +
+            PG.esc(r.label + (r.periodName ? ' — ' + r.periodName : '')) + '">' +
+            '<div class="amt' + (r.price==null?' missing':'') + '">' + (r.price==null?'No price':money(r.price)) + '</div>' +
+            '<div class="src src-'+r.source+'">' + lbl + '</div></td>';
+        }).join('') + '</tr>';
+    }).join('') + '</tbody>';
+
+    m.innerHTML = '<div class="pg-modal" style="width:1140px;max-width:96vw;">' +
+      '<div class="pg-modal-header"><div><h3>Price Calendar</h3>' +
+        '<div class="muted text-sm">' + PG.esc(rtName(focus.roomTypeId)) + ' — every rate plan on this room type, and where each price comes from</div></div>' +
+        '<button class="pg-modal-close" onclick="PG.closeModal(\'rpCalModal\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="rp-toolbar" style="margin-bottom:16px;">' +
+          '<button class="btn-icon bordered ic-dir" id="calPrev" aria-label="Previous period">' + PG.icon('chevronLeft',16) + '</button>' +
+          '<button class="btn btn-light btn-sm" id="calToday">Today</button>' +
+          '<button class="btn-icon bordered ic-dir" id="calNext" aria-label="Next period">' + PG.icon('chevronRight',16) + '</button>' +
+          '<input type="date" class="form-control" id="calFrom" value="'+from+'" style="width:160px;" aria-label="Calendar start date">' +
+          PG.segmented('calSpan', [{value:'7',label:'7 Days'},{value:'14',label:'14 Days'},{value:'30',label:'30 Days'}], String(span), {ariaLabel:'Range length'}) +
+        '</div>' +
+        '<div class="pcm-wrap"><table class="pcm">' + head + body + '</table></div>' +
+        '<div class="pcm-legend">' +
+          '<span><span class="src src-base">BASE</span> the plan’s base price</span>' +
+          '<span><span class="src src-period">PERIOD</span> a named pricing period</span>' +
+          '<span><span class="src src-manual">MANUAL</span> a one-off price on that cell</span>' +
+          '<span><span class="src src-missing">NO PRICE</span> not sellable that night</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+    document.getElementById('calPrev').addEventListener('click', function(){ from = PG.addDays(from, -span); paint(); });
+    document.getElementById('calNext').addEventListener('click', function(){ from = PG.addDays(from, span); paint(); });
+    document.getElementById('calToday').addEventListener('click', function(){ from = PG.TODAY; paint(); });
+    document.getElementById('calFrom').addEventListener('change', function(){ from = this.value; paint(); });
+    PG.wireSegmented(m, 'calSpan', function(v){ span = +v; paint(); });
+    if (CAN_MANAGE) m.querySelectorAll('.cell').forEach(function(td){
+      td.addEventListener('click', function(){ openCellEditor(td.dataset.plan, td.dataset.date); });
+    });
+  }
+  paint();
+  PG.openModal('rpCalModal');
+}
+
+/* One-off price for a single plan+date. Explains the current number first, then offers
+   to change it — a price cell must never be an unexplained editable box. */
+function openCellEditor(planId, dateStr){
+  s = PG.getState();
+  var p = planById(planId);
+  var r = PG.resolvePrice(s, p.roomTypeId, planId, dateStr);
+  var key = PG.overrideKey(p.roomTypeId, planId, dateStr);
+  var cur = (s.rateOverrides||{})[key];
+  var mm = modal('rpCellModal');
+  mm.innerHTML = '<div class="pg-modal" style="max-width:450px;">' +
+    '<div class="pg-modal-header"><div><h3>Price for one date</h3>' +
+      '<div class="muted text-sm">' + PG.esc(p.name) + ' · ' + PG.fmtDate(dateStr) + '</div></div>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpCellModal\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="preview-box" style="margin-bottom:18px;">' +
+        '<div class="pv-line"><span>Rate plan</span><span>' + PG.esc(p.name) + '</span></div>' +
+        '<div class="pv-line"><span>Pricing period</span><span>' + (r.periodName ? PG.esc(r.periodName) : '—') + '</span></div>' +
+        '<div class="pv-line"><span>Plan base price</span><span>' + money(p.basePrice) + '</span></div>' +
+        '<div class="pv-line total"><span>Current price</span><span>' +
+          (r.price==null ? '<span class="src-missing">No price</span>' : money(r.price)) +
+          ' <span class="text-sm muted">(' + r.label + ')</span></span></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label" for="ceVal">One-off price for this date <span class="opt">(optional)</span></label>' +
+        '<div class="price-input-wrap"><span class="cur-pre">' + CURRENCY + '</span>' +
+        '<input type="number" min="0.01" step="0.01" class="form-control" id="ceVal" value="'+(cur!=null?cur:'')+'" placeholder="Leave empty to use the rule above">' +
+        '<span class="unit">/ night</span></div>' +
+        '<div class="form-hint">Applies to this one date on this one rate plan. Use a pricing period for anything recurring.</div></div>' +
+      '<div id="ceStatus" role="status" aria-live="polite"></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer">' +
+      (cur!=null ? '<button class="btn btn-light" id="ceClear">Remove one-off price</button>' : '') +
+      '<button class="btn btn-light" onclick="PG.closeModal(\'rpCellModal\')">Cancel</button>' +
+      '<button class="btn btn-primary" id="ceSave">Save Price</button></div>' +
+  '</div>';
+
+  function save(raw){
+    var st = PG.getState();
+    st.rateOverrides = st.rateOverrides || {};
+    var prev = st.rateOverrides[key];
+    if (!raw){ delete st.rateOverrides[key]; }
+    else {
+      var v = parseFloat(raw);
+      if (!(v>0)){
+        document.getElementById('ceStatus').innerHTML = '<div class="help-note help-note-danger">' + PG.icon('alert',16) + '<div>Enter a price greater than 0.</div></div>';
+        return;
+      }
+      st.rateOverrides[key] = Math.round(v*100)/100;
+    }
+    PG.setState(st);
+    PG.addAudit('Rate Changed', p.name + ' — one-off price for ' + PG.fmtDateShort(dateStr) + ' ' +
+      (raw ? 'set to ' + money(parseFloat(raw)) : 'removed') + '.', null,
+      { module:'Rate Plans & Pricing', recordId:key, previousValue: prev!=null?prev:'none', newValue: raw?parseFloat(raw):'none' });
+    PG.toast(raw ? 'One-off price saved.' : 'One-off price removed.', 'success');
+    PG.closeModal('rpCellModal');
+    s = PG.getState();
+    openPriceCalendar(planId);
+  }
+  document.getElementById('ceSave').addEventListener('click', function(){ save(document.getElementById('ceVal').value.trim()); });
+  var cb = document.getElementById('ceClear');
+  if (cb) cb.addEventListener('click', function(){ save(''); });
+  PG.openModal('rpCellModal');
+}
+
+/* ================================================================== */
+/* Plan and period mutations                                           */
+/* ================================================================== */
+function togglePlan(id){
+  var st = PG.getState();
+  var p = st.ratePlans.find(function(x){return x.id===id;});
+  var prev = p.active;
+  p.active = !p.active; p.updatedAt = PG.nowIso();
+  PG.setState(st);
+  PG.addAudit(p.active ? 'Rate Plan Activated' : 'Rate Plan Deactivated',
+    p.name + ' (' + PG.planScopeLabel(st,p) + ') was ' + (p.active?'activated':'deactivated') + '.' +
+    (p.active ? '' : ' Existing reservations booked on it keep their booked price.'), null,
+    { module:'Rate Plans & Pricing', recordId:id, previousValue: prev?'Active':'Inactive', newValue: p.active?'Active':'Inactive' });
+  PG.toast('Rate plan ' + (p.active?'activated':'deactivated') + '.', 'success');
+  s = PG.getState(); renderShell();
+}
+
+function duplicatePlan(id){
+  var st = PG.getState();
+  var src = st.ratePlans.find(function(x){return x.id===id;});
+  var copy = JSON.parse(JSON.stringify(src));
+  copy.id = newId('rp'); copy.name = src.name + ' (Copy)';
+  copy.code = src.code ? src.code + '-C' : null;
+  copy.isDefault = false;  // never two defaults on one room type
+  copy.active = false;     // a copy starts switched off so it cannot sell before review
+  copy.createdAt = PG.nowIso(); copy.updatedAt = PG.nowIso();
+  (copy.periods||[]).forEach(function(pp){ pp.id = newId('pp'); });
+  st.ratePlans.push(copy);
+  PG.setState(st);
+  PG.addAudit('Rate Plan Created', copy.name + ' duplicated from ' + src.name + ', created inactive with ' +
+    (copy.periods||[]).length + ' pricing period(s).', null,
+    { module:'Rate Plans & Pricing', recordId: copy.id, newValue: copy.name });
+  PG.toast('Rate plan duplicated — review and activate it when ready.', 'success');
+  s = PG.getState(); renderShell();
+}
+
+function confirmDeletePlan(id){
+  var p = planById(id), deps = reservationsUsingPlan(id);
+  var m = modal('rpDelPlan');
+  m.innerHTML = '<div class="pg-modal" style="max-width:480px;">' +
+    '<div class="pg-modal-header"><h3>Delete Rate Plan</h3>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpDelPlan\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+    '<div class="pg-modal-body">' + (deps.length
+      ? '<div class="help-note help-note-danger">' + PG.icon('alert',16) + '<div><strong>' + deps.length + ' reservation' +
+        (deps.length===1?' was':'s were') + '</strong> booked on “' + PG.esc(p.name) + '”. Deleting it would leave them pointing at a plan that no longer exists. ' +
+        'Deactivate it instead — it stops being offered for new reservations while existing ones keep their booked price.</div></div>'
+      : '<div class="preview-box" style="margin-bottom:16px;">' +
+          '<div class="pv-line"><span>Rate plan</span><span>' + PG.esc(p.name) + '</span></div>' +
+          '<div class="pv-line"><span>Applies to</span><span>' + PG.esc(PG.planScopeLabel(s,p)) + '</span></div>' +
+          '<div class="pv-line"><span>Base price</span><span>' + money(p.basePrice) + ' / night</span></div>' +
+          '<div class="pv-line total"><span>Pricing periods deleted with it</span><span>' + (p.periods||[]).length + '</span></div>' +
+        '</div>' +
+        '<div class="help-note help-note-warning">' + PG.icon('alert',16) +
+        '<div>This can’t be undone. No reservation currently uses this plan, so nothing on the books is affected.</div></div>') +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'rpDelPlan\')">Cancel</button>' +
+      (deps.length ? '' : '<button class="btn btn-danger" id="delPlanGo">Delete Rate Plan</button>') + '</div></div>';
+  if (!deps.length) document.getElementById('delPlanGo').addEventListener('click', function(){
+    var st = PG.getState();
+    var i = st.ratePlans.findIndex(function(x){return x.id===id;});
+    var removed = st.ratePlans[i];
+    st.ratePlans.splice(i,1); PG.setState(st);
+    PG.addAudit('Rate Plan Deleted', removed.name + ' was permanently deleted.', null,
+      { module:'Rate Plans & Pricing', recordId:id, previousValue: removed.name, newValue:'deleted' });
+    PG.toast('Rate plan deleted.', 'success');
+    PG.closeModal('rpDelPlan'); s = PG.getState(); renderShell();
+  });
+  PG.openModal('rpDelPlan');
+}
+
+function duplicatePeriod(planId, periodId){
+  var src = periodRef(planId, periodId);
+  if (!src) return;
+  var len = PG.dateRange(src.startDate, PG.addDays(src.endDate,1)).length;
+  openPeriodEditor(planId, null, {
+    name: src.name + ' (Copy)',
+    startDate: PG.addDays(src.endDate, 1), endDate: PG.addDays(src.endDate, len),
+    daysOfWeek: (src.daysOfWeek||[]).slice(), mode: src.mode,
+    prices: JSON.parse(JSON.stringify(src.prices||{}))
+  });
+}
+
+function togglePeriod(planId, periodId){
+  var st = PG.getState();
+  var p = st.ratePlans.find(function(x){return x.id===planId;});
+  var pp = (p.periods||[]).find(function(x){return x.id===periodId;});
+  var prev = pp.active !== false;
+  pp.active = !prev; pp.updatedAt = PG.nowIso(); p.updatedAt = PG.nowIso();
+  PG.setState(st);
+  PG.addAudit('Pricing Period Updated',
+    '“' + pp.name + '” on ' + p.name + ' was ' + (pp.active?'reactivated':'deactivated') +
+    '. ' + (pp.active ? 'It prices its dates again.' : 'Those dates fall back to the plan base price of ' + money(p.basePrice) + '.'), null,
+    { module:'Rate Plans & Pricing', recordId: pp.id, previousValue: prev?'Active':'Inactive', newValue: pp.active?'Active':'Inactive' });
+  PG.toast('Pricing period ' + (pp.active?'reactivated':'deactivated') + '.', 'success');
+  s = PG.getState(); renderShell();
+}
+
+function confirmDeletePeriod(planId, periodId){
+  var p = planById(planId), pp = periodRef(planId, periodId);
+  var nights = periodNights(pp);
+  var m = modal('rpDelPeriod');
+  m.innerHTML = '<div class="pg-modal" style="max-width:480px;">' +
+    '<div class="pg-modal-header"><h3>Delete Pricing Period</h3>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'rpDelPeriod\')" aria-label="Close">' + PG.icon('x',16) + '</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="preview-box" style="margin-bottom:16px;">' +
+        '<div class="pv-line"><span>Pricing period</span><span>' + PG.esc(pp.name) + '</span></div>' +
+        '<div class="pv-line"><span>Rate plan</span><span>' + PG.esc(p.name) + '</span></div>' +
+        '<div class="pv-line"><span>Date range</span><span>' + PG.fmtDateShort(pp.startDate) + ' – ' + PG.fmtDateShort(pp.endDate) + '</span></div>' +
+        '<div class="pv-line total"><span>Nights returning to base price</span><span>' + nights + ' → ' + money(p.basePrice) + '</span></div>' +
+      '</div>' +
+      '<div class="help-note help-note-warning">' + PG.icon('alert',16) +
+      '<div>Those ' + nights + ' night' + (nights===1?'':'s') + ' will sell at the plan’s base price instead. Reservations already booked keep the price they were sold at.</div></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'rpDelPeriod\')">Cancel</button>' +
+      '<button class="btn btn-danger" id="delPeriodGo">Delete Period</button></div></div>';
+  document.getElementById('delPeriodGo').addEventListener('click', function(){
+    var st = PG.getState();
+    var tp = st.ratePlans.find(function(x){return x.id===planId;});
+    var i = tp.periods.findIndex(function(x){return x.id===periodId;});
+    var removed = tp.periods[i];
+    tp.periods.splice(i,1); tp.updatedAt = PG.nowIso();
+    PG.setState(st);
+    PG.addAudit('Pricing Period Deleted',
+      '“' + removed.name + '” removed from ' + tp.name + '. ' + nights + ' night(s) return to the base price of ' + money(tp.basePrice) + '.', null,
+      { module:'Rate Plans & Pricing', recordId: periodId, previousValue: describePeriod(removed), newValue:'deleted' });
+    PG.toast('Pricing period deleted.', 'success');
+    PG.closeModal('rpDelPeriod'); s = PG.getState(); renderShell();
+  });
+  PG.openModal('rpDelPeriod');
+}
+
+/* ================================================================== */
+/* Boot — permission gate LAST                                         */
 /* ================================================================== */
 function init(){
   renderShell();
-  // Deep links from global search: ?plan=… opens that plan's drawer, and
-  // &period=… continues straight into that period's editor.
+  // Deep links: from global search (?plan=, &period=) and from the retired
+  // rate-plan-form.html route (&edit=1 / ?new=1).
   var planParam = qp.get('plan');
+  if (qp.get('new') && CAN_MANAGE){ openPlanEditor(null); return; }
   if (planParam && planById(planParam)){
     var periodParam = qp.get('period');
-    if (periodParam && CAN_MANAGE && periodById(planParam, periodParam)) openPeriodEditor(planParam, periodParam);
+    if (periodParam && CAN_MANAGE && periodRef(planParam, periodParam)) openPeriodEditor(planParam, periodParam);
+    else if (qp.get('edit') && CAN_MANAGE) openPlanEditor(planParam);
     else openPlanDrawer(planParam);
   }
 }
 
 if (!CAN_VIEW){
   page.innerHTML = '<div class="pg-page-head"><div><h1>Rate Plans &amp; Pricing</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
-    'You don’t have permission to view Rate Plans &amp; Pricing.<br>Contact a Hotel Admin to request access.</div></div></div>';
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',28) + '</div>' +
+    '<strong>No access to Rate Plans &amp; Pricing</strong>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();
 }

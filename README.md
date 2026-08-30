@@ -37,7 +37,7 @@ It is **not** a real product: there is no server, no database, no authentication
 
 - B2B, admin-first, desktop-first, multi-tenant platform (this prototype models **one tenant**: Palestine Grand Hotel).
 - Operated from a Hotel Admin Panel — **for hotel staff**, not guests.
-- Visual language: **Metronic-style** enterprise admin UI (dark navy sidebar, white content, card-based layout, top header).
+- Visual language: **Metronic 8 Bootstrap Demo 1 (Light, LTR)** conventions — dark aside, white header, light canvas, page toolbar, underline tabs, pale-bordered cards, dashed table rows (§6.0).
 - **Physical rooms are inside the MVP**: a real operational allocation layer beneath room-type commercial inventory (§4.6–4.7). Full front-desk and housekeeping functionality (Check-In/Check-Out workflows, housekeeping status boards, maintenance ticketing) remains **outside** the MVP.
 
 ### 1.3 Explicitly out of scope — do not build these
@@ -246,12 +246,22 @@ Room Type  →  Rate Plan  →  Pricing Period  →  Daily Prices
 |---|---|---|---|
 | 1 | **Manual Override** | `state.rateOverrides["rtId\|planId\|date"]` — a one-off price typed into one Price Calendar cell | `manual` / "Manual Override" |
 | 2 | **Period Override** | the plan's active pricing period covering that date **whose `daysOfWeek` includes that date's weekday** | `period` / "Period Override" |
-| 3 | **Base Price** | `state.rates[rtId][date]`, falling back to `roomTypes[].baseRate` — skipped entirely when the plan is `strictPeriodPricing` | `base` / "Base Price" |
+| 3 | **Plan Base Price** | `ratePlan.basePrice` — the plan's own default nightly rate, edited on the Rate Plans tab. Skipped entirely when the plan is `strictPeriodPricing` | `base` / "Base Price" |
+| 4 | **Room Type Rate** | `state.rates[rtId][date]`, falling back to `roomTypes[].baseRate` — only reached by a plan that has no base price of its own | `base` / "Room Type Rate" |
 | — | **nothing** | no layer produced a price | `missing` / "Missing Price" |
 
 A `missing` price is **never** rendered as `$0`; it renders as "No price" and blocks the plan from being sold on that date.
 
-**Engine surface:** `basePriceFor`, `ratePlansForType`, `defaultRatePlanFor`, `ratePlanById`, `periodTimeState` (active/upcoming/expired/inactive), `periodCoversDate`, `periodPriceForDate`, `overrideKey`, `resolvePrice`, `nightlyBreakdown`, `validateRatePlanForStay`, `overlappingPeriods`, `periodAffectedDates`. All exercised directly by `tests/rate-plans.test.js` (§10.9).
+**Scope — where a plan may be sold.** A plan always belongs to **one room type** (that is what keeps `PG.rateFor()` and the reservation flow unambiguous), and then either sells across every room of that type or is narrowed to specific physical rooms:
+
+```
+scope: "roomType"  →  every room of plan.roomTypeId
+scope: "rooms"     →  only plan.physicalRoomIds (all of that same type)
+```
+
+"Breakfast Included — Rooms 101–105" is the narrowed form. **Narrowing never crosses room types**, so a room can never be offered a plan priced for a different type. `PG.ratePlansForRoom(state, roomId, activeOnly)` is the room-level question; `PG.planScopeRooms()` and `PG.planScopeLabel()` render it (the label collapses contiguous room numbers into ranges via `PG.summarizeRoomNumbers()`). `PG.validateRatePlanForStay()` takes an optional 6th `physicalRoomId` and refuses an out-of-scope room by name. Inactive and non-sellable rooms cannot be selected as targets at all.
+
+**Engine surface:** `basePriceFor`, `ratePlansForType`, `ratePlansForRoom`, `defaultRatePlanFor`, `ratePlanById`, `planScopeLabel`, `planScopeRooms`, `summarizeRoomNumbers`, `periodTimeState` (active/upcoming/expired/inactive), `periodCoversDate`, `periodPriceForDate`, `overrideKey`, `resolvePrice`, `nightlyBreakdown`, `validateRatePlanForStay`, `overlappingPeriods`, `periodAffectedDates`. All exercised directly by `tests/rate-plans.test.js` (§10.9).
 
 **`PG.rateFor(state, roomTypeId, dateStr)` still exists and still works** — it is now a thin shim that resolves against the room type's **default** plan, which is exactly what a bare (roomType, date) question always implicitly meant. Every pre-existing call site kept working unchanged.
 
@@ -259,7 +269,12 @@ A `missing` price is **never** rendered as `$0`; it renders as "No price" and bl
 
 **Booked-price snapshots — the rule that protects existing reservations.** Each reservation room item carries `ratePlanId` plus `nightly: { date: price }`, written at booking time. **`PG.roomItemCharge` / `PG.reservationRoomCharges` / `PG.reservationTotal`** are the only places a reservation's money is computed; they prefer the snapshot and fall back to a live resolve only for pre-snapshot data. **`PG.snapshotRoomItemPricing(state, room, checkIn, checkOut)` is the only thing that moves a booked price**, and it is called from exactly two places: `new-reservation.html`'s `createReservation()` and `reservation-detail.html`'s Edit flow. Consequence: repricing a rate plan, editing a pricing period, or deactivating a plan **cannot** change what an existing guest was quoted. `tests/rate-plans.test.js` guards this by repricing every plan to $999, wiping the base calendar, and asserting all four seeded reservation totals are unmoved.
 
-**Seeding rule that must be preserved:** every room type's **default** plan is priced only from `addDays(TODAY, 31)` onward — outside the base `rates` calendar's window. Inside that window the default plan falls through to Base Price, so `PG.rateFor()` returns byte-identical numbers to the pre-rate-plan model. **A new seed period overlapping the base window would silently reprice the demo data.**
+**Two seeding rules that must be preserved:**
+
+1. **The Thu/Fri weekend markup lives in a named "Weekend Premium" pricing period on each default plan**, not buried in the per-date `rates` calendar. That is the whole point of the model: a recurring price rule should be a named, editable object an operator can see, not an invisible per-date number. Do not push it back into `state.rates`.
+2. **The seeded reservations carry explicit booked-price snapshots** (`BOOKED_NIGHTLY` at the end of `buildSeed()`), written at the rates in force when each booking was taken — deliberately *not* derived from today's rate plans. This keeps the demo's historical totals stable (RES-10245 = 1170, RES-10246 = 260, RES-10247 = 150, RES-10248 = 200) **and** ships a visible "booked price differs from today's price" case, which Reservation Detail surfaces rather than hides.
+
+**Schema migration:** `getState()` carries a *nested* migration for `ratePlans` (scope, `physicalRoomIds`, `basePrice`, `currency`, `periods`). Top-level backfill cannot help there — the `ratePlans` key already exists but its shape changed — and without it a browser holding older state renders every plan with a blank price and no scope.
 
 ### 4.5 Date handling — a hard-won lesson
 
@@ -355,7 +370,24 @@ RTL support predates this pass (drawer mirroring, sidebar, table text-alignment,
 
 ## 6. Design system components (`assets/css/style.css`)
 
-The visual language is **Metronic-inspired**: dark navy sidebar (`--pg-sidebar-bg: #1e2129`), white content area, primary blue `--pg-primary: #1B84FF`, card-based layout with `border-radius: 8px`, dense operational tables. All design tokens are CSS custom properties on `:root` — check there before hardcoding a color.
+### 6.0 Visual system — Metronic 8 Demo 1 (Light, LTR)
+
+The whole stylesheet is calibrated to **Metronic 8 Bootstrap Demo 1, Light LTR**. The single most important thing to understand before touching it: **Metronic's light theme carries hierarchy in type weight and muted text, not in boxes.** Surfaces are separated by a very pale `#F1F1F4` hairline and almost no shadow. An earlier build of this app used a much darker `#e4e6ef` border everywhere and read as a grid of outlined rectangles; the fix was the neutral ramp, not more spacing.
+
+Structural pieces that define the look — change these only deliberately:
+
+| Piece | Implementation | Why it matters |
+|---|---|---|
+| **Dark aside** | `.pg-sidebar` `#1E1E2D`, active item = filled `#1B1B29` panel + a 4px primary bullet on the leading edge | Demo 1's signature. Not an inset box-shadow bar. |
+| **Page toolbar** | `.pg-page-head` — title, subtitle and the page's **primary action**, on the canvas, above the cards, closed by a hairline | This is what stops primary actions from being buried inside the first card. Every page uses it. |
+| **Underline tabs** | `.pg-tabs` / `.pg-tab` — one continuous hairline under the row, 2px primary underline on the active tab, muted inactive labels, optional `.tab-count` badge | Replaces boxed tabs, which read as a row of disabled buttons and hid the active state. **Never reintroduce per-tab borders or gaps.** |
+| **Cards** | `--pg-radius: 10px`, `1px solid #F1F1F4`, `0 3px 4px rgba(0,0,0,.03)` | Restraint is the point. |
+| **Tables** | `table.dt` — uppercase muted headers, **dashed** row separators (`1px dashed`) | Metronic's `table-row-dashed`; what makes a dense operational table read as light. |
+| **Badges** | Pale tinted surface + coloured label, `--pg-radius-sm: 7px` — a rounded rectangle, **not** a pill, always with a dot or icon | Status never depends on colour alone. |
+| **Buttons** | Five levels only: `.btn-primary` / `.btn-outline` / `.btn-light` / `.btn-icon` (ghost) / `.btn-danger`, all 38px tall (`.btn-sm` 32px) | Don't invent a sixth. |
+| **Header** | Context + breadcrumb left, global search centre, help / notifications / user menu right | Product and demo actions (New Reservation, Reset Demo Data) were removed from here — they competed with each page's own primary action. Reset Demo Data now lives in the user menu. |
+
+All design tokens are CSS custom properties on `:root` — check there before hardcoding a colour, radius or shadow.
 
 ### 6.1 Core components
 
@@ -441,8 +473,8 @@ The old "Guided Journey" nav item was removed from the sidebar in an earlier res
 | `room-types.html` | Room type list | Table with View/Edit actions + Add. |
 | `room-type-form.html` | Create/edit/view/**delete** a room type | Bed Configuration uses the managed-select component. Delete cascades to associated `rates[id]`, `ratePlans`, `physicalRooms`, `roomAssignments`, and `roomBlocks`. |
 | `physical-rooms.html` | **Physical Rooms management — room-focused operations, connected to the same logic as the Operations Calendar** | Dense table (not cards) — Room Number, Room Type, Building/Floor, Bed Config, Key Attributes, Today's Status, Current/Next Reservation, Active State, Actions; lower-priority columns collapse below 1100–1500px. Summary strip (Total/Active & Sellable/Reserved Today/Blocked Today/Inactive). Add/Edit is a **Drawer** (Connecting Rooms kept mutual on save; also sets the room's `operationalStatus` baseline — the only place that's editable). Room Details is a separate, rebuilt-per-open **Drawer**, whose footer adds **Create Reservation** (prefilled via `new-reservation.html?rt=&room=&date=`, same as the Operations Calendar's empty-cell/quick-add) alongside Edit and **Block Room**; both the row's More menu and the Details drawer offer Create Reservation, Block Room, and View on Operations Calendar (`?room=<id>` deep link, §8.2). **Block Room opens `PG.renderBlockRoomModal()`** — the exact same shared modal the Operations Calendar's drag-to-create-block and per-row Block quick action use, not a page-local duplicate; it live-previews conflicting assignments and lists each with an inline **Change Room** button — Save stays disabled until every conflict is resolved. Deactivate runs the same conflict check. No delete action anywhere — Activate/Deactivate is the only lifecycle control. |
-| `rates.html` | **Rate Plans & Pricing** — two tabs: **Price Calendar** and **Rate Plans** | See §8.5. The file name stays `rates.html` so every existing deep link keeps working; the *visible* name everywhere is "Rate Plans & Pricing". Price Calendar = rate-plan rows grouped under room type × date columns, each cell showing its price **and which layer produced it** (Base / Period / Manual / No price); clicking a cell opens the plan+period behind it. Rate Plans = a worklist grouped by room type with a plan detail drawer and the shared Pricing Period editor. Deep links: `?tab=plans`, `?plan=<id>`, `?plan=<id>&period=<id>`. |
-| `rate-plan-form.html` | Create/edit a rate plan's **commercial identity** only | Name, code, room type, meal plan, description, Active/Inactive, Default-for-room-type, and the fall-back-to-base vs. not-sellable choice. **No dates or prices** — those are pricing periods, edited on `rates.html`. Room type is locked once reservations are booked on the plan. Deletion moved to the Rate Plans worklist, where it is offered only when nothing depends on the plan. |
+| `rates.html` | **Rate Plans & Pricing** — exactly two underline tabs: **Rate Plans** and **Pricing Periods** | See §8.5. File name stays `rates.html` so every existing deep link keeps working. **Rate Plans** = a worklist (plan, applies-to, base price, current period, status, last updated) with an Add/Edit drawer sectioned Basic information / Target scope / Base price. **Pricing Periods** = a worklist over every period in the property (period, plan, applies-to, dates, price with delta-vs-base, nights, status) with its own drawer. The **Price Calendar** is a modal opened *from a plan* — it answers "why is this night this price" about a plan you are already looking at, which is not a top-level job. Deep links: `?tab=periods`, `?plan=<id>`, `?plan=<id>&period=<id>`, `?plan=<id>&edit=1`, `?new=1`. |
+| `rate-plan-form.html` | **Retired route, kept alive as a redirect** | Rate plans are now created and edited in a drawer on the Rate Plans tab. This page redirects to `rates.html?tab=plans&plan=<id>&edit=1` (or `&new=1`) so old bookmarks and links still resolve. Do not rebuild a full-page plan form here. |
 | `availability-inventory.html` | Live commercial availability grid + Stop Sell/Reopen/Adjust Inventory | Grid cells are clickable (`tbody .av-cell` only). Adjust Inventory is a **Drawer**; Stop Sell/Reopen are **Modals**, each pre-filling from the selected cell. The selected cell's detail card has a **View Breakdown** toggle (§8.5) showing the full physical-room-connected accounting behind the one Available Quantity number. Adjust Inventory's "Increase" can never push sellable inventory past the room type's active+sellable physical-room count. |
 | `reservations.html` | Reservations worklist | Search + 5 filters (status, payment status, source, arrival, departure) + Clear Filters. Supports `?arrival=/?departure=/?status=/?payStatus=/?source=` query prefiltering. Has the Arabic toggle header button (only page that does). |
 | `guests.html` | **Guests directory** | Dense searchable table (not a card gallery) — Guest Name, Phone/Email, Nationality (collapses below 1300px), Preferred Language, Upcoming Reservation, Last Stay, Total Reservations, Notes indicator, Actions. Filters: search (name/phone/email/`idRef`), Has Upcoming/Has Past Reservations, Important/VIP, Communication Language, Last Stay date range, Clear Filters. Add/Edit is `PG.renderGuestDrawer()` (§8.3). |

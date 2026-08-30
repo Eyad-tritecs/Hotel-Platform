@@ -7,204 +7,32 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
-<style>
-  .rpf-periods{margin-top:6px;}
-  .rpf-period{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--pg-border);
-    border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;}
-  .rpf-period .nm{font-weight:700;}
-  .rpf-period .mt{font-size:11.5px;color:var(--pg-gray-600);margin-top:2px;}
-</style>
 </head>
 <body>
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
+/* Creating and editing a rate plan is now a right-side drawer on the Rate Plans tab,
+   not a separate full-page form — the drawer keeps the plan list visible behind it and
+   matches every other editor in the app.
+
+   This route is deliberately kept alive rather than deleted: old bookmarks and any
+   external link still resolve, they just land on the drawer that replaced this page.
+   `?id=` opens that plan's editor; no id opens the Add Rate Plan drawer. */
 var id = new URLSearchParams(location.search).get('id');
-var page = PG.mount("rates", ["Hotel Management", "Rate Plans & Pricing", id ? "Edit Rate Plan" : "Add Rate Plan"]);
-var CAN_VIEW = PG.hasPermission('view_rates');
-var CAN_MANAGE = PG.hasPermission('manage_rates');
-var s = PG.getState();
-var rp = id ? PG.ratePlanById(s, id) : null;
-var DOW_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var target = 'rates.html?tab=plans' + (id ? '&plan=' + encodeURIComponent(id) + '&edit=1' : '&new=1');
 
-function rtName(rtId){ var rt = s.roomTypes.find(function(r){return r.id===rtId;}); return rt ? rt.name : rtId; }
-function reservationsUsingPlan(planId){
-  return s.reservations.filter(function(r){ return (r.rooms||[]).some(function(rm){ return rm.ratePlanId === planId; }); });
-}
+var page = PG.mount("rates", ["Hotel Configuration", "Rate Plans & Pricing", id ? "Edit Rate Plan" : "Add Rate Plan"]);
+page.innerHTML =
+  '<div class="pg-page-head"><div><h1>Rate Plan</h1>' +
+    '<div class="sub">Rate plans are now edited in a drawer on the Rate Plans tab</div></div></div>' +
+  '<div class="card"><div class="card-body"><div class="empty-state">' +
+    '<div class="ic">' + PG.icon('tag',28) + '</div>' +
+    '<strong>Opening the rate plan editor…</strong>' +
+    'If you are not redirected, <a href="' + target + '">continue to Rate Plans &amp; Pricing</a>.' +
+  '</div></div></div>';
 
-function render(){
-  var rtOptions = s.roomTypes.map(function(rt){
-    return '<option value="'+rt.id+'"'+(rp && rp.roomTypeId===rt.id ? ' selected':'')+'>'+PG.esc(rt.name)+' (base '+PG.fmtMoney(rt.baseRate)+')</option>';
-  }).join('');
-  var deps = rp ? reservationsUsingPlan(rp.id) : [];
-
-  var html = '';
-  html += '<div class="pg-page-head"><div><h1>'+(rp ? 'Edit Rate Plan' : 'Add Rate Plan')+'</h1>' +
-    '<div class="sub">'+(rp ? PG.esc(rp.name) + ' · ' + PG.esc(rtName(rp.roomTypeId)) : 'A commercial offer attached to one room type')+'</div></div>' +
-    '<div class="pg-actions"><a class="btn btn-light" href="rates.html?tab=plans">' + PG.icon('chevronLeft',15) + ' Back to Rate Plans</a></div></div>';
-
-  // What a rate plan is vs. what a pricing period is — stated once, on the screen
-  // where the distinction actually matters, instead of assumed knowledge.
-  html += '<div class="help-note" style="margin-bottom:20px;">' + PG.icon('info',16) +
-    '<div>A rate plan holds the <strong>commercial identity</strong> of an offer — its name, room type, meal plan, and whether it can be sold. ' +
-    'Its <strong>dates and prices</strong> live in named pricing periods, managed from the Rate Plans &amp; Pricing screen.</div></div>';
-
-  html += '<div class="card"><div class="card-header"><h3>Plan Details</h3></div><div class="card-body"><div class="grid-2">' +
-    '<div class="form-group"><label class="form-label" for="f-name">Rate Plan Name <span class="req">*</span></label>' +
-      '<input class="form-control" id="f-name" value="'+PG.esc(rp ? rp.name : '')+'" placeholder="e.g. Flexible Rate, Non-Refundable Rate">' +
-      '<div class="form-hint">Name the offer, not a date range — seasons belong in pricing periods.</div></div>' +
-    '<div class="form-group"><label class="form-label" for="f-code">Internal Code <span class="opt">(optional)</span></label>' +
-      '<input class="form-control" id="f-code" value="'+PG.esc(rp && rp.code ? rp.code : '')+'" placeholder="e.g. FLEX-STD"></div>' +
-    '<div class="form-group"><label class="form-label" for="f-rt">Room Type <span class="req">*</span></label>' +
-      '<select class="form-control" id="f-rt"'+(deps.length?' disabled':'')+'>'+rtOptions+'</select>' +
-      (deps.length ? '<div class="form-hint">Locked — '+deps.length+' reservation(s) are booked on this plan.</div>' : '') + '</div>' +
-    '<div class="form-group"><label class="form-label">Meal Plan</label><div id="meal-select"></div></div>' +
-  '</div>' +
-  '<div class="form-group"><label class="form-label" for="f-desc">Description <span class="opt">(optional)</span></label>' +
-    '<textarea class="form-control" id="f-desc" rows="2" placeholder="Short summary of what this offer includes">'+PG.esc(rp && rp.description ? rp.description : '')+'</textarea></div>' +
-  '</div></div>';
-
-  html += '<div class="card" style="margin-top:20px;"><div class="card-header"><h3>Availability &amp; Behavior</h3></div><div class="card-body">' +
-    '<div class="form-group"><label class="form-label">Status</label>' +
-      PG.segmented('active', [{value:'1',label:'Active'},{value:'0',label:'Inactive'}], (!rp || rp.active) ? '1' : '0', {ariaLabel:'Plan status'}) +
-      '<div class="form-hint">Inactive plans can’t be selected for new reservations. Reservations already booked on them keep their booked price.</div></div>' +
-    '<div class="form-group"><label class="form-label">Default plan for this room type</label>' +
-      PG.segmented('isdefault', [{value:'0',label:'No'},{value:'1',label:'Yes'}], (rp && rp.isDefault) ? '1' : '0', {ariaLabel:'Default plan'}) +
-      '<div class="form-hint">The default plan answers a price question asked without naming a plan. Exactly one per room type — setting this moves the flag off whichever plan currently holds it.</div></div>' +
-    '<div class="form-group"><label class="form-label">Pricing outside its periods</label>' +
-      PG.segmented('strict', [
-        {value:'0',label:'Fall back to base price'},
-        {value:'1',label:'Not sellable'}
-      ], (rp && rp.strictPeriodPricing) ? '1' : '0', {ariaLabel:'Pricing outside periods'}) +
-      '<div class="form-hint">“Not sellable” makes dates no pricing period covers show as <strong>No price</strong> rather than quietly selling at the room type’s base rate — use it for contracted plans restricted to specific days.</div></div>' +
-  '</div></div>';
-
-  if (rp){
-    var periods = (rp.periods||[]).slice().sort(function(a,b){ return a.startDate < b.startDate ? -1 : 1; });
-    html += '<div class="card" style="margin-top:20px;"><div class="card-header"><div><h3>Pricing Periods</h3>' +
-      '<div class="desc">Where this plan’s dates and prices live</div></div>' +
-      '<a class="btn btn-outline btn-sm" href="rates.html?plan='+rp.id+'">Manage Periods</a></div><div class="card-body">' +
-      (periods.length ? '<div class="rpf-periods">' + periods.map(function(pp){
-        var st = PG.periodTimeState(pp);
-        var badge = {active:['badge-green','Active'],upcoming:['badge-blue','Upcoming'],expired:['badge-gray','Expired'],inactive:['badge-gray','Off']}[st];
-        var price = pp.mode==='byday' ? 'Per-day pricing'
-          : ((pp.prices||{}).same != null ? PG.fmtMoney(Number(pp.prices.same)) + ' / night' : 'Not priced');
-        return '<div class="rpf-period"><div><div class="nm">' + PG.esc(pp.name) + '</div>' +
-          '<div class="mt">' + PG.fmtDateShort(pp.startDate) + ' – ' + PG.fmtDateShort(pp.endDate) + ' · ' +
-          ((pp.daysOfWeek||[]).length===7 ? 'All days' : (pp.daysOfWeek||[]).map(function(d){return DOW_SHORT[d];}).join(', ')) +
-          ' · ' + price + '</div></div>' +
-          '<span class="badge '+badge[0]+'"><span class="badge-dot"></span>'+badge[1]+'</span></div>';
-      }).join('') + '</div>'
-      : '<div class="empty-state" style="padding:26px 12px;"><div class="ic">' + PG.icon('calendar',28) + '</div>' +
-        'No pricing periods yet.<br><span class="text-sm">This plan currently falls back to the room type’s base price.</span></div>') +
-    '</div></div>';
-  }
-
-  html += '<div class="card" style="margin-top:20px;"><div class="card-footer" style="display:flex;justify-content:space-between;">' +
-    '<a class="btn btn-light" href="rates.html?tab=plans">Cancel</a>' +
-    '<button class="btn btn-primary" id="saveBtn">' + (rp ? 'Save Changes' : 'Create Rate Plan') + '</button></div></div>';
-  html += '<div id="rpfStatus" role="status" aria-live="polite"></div>';
-
-  page.innerHTML = html;
-  PG.enhanceSelects(page);
-}
-
-var mealValue, form = { active: (!rp || rp.active) ? '1' : '0', isDefault: (rp && rp.isDefault) ? '1' : '0', strict: (rp && rp.strictPeriodPricing) ? '1' : '0' };
-
-function wire(){
-  mealValue = rp ? rp.mealPlan : s.mealPlans[0];
-  PG.renderManagedSelect(document.getElementById('meal-select'), {
-    value: mealValue,
-    getList: function(){ return PG.getState().mealPlans; },
-    setList: function(list){ var st = PG.getState(); st.mealPlans = list; PG.setState(st); },
-    onChange: function(v){ mealValue = v; },
-    placeholder: 'e.g. All Inclusive'
-  });
-  PG.wireSegmented(page, 'active', function(v){ form.active = v; });
-  PG.wireSegmented(page, 'isdefault', function(v){ form.isDefault = v; });
-  PG.wireSegmented(page, 'strict', function(v){ form.strict = v; });
-
-  document.getElementById('saveBtn').addEventListener('click', function(){
-    var btn = this;
-    var name = document.getElementById('f-name').value.trim();
-    var status = document.getElementById('rpfStatus');
-    if (!name){
-      status.innerHTML = '<div class="help-note help-note-danger" style="margin-top:14px;">' + PG.icon('alert',16) + '<div>A rate plan name is required.</div></div>';
-      document.getElementById('f-name').focus();
-      return;
-    }
-    status.innerHTML = '';
-    btn.disabled = true; btn.textContent = 'Saving…';
-    setTimeout(function(){
-      try {
-        var st = PG.getState();
-        var roomTypeId = rp ? rp.roomTypeId : document.getElementById('f-rt').value;
-        var data = {
-          name: name,
-          code: document.getElementById('f-code').value.trim() || null,
-          roomTypeId: roomTypeId,
-          mealPlan: mealValue,
-          description: document.getElementById('f-desc').value.trim(),
-          active: form.active === '1',
-          isDefault: form.isDefault === '1',
-          strictPeriodPricing: form.strict === '1',
-          updatedAt: PG.nowIso()
-        };
-        // Exactly one default per room type — claiming the flag releases it from
-        // whichever plan held it, so PG.rateFor() can never face two candidates.
-        if (data.isDefault){
-          st.ratePlans.forEach(function(p){
-            if (p.roomTypeId === roomTypeId && (!rp || p.id !== rp.id)) p.isDefault = false;
-          });
-        }
-        var target, action, prev = null;
-        if (rp){
-          target = st.ratePlans.find(function(p){return p.id===rp.id;});
-          if (!target) throw new Error('This rate plan no longer exists.');
-          prev = target.name + ' · ' + (target.active?'Active':'Inactive') + (target.isDefault?' · Default':'');
-          Object.assign(target, data);
-          action = 'Rate Plan Updated';
-        } else {
-          target = Object.assign({
-            id: 'rp-' + Date.now().toString(36),
-            propertyId: st.hotel.propertyCode,
-            periods: [],
-            createdAt: PG.nowIso()
-          }, data);
-          st.ratePlans.push(target);
-          action = 'Rate Plan Created';
-        }
-        PG.setState(st);
-        PG.addAudit(action, target.name + ' (' + rtName(target.roomTypeId) + ') — ' +
-          (target.active ? 'active' : 'inactive') + (target.isDefault ? ', default plan for this room type' : '') +
-          (target.strictPeriodPricing ? ', sells only inside its pricing periods' : '') + '.', null,
-          { module: 'Rate Plans & Pricing', recordId: target.id, previousValue: prev,
-            newValue: target.name + ' · ' + (target.active?'Active':'Inactive') + (target.isDefault?' · Default':'') });
-        PG.toast(rp ? 'Rate plan updated.' : 'Rate plan created.', 'success');
-        setTimeout(function(){ location.href = 'rates.html?plan=' + target.id; }, 450);
-      } catch(e){
-        btn.disabled = false; btn.textContent = rp ? 'Save Changes' : 'Create Rate Plan';
-        status.innerHTML = '<div class="help-note help-note-danger" style="margin-top:14px;">' + PG.icon('alert',16) +
-          '<div>Couldn’t save — ' + PG.esc(e.message) + ' Nothing was changed.</div></div>';
-        PG.toast('Couldn’t save the rate plan.', 'danger');
-      }
-    }, 400);
-  });
-}
-
-function init(){ render(); wire(); }
-
-if (!CAN_VIEW || !CAN_MANAGE){
-  page.innerHTML = '<div class="pg-page-head"><div><h1>Rate Plan</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
-    'You don’t have permission to edit rate plans.<br>Contact a Hotel Admin to request access.</div></div></div>';
-} else if (id && !rp){
-  page.innerHTML = '<div class="pg-page-head"><div><h1>Rate Plan</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('alert',30) + '</div>' +
-    'That rate plan no longer exists.<br><a href="rates.html?tab=plans">Back to Rate Plans</a></div></div></div>';
-} else {
-  init();
-}
+location.replace(target);
 </script>
 </body>
 </html>
