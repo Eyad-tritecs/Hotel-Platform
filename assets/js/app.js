@@ -960,6 +960,27 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* CSV export — shared by every report page (see reservation-reports.html, */
+  /* inventory-reports.html, payment-reports.html) so each report's export   */
+  /* button is one call, not a hand-rolled CSV builder per page.             */
+  /* ---------------------------------------------------------------- */
+  function csvCell(v) {
+    v = v == null ? "" : String(v);
+    if (/[",\n]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }
+  function exportCsv(filename, headers, rows) {
+    var lines = [headers.map(csvCell).join(",")];
+    rows.forEach(function (row) { lines.push(row.map(csvCell).join(",")); });
+    var blob = new Blob([lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Formatting helpers                                                 */
   /* ---------------------------------------------------------------- */
   var STATUS_BADGE = {
@@ -1127,6 +1148,10 @@
     html += '<div class="pg-header-left">';
     html += '<div class="pg-property-ctx" title="Current property — this pilot has a single hotel, so no switcher is shown">' + ICONS.building + '<span>Palestine Grand Hotel</span></div>';
     html += '<div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
+    html += '<div class="pg-gsearch">' +
+      '<input class="pg-gsearch-input" id="pg-gsearch-input" placeholder="Search reservations, guests, rooms, payments…" autocomplete="off" aria-label="Global search">' +
+      '<div class="pg-gsearch-panel" id="pg-gsearch-panel"></div>' +
+    "</div>";
     html += '<div class="pg-header-right">';
     if (activeKey === "reservations") {
       html += '<a class="pg-header-btn" href="reservations-ar.html" title="Switch this screen to Arabic (RTL)">&#1575;&#1604;&#1593;&#1585;&#1576;&#1610;&#1577; (AR)</a>';
@@ -1136,6 +1161,144 @@
     html += '<div class="pg-user"><div class="avatar">HA</div><div><div class="u-name">Hotel Admin</div><div class="u-role">Palestine Grand Hotel</div></div></div>';
     html += "</div></header>";
     return html;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Global search — header search box present on every page (rendered by   */
+  /* renderHeader/mount). Searches reservations, guests, physical rooms      */
+  /* (by number or room type name), and payments (by transaction ref) —     */
+  /* grouped, capped per group, and opened via the same detail pages/deep-   */
+  /* link drawers every other cross-page link in this app already uses.     */
+  /* ---------------------------------------------------------------- */
+  var RECENT_SEARCH_KEY = "pg_recent_searches_v1";
+  var GSEARCH_LIMIT = 6;
+  function globalSearch(state, query) {
+    var q = (query || "").trim().toLowerCase();
+    if (!q) return { reservations: [], guests: [], rooms: [], payments: [] };
+    var qDigits = q.replace(/\D/g, "");
+    var reservations = state.reservations.filter(function (r) {
+      var c = state.customers.find(function (x) { return x.id === r.customerId; });
+      var hay = [r.id, c ? c.name : ""].join(" ").toLowerCase();
+      return hay.indexOf(q) > -1;
+    }).slice(0, GSEARCH_LIMIT);
+    var guests = state.customers.filter(function (c) {
+      var hay = [c.name, c.email].join(" ").toLowerCase();
+      var phoneMatch = qDigits && (c.phone || "").replace(/\D/g, "").indexOf(qDigits) > -1;
+      return hay.indexOf(q) > -1 || phoneMatch;
+    }).slice(0, GSEARCH_LIMIT);
+    var rooms = state.physicalRooms.filter(function (pr) {
+      var rt = state.roomTypes.find(function (x) { return x.id === pr.roomTypeId; });
+      var hay = [pr.roomNumber, rt ? rt.name : ""].join(" ").toLowerCase();
+      return hay.indexOf(q) > -1;
+    }).slice(0, GSEARCH_LIMIT);
+    var payments = state.reservations.filter(function (r) {
+      return r.transactionRef && r.transactionRef.toLowerCase().indexOf(q) > -1;
+    }).slice(0, GSEARCH_LIMIT);
+    return { reservations: reservations, guests: guests, rooms: rooms, payments: payments };
+  }
+  function recentSearches() {
+    try { return JSON.parse(localStorage.getItem(RECENT_SEARCH_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function pushRecentSearch(q) {
+    q = (q || "").trim();
+    if (!q) return;
+    try {
+      var list = recentSearches().filter(function (x) { return x.toLowerCase() !== q.toLowerCase(); });
+      list.unshift(q);
+      localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(list.slice(0, 5)));
+    } catch (e) { /* localStorage unavailable — recent searches simply won't persist */ }
+  }
+  function wireGlobalSearch() {
+    var input = document.getElementById("pg-gsearch-input");
+    var panel = document.getElementById("pg-gsearch-panel");
+    if (!input || !panel) return;
+    var flat = []; // flattened, in display order, for keyboard navigation
+    var hi = -1;
+
+    function resultRow(kind, id, main, sub) {
+      return { kind: kind, id: id, main: main, sub: sub };
+    }
+    function buildFlat(query) {
+      var st = getState();
+      var res = globalSearch(st, query);
+      var out = [];
+      res.reservations.forEach(function (r) {
+        var c = st.customers.find(function (x) { return x.id === r.customerId; });
+        out.push(resultRow("reservation", r.id, r.id + " — " + (c ? c.name : "Guest"), r.status + " · " + fmtDateShort(r.checkIn) + "–" + fmtDateShort(r.checkOut)));
+      });
+      res.guests.forEach(function (c) {
+        out.push(resultRow("guest", c.id, c.name, (c.phone || "—") + " · " + (c.email || "—")));
+      });
+      res.rooms.forEach(function (pr) {
+        var rt = st.roomTypes.find(function (x) { return x.id === pr.roomTypeId; });
+        out.push(resultRow("room", pr.id, "Room " + pr.roomNumber, (rt ? rt.name : "") + " · Floor " + pr.floor));
+      });
+      res.payments.forEach(function (r) {
+        var c = st.customers.find(function (x) { return x.id === r.customerId; });
+        out.push(resultRow("payment", r.id, r.transactionRef, r.id + (c ? " · " + c.name : "") + " · " + r.paymentStatus));
+      });
+      return out;
+    }
+    function openResult(item) {
+      pushRecentSearch(input.value);
+      if (item.kind === "reservation") location.href = "reservation-detail.html?id=" + item.id;
+      else if (item.kind === "guest") location.href = "guest-detail.html?id=" + item.id;
+      else if (item.kind === "room") location.href = "physical-rooms.html?room=" + item.id;
+      else if (item.kind === "payment") location.href = "payments.html?id=" + item.id;
+    }
+    function renderPanel() {
+      var q = input.value.trim();
+      if (!q) {
+        var recents = recentSearches();
+        if (!recents.length) { panel.innerHTML = '<div class="pg-gsearch-empty">Start typing to search reservations, guests, rooms, or payments.</div>'; flat = []; hi = -1; panel.classList.add("show"); return; }
+        panel.innerHTML = '<div class="pg-gsearch-recent"><span class="pg-gsearch-group-title" style="padding:0;">Recent Searches</span></div>' +
+          '<div style="padding:0 14px 10px;">' + recents.map(function (rterm) { return '<span class="pg-gsearch-recent-chip" data-recent="' + esc(rterm) + '">' + esc(rterm) + "</span>"; }).join("") + "</div>";
+        panel.querySelectorAll("[data-recent]").forEach(function (chip) {
+          chip.addEventListener("click", function () { input.value = chip.dataset.recent; input.dispatchEvent(new Event("input")); input.focus(); });
+        });
+        flat = []; hi = -1;
+        panel.classList.add("show");
+        return;
+      }
+      flat = buildFlat(q);
+      hi = -1;
+      if (!flat.length) { panel.innerHTML = '<div class="pg-gsearch-empty">No matches for "' + esc(q) + '".</div>'; panel.classList.add("show"); return; }
+      var groups = [["reservation", "Reservations"], ["guest", "Guests"], ["room", "Rooms"], ["payment", "Payments"]];
+      var html = "";
+      groups.forEach(function (g) {
+        var items = flat.filter(function (it) { return it.kind === g[0]; });
+        if (!items.length) return;
+        html += '<div class="pg-gsearch-group-title">' + g[1] + "</div>";
+        items.forEach(function (it) {
+          var idx = flat.indexOf(it);
+          html += '<div class="pg-gsearch-item" data-idx="' + idx + '"><span class="gs-main">' + esc(it.main) + '</span><span class="gs-sub">' + esc(it.sub) + "</span></div>";
+        });
+      });
+      panel.innerHTML = html;
+      panel.querySelectorAll(".pg-gsearch-item").forEach(function (el) {
+        el.addEventListener("mousedown", function (e) { e.preventDefault(); openResult(flat[+el.dataset.idx]); });
+      });
+      panel.classList.add("show");
+      setHighlight(0); // first result pre-highlighted so Enter opens it immediately, without requiring an arrow key first
+    }
+    function setHighlight(newHi) {
+      var items = panel.querySelectorAll(".pg-gsearch-item");
+      if (!items.length) return;
+      hi = Math.max(0, Math.min(items.length - 1, newHi));
+      items.forEach(function (el, i) { el.classList.toggle("hi", i === hi); });
+      items[hi].scrollIntoView({ block: "nearest" });
+    }
+    input.addEventListener("focus", renderPanel);
+    input.addEventListener("input", renderPanel);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setHighlight(hi + 1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight(hi - 1); }
+      else if (e.key === "Enter") { e.preventDefault(); if (hi > -1 && flat[hi]) openResult(flat[hi]); }
+      else if (e.key === "Escape") { panel.classList.remove("show"); input.blur(); }
+    });
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest(".pg-gsearch")) panel.classList.remove("show");
+    });
   }
 
   function mount(activeKey, crumbs) {
@@ -1149,6 +1312,7 @@
         setTimeout(function () { location.reload(); }, 400);
       }
     });
+    wireGlobalSearch();
     return document.getElementById("pg-page");
   }
 
@@ -1961,6 +2125,8 @@
     generatePaymentLink: generatePaymentLink,
     recordPaymentOutcome: recordPaymentOutcome,
     renderRecordRefundModal: renderRecordRefundModal,
+    globalSearch: globalSearch,
+    exportCsv: exportCsv,
     renderChangeRoomDrawer: renderChangeRoomDrawer,
     renderBlockRoomModal: renderBlockRoomModal,
     renderGuestDrawer: renderGuestDrawer,

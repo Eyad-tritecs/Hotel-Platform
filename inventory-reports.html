@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory Reports — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .rp-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:900px){.rp-cards{grid-template-columns:1fr;}}
+  .rp-card{border:1px solid var(--pg-border);border-radius:10px;padding:14px 16px;background:#fff;cursor:pointer;transition:border-color .12s;}
+  .rp-card:hover{border-color:var(--pg-primary);}
+  .rp-card.active{border-color:var(--pg-primary);background:var(--pg-primary-light);}
+  .rp-card h4{font-size:13.5px;margin-bottom:4px;}
+  .rp-card p{font-size:11.8px;color:var(--pg-gray-600);margin:0;}
+  .rp-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;}
+  .rp-filters .form-group{margin-bottom:0;}
+  .rp-filters .form-label{font-size:11px;}
+  .rp-filters input, .rp-filters select{min-width:150px;}
+  .rp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
+  @media (max-width:900px){.rp-kpis{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("inventory-reports", ["Reports", "Inventory Reports"]);
+var s = PG.getState();
+
+var REPORTS = [
+  { key:'occupancy', title:'Occupancy', purpose:'Booked vs. sellable rooms, per night, across the selected date range.' },
+  { key:'utilization', title:'Room Availability and Utilization', purpose:'Per room type: how much of the sellable inventory was actually booked over the range.' },
+  { key:'blocked', title:'Blocked Rooms', purpose:'Physical-room blocks (Out of Order / Out of Service / Management Hold / Other) overlapping the selected range.' }
+];
+
+function rtName(id){ var rt=s.roomTypes.find(function(r){return r.id===id;}); return rt?rt.name:id; }
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Inventory Reports</h1><div class="sub">Lightweight operational reports — not a business-intelligence product</div></div></div>';
+html += '<div class="rp-cards" id="rpCards"></div>';
+html += '<div class="card"><div class="card-header"><div><h3 id="rpTitle"></h3><div class="desc" id="rpPurpose"></div></div></div><div class="card-body">' +
+  '<div class="rp-filters" id="rpFilters"></div>' +
+  '<div id="rpKpis"></div>' +
+  '<div class="table-wrap"><table class="dt" id="rpTable"></table></div>' +
+'</div></div>';
+page.innerHTML = html;
+
+document.getElementById('rpCards').innerHTML = REPORTS.map(function(r){
+  return '<div class="rp-card" data-report="'+r.key+'"><h4>'+r.title+'</h4><p>'+r.purpose+'</p></div>';
+}).join('');
+document.getElementById('rpCards').addEventListener('click', function(e){
+  var card = e.target.closest('.rp-card'); if (!card) return;
+  selectReport(card.dataset.report);
+});
+
+var qp = new URLSearchParams(location.search);
+var state = { report: qp.get('report') || 'occupancy', from: qp.get('from') || PG.TODAY, to: qp.get('to') || PG.addDays(PG.TODAY,6), roomType: 'all' };
+
+function selectReport(key){
+  state.report = key;
+  document.querySelectorAll('.rp-card').forEach(function(c){ c.classList.toggle('active', c.dataset.report===key); });
+  render();
+}
+function fieldDate(id, label, value){ return '<div class="form-group"><label class="form-label">'+label+'</label><input type="date" class="form-control" id="'+id+'" value="'+value+'"></div>'; }
+
+function render(){
+  s = PG.getState();
+  var def = REPORTS.find(function(r){return r.key===state.report;});
+  document.getElementById('rpTitle').textContent = def.title;
+  document.getElementById('rpPurpose').textContent = def.purpose;
+
+  var filtersHtml = '<div class="form-group"><label class="form-label">Property</label><select class="form-control" disabled><option>'+PG.esc(s.hotel.name)+'</option></select></div>';
+  filtersHtml += fieldDate('rp-from','From', state.from) + fieldDate('rp-to','To', state.to);
+  if (state.report!=='blocked'){
+    filtersHtml += '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control" id="rp-rt"><option value="all">All Room Types</option>' +
+      s.roomTypes.map(function(rt){return '<option value="'+rt.id+'"'+(rt.id===state.roomType?' selected':'')+'>'+PG.esc(rt.name)+'</option>';}).join('') + '</select></div>';
+  }
+  filtersHtml += '<button class="btn btn-primary btn-sm" id="rp-export" style="margin-left:auto;">Export CSV</button>';
+  document.getElementById('rpFilters').innerHTML = filtersHtml;
+  PG.enhanceSelects(document.getElementById('rpFilters'));
+
+  var fromEl=document.getElementById('rp-from'), toEl=document.getElementById('rp-to'), rtEl=document.getElementById('rp-rt');
+  if (fromEl) fromEl.addEventListener('change', function(){ state.from=this.value; render(); });
+  if (toEl) toEl.addEventListener('change', function(){ state.to=this.value; render(); });
+  if (rtEl) rtEl.addEventListener('change', function(){ state.roomType=this.value; render(); });
+
+  var result = buildReport(state.report);
+  document.getElementById('rpKpis').innerHTML = result.kpis ? '<div class="rp-kpis">'+result.kpis.map(function(k){return kpiTile(k[0],k[1],k[2]);}).join('')+'</div>' : '';
+  document.getElementById('rpTable').innerHTML = '<thead><tr>' + result.headers.map(function(h){return '<th'+(h.num?' class="num"':'')+'>'+h.label+'</th>';}).join('') + '</tr></thead>' +
+    '<tbody>' + (result.rows.length ? result.rows.map(function(row){ return '<tr>'+row.map(function(c,i){return '<td'+(result.headers[i].num?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>'; }).join('') : '<tr><td colspan="'+result.headers.length+'"><div class="empty-state">No records match this filter.</div></td></tr>') + '</tbody>';
+
+  document.getElementById('rp-export').addEventListener('click', function(){
+    PG.exportCsv(state.report+'-report.csv', result.headers.map(function(h){return h.label;}), result.csvRows);
+  });
+}
+function kpiTile(label, value, note){ return '<div class="kpi"><div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+'</div><div class="kpi-note">'+(note||'&nbsp;')+'</div></div>'; }
+
+function typesFor(){ return state.roomType==='all' ? s.roomTypes : s.roomTypes.filter(function(rt){return rt.id===state.roomType;}); }
+
+function buildReport(key){
+  var dates = PG.dateRange(state.from, PG.addDays(state.to,1));
+  if (key==='occupancy'){
+    var totalCap=0, totalBooked=0;
+    var rows = dates.map(function(d){
+      var cap=0, booked=0, stop=false;
+      typesFor().forEach(function(rt){ var a=PG.computeAvailability(s, rt.id, d); cap+=a.sellable; booked+=a.booked; if (a.stopSell) stop=true; });
+      totalCap+=cap; totalBooked+=booked;
+      var pct = cap ? Math.round(booked/cap*100) : 0;
+      return { d:d, cap:cap, booked:booked, avail:Math.max(0,cap-booked), pct:pct, stop:stop };
+    });
+    var avgPct = totalCap ? Math.round(totalBooked/totalCap*100) : 0;
+    return {
+      kpis: [['Avg Occupancy', avgPct+'%'], ['Room-Nights Booked', totalBooked], ['Room-Nights Sellable', totalCap]],
+      headers: [{label:'Date'},{label:'Sellable',num:true},{label:'Booked',num:true},{label:'Available',num:true},{label:'Occupancy %',num:true},{label:'Stop Sell'}],
+      rows: rows.map(function(r){ return [PG.fmtDate(r.d), r.cap, r.booked, r.avail, r.pct+'%', r.stop?'<span class="badge badge-red"><span class="badge-dot"></span>Yes</span>':'—']; }),
+      csvRows: rows.map(function(r){ return [r.d, r.cap, r.booked, r.avail, r.pct, r.stop?'Yes':'No']; })
+    };
+  }
+  if (key==='utilization'){
+    var rows2 = typesFor().map(function(rt){
+      var sellNights=0, bookedNights=0, stopDays=0;
+      dates.forEach(function(d){ var a=PG.computeAvailability(s, rt.id, d); sellNights+=a.sellable; bookedNights+=a.booked; if (a.stopSell) stopDays++; });
+      var util = sellNights ? Math.round(bookedNights/sellNights*100) : 0;
+      return { rt:rt, sellNights:sellNights, bookedNights:bookedNights, util:util, stopDays:stopDays, physicalCap: PG.activeSellablePhysicalCount(s, rt.id) };
+    });
+    return {
+      kpis: [['Room Types', rows2.length], ['Avg Utilization', rows2.length ? Math.round(rows2.reduce(function(a,r){return a+r.util;},0)/rows2.length)+'%' : '0%']],
+      headers: [{label:'Room Type'},{label:'Active Sellable Physical',num:true},{label:'Room-Nights Sellable',num:true},{label:'Room-Nights Booked',num:true},{label:'Utilization %',num:true},{label:'Days at Stop Sell',num:true}],
+      rows: rows2.map(function(r){ return [PG.esc(r.rt.name), r.physicalCap, r.sellNights, r.bookedNights, r.util+'%', r.stopDays]; }),
+      csvRows: rows2.map(function(r){ return [r.rt.name, r.physicalCap, r.sellNights, r.bookedNights, r.util, r.stopDays]; })
+    };
+  }
+  // Blocked Rooms
+  var blocks = s.roomBlocks.filter(function(b){ return b.startDate < PG.addDays(state.to,1) && b.endDate > state.from; }).sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  function blockStatus(b){
+    if (b.endDate<=PG.TODAY) return 'Ended';
+    if (b.startDate>PG.TODAY) return 'Upcoming';
+    return 'Active';
+  }
+  return {
+    kpis: [['Blocks in Range', blocks.length], ['Currently Active', blocks.filter(function(b){return blockStatus(b)==='Active';}).length]],
+    headers: [{label:'Room'},{label:'Room Type'},{label:'Block Type'},{label:'Start'},{label:'End'},{label:'Status'},{label:'Reason'}],
+    rows: blocks.map(function(b){
+      var room = s.physicalRooms.find(function(p){return p.id===b.physicalRoomId;});
+      return ['<a href="physical-rooms.html?room='+b.physicalRoomId+'">Room '+(room?PG.esc(room.roomNumber):'—')+'</a>', room?PG.esc(rtName(room.roomTypeId)):'—', PG.esc(b.type), PG.fmtDateShort(b.startDate), PG.fmtDateShort(PG.addDays(b.endDate,-1)), blockStatus(b), PG.esc(b.reason)];
+    }),
+    csvRows: blocks.map(function(b){
+      var room = s.physicalRooms.find(function(p){return p.id===b.physicalRoomId;});
+      return [room?room.roomNumber:'—', room?rtName(room.roomTypeId):'—', b.type, b.startDate, PG.addDays(b.endDate,-1), blockStatus(b), b.reason];
+    })
+  };
+}
+
+selectReport(state.report);
+</script>
+</body>
+</html>

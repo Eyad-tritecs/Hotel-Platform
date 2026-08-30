@@ -61,7 +61,10 @@ What's actually built and working today, grouped by module (see §8 for the full
 - **Arabic (RTL)** — one representative screen (`reservations-ar.html`), deliberately not a full localization.
 - **A Guided Journey demo** — a scripted, 7-phase walkthrough of one booking scenario for stakeholder demos.
 
-**Intentionally not yet built** (nav links exist, pages don't — see §7): `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html` (Platform Super Admin tenant list).
+**Intentionally not yet built** (nav links exist, page doesn't — see §7): `hotels.html` (Platform Super Admin tenant list).
+- **Reports** — three lightweight report hubs (Reservation/Inventory/Payment Reports, §8.7), each a card list over several compact reports (filters + KPI tiles + an operational table + CSV export), not a BI product.
+- **Global search** — a header search box present on every page (§5.4), grouped by Reservations/Guests/Rooms/Payments, keyboard-navigable, with per-viewer recent searches.
+- **Saved operational views** — one-click predefined filters (Today's Arrivals/Departures, Unassigned Reservations, Payment Issues, Blocked Rooms) on the Dashboard, linking into the query params those pages already understand.
 
 ---
 
@@ -136,6 +139,7 @@ The prototype needs to *feel* like a real connected system — creating a reserv
 ├── guests.html / guest-detail.html
 ├── reservation-detail.html
 ├── payments.html
+├── reservation-reports.html / inventory-reports.html / payment-reports.html
 ├── hotel-policies.html / taxes-fees.html / payment-configuration.html
 ├── users.html / roles.html / permissions.html / audit.html
 ├── demo-journey.html             Guided stakeholder demo
@@ -295,6 +299,10 @@ The header renders a `.pg-property-ctx` pill showing "Palestine Grand Hotel" wit
 
 `CURRENT_ROLE` (hardcoded to `"Hotel Admin"`, exported as `PG.CURRENT_ROLE`) gates `NAV` items flagged `superAdminOnly: true` (currently only "Hotels"). It also backs a `CAN_MANAGE` check reused across several pages (`physical-rooms.html`, `operations-calendar.html`, `guests.html`, `guest-detail.html`) that renders a permission-denied panel when false — **always true today**, since there is no login screen or role switcher UI. If a future prompt asks for a role switcher, this is the variable to wire up; the permission-denied panels already exist and will activate automatically.
 
+### 5.4 Global search (header)
+
+`renderHeader()` renders a `.pg-gsearch` search box on **every** page (it's part of the shared header, not a per-page feature), wired up by `wireGlobalSearch()` inside `mount()` — so it needs no per-page setup. **`PG.globalSearch(state, query)`** is the single search primitive: substring match (case-insensitive) across reservation ID + guest name (→ *Reservations*), guest name/email/phone (→ *Guests*), physical room number + room type name (→ *Rooms*), and `transactionRef` (→ *Payments*), each group capped at 6 results. The dropdown groups results in that order, supports Arrow Up/Down + Enter (the first result is pre-highlighted so Enter works without an arrow key first) + Escape, and opening a result navigates straight to the right page — `reservation-detail.html?id=`, `guest-detail.html?id=`, `physical-rooms.html?room=` (opens that room's Details drawer via the existing deep link), or `payments.html?id=` (opens that reservation's Payment Details drawer via the existing deep link) — never a generic search-results page. **Recent searches** are the one piece of UI state that lives outside `state` entirely: a small array in its own `localStorage` key (`pg_recent_searches_v1`, capped at 5, newest first), read/written by `recentSearches()`/`pushRecentSearch()` — deliberately not part of the main `pg_hotel_admin_state_v1` blob since it's a per-viewer convenience, not business data, and "Reset Demo Data" should not need to touch it.
+
 ---
 
 ## 6. Design system components (`assets/css/style.css`)
@@ -355,12 +363,12 @@ Hotel Management  → Dashboard (index.html), Operations Calendar (operations-ca
                      Rates, [Availability & Inventory — hidden, see below]
 Reservations      → Reservations, New Reservation, Guests (guests.html)
 Payments          → Payments
-Reports           → Reservation Reports, Inventory Reports, Payment Reports (ALL THREE — NOT YET BUILT)
+Reports           → Reservation Reports, Inventory Reports, Payment Reports
 Settings          → Hotel Policies, Taxes & Fees, Payment Configuration
 Administration    → Hotels (hotels.html — NOT YET BUILT, super-admin-only), Users, Roles, Permissions, Audit
 ```
 
-**The nav links to three pages that do not exist yet:** `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html`, `hotels.html`. This is intentional — screens get built incrementally, one focused prompt at a time, not all at once. When you build one of these, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new label to `CRUMB_LINKS` too).
+**The nav still links to one page that doesn't exist yet:** `hotels.html`. This is intentional — screens get built incrementally, one focused prompt at a time, not all at once. When you build it, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new label to `CRUMB_LINKS` too).
 
 **`Availability & Inventory` is hidden from the sidebar, not removed.** By product decision, the Operations Calendar (§8.2/§8.5) is now the primary availability/inventory workspace; `availability-inventory.html`, its route, and every bit of its logic are fully intact and directly reachable by URL — only its `NAV` entry is toggled via a `hidden: true` flag (`renderSidebar()` filters `!it.hidden`, the same spot `superAdminOnly` is already filtered), reusing that existing visibility mechanism rather than adding a new one. It's also been unlinked from the Dashboard's shortcuts/alerts, `reservation-detail.html`'s More menu, and `reservations-ar.html`'s own hand-written sidebar (all now point at the Operations Calendar instead). Flip `hidden` back to `false` (or delete the key) to restore it to the nav — nothing else needs to change. Don't create a second, competing entry point for editing availability/inventory outside the Operations Calendar and this dormant page.
 
@@ -391,6 +399,7 @@ The old "Guided Journey" nav item was removed from the sidebar in an earlier res
 | `taxes-fees.html` | **Taxes & Fees — real, configurable charges wired into pricing** | See §8.5. CRUD over `state.taxesFees` (Add Charge / Edit **Drawer**): Percentage or Fixed, Tax or Fee, Applies by Default + Active toggles, optional Effective From/To. A live "Example Pricing Breakdown" sidebar card shows exactly what `PG.computePricing()` would charge on a $100 room subtotal today. No delete — same Active/Inactive-only lifecycle convention as Physical Rooms. |
 | `hotel-policies.html`, `payment-configuration.html` | Settings, mostly read-only/lightweight | Explicitly kept lightweight per the original brief. |
 | `users.html`, `roles.html`, `permissions.html`, `audit.html` | Administration | Lightweight by design, except Audit, which reads the real `state.audit` log. |
+| `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html` | **Reports — a card grid + one inline report viewer per hub**, see §8.7 | 5/3/2 reports respectively. Every report: Property (disabled) + date-range + relevant secondary filters, KPI tiles where useful, an operational table as the primary result, and **Export CSV**. `?report=`/`?from=`/`?to=`/`?status=` query params select a report and its filters on load (used by Dashboard's Saved Views). |
 | `demo-journey.html` | **Guided Journey** — a 7-phase clickable walkthrough of one scenario (Ahmad Khalil, WhatsApp booking → payment → cancellation) | Not in primary nav (§7) but linked from the Dashboard. Opens `new-reservation.html?demo=ahmad-whatsapp` and other screens in new tabs so the checklist stays visible. |
 
 ### 8.1 New Reservation wizard — key behaviors to preserve
@@ -464,6 +473,15 @@ Interaction pattern only loosely modeled on Mews-style hotel operations calendar
 - **Dashboard payment exceptions** (`index.html`'s alert loop) cover Payment Link Expiring-soon (≤6h, existing), Failed (existing), and three additions — **Expired** (every one, not deduped, since it's already a rare terminal state), **Refund Pending** (every one — these need action), and **Payment Required** older than 24h (age-gated and `dedupeKey`'d like the existing Stale Draft alert, so a reservation that simply hasn't had its link generated yet in the last few minutes doesn't clutter the list). All payment alerts link to `payments.html?id=<reservationId>`, which opens straight to that reservation's Payment Details drawer.
 - **The Operations Calendar was already correctly scoped here and needed no change**: `openReservationDrawer()` already shows the full `PG.payBadge(res.paymentStatus)` in its Payment section, and bars themselves only ever carry a small warning icon for the `Failed`/`Expired`/`Refund Pending` exception set (`payException` in `renderBarHtml()`) — full status detail lives in the drawer, never crowding the bar itself.
 
+### 8.7 Reports and Saved Views — key behaviors to preserve
+
+- **Three report *hubs*, ten reports, no tenth/eleventh HTML file.** `reservation-reports.html` (Arrivals, Departures, Reservations by Status, Cancellations and No Shows, Unassigned Reservations), `inventory-reports.html` (Occupancy, Room Availability and Utilization, Blocked Rooms), and `payment-reports.html` (Revenue Summary, Payments by Status) each render a card grid at the top; clicking a card swaps which report renders below (filters + KPI tiles + an operational table) in the same card — there's no separate route per report. This is deliberate: "lightweight MVP reports," not a BI product with a page per metric.
+- **Every report reads directly from `PG.getState()`** the same way every other page does — there is no separate reporting datastore, cache, or precomputed rollup, so a report is never stale relative to the rest of the app and always agrees with what `payments.html`/`reservations.html`/`physical-rooms.html` show for the same records.
+- **`PG.exportCsv(filename, headers, rows)`** is the one CSV export implementation every report's "Export CSV" button calls — it isn't a real download in every environment (relies on a `Blob` + `<a download>` click), consistent with this being a static prototype rather than a server-backed export pipeline.
+- **"Unassigned Reservations" is a diagnostic report, not a UI concept.** It lists any active reservation item with fewer physical-room assignments than its quantity — the same self-heal condition Reservation Detail already flags as "Needs Attention" (§4.7) — and its own copy states plainly this should always be empty in normal operation. It is **not** a lane, filter, or status anywhere else, and must never be treated as license to reintroduce one (§4.7, §9).
+- **Every report's filters include a disabled single-option Property selector** (this pilot has one property, no switcher — same convention as the header's property pill) and a date range where relevant; no report has an amount-range filter, since that capability doesn't exist anywhere else in the app and wasn't invented here either.
+- **Saved Views on the Dashboard are just links with query params**, not a new saved-view feature: `reservation-reports.html?report=arrivals&from=&to=`, `?report=departures&from=&to=`, `?report=unassigned`, `payments.html?status=Issues` (a new pseudo-status meaning Failed ∪ Expired ∪ Refund Pending, handled in `filteredRows()` alongside the existing "Payment Required" ∪ "Link Sent" grouping), and `inventory-reports.html?report=blocked&from=&to=`. Every report page reads `?report=`/`?from=`/`?to=`/`?status=` on load and calls the same `selectReport()`/`render()` a card click would. Custom user-created saved views were deliberately not built (see §11) — the five predefined ones above are what was asked for.
+
 ---
 
 ## 9. Known issues / deliberate simplifications (read before "fixing" these)
@@ -504,8 +522,8 @@ Interaction pattern only loosely modeled on Mews-style hotel operations calendar
 
 Based on the nav structure already wired in but not yet built:
 
-- `reservation-reports.html`, `inventory-reports.html`, `payment-reports.html` — reporting views; `state.audit` and `state.adjustments` already contain data that could feed Inventory Reports. Any reservation/room-availability report must show the assigned physical room number per §4.7's rule — do not add an "assignment status" filter or an "unassigned" result type/export column.
 - `hotels.html` — a Platform Super Admin-only tenant list (would need `CURRENT_ROLE` toggled to `"Platform Super Admin"` to view/test).
+- Custom, user-created saved views (beyond the five predefined ones in §8.7) — deliberately deferred as out of MVP scope when the Reports/search work was built.
 
 Do not build these speculatively — wait for the corresponding prompt, per the user's own stated sequencing.
 

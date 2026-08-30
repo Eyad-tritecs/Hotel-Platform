@@ -228,6 +228,17 @@ s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;})
 });
 html += '</tbody></table></div></div></div>';
 
+// Saved Operational Views — predefined filtered views into existing worklists/reports,
+// not a new saved-views feature — each link just carries the query params those pages
+// already understand.
+html += '<div class="card"><div class="card-header"><h3>Saved Views</h3><div class="desc">Predefined operational filters, one click away</div></div><div class="card-body"><div class="quick-ops">' +
+  '<a class="btn btn-light" href="reservation-reports.html?report=arrivals&from='+T+'&to='+T+'">Today\'s Arrivals</a>' +
+  '<a class="btn btn-light" href="reservation-reports.html?report=departures&from='+T+'&to='+T+'">Today\'s Departures</a>' +
+  '<a class="btn btn-light" href="reservation-reports.html?report=unassigned">Unassigned Reservations</a>' +
+  '<a class="btn btn-light" href="payments.html?status=Issues">Payment Issues</a>' +
+  '<a class="btn btn-light" href="inventory-reports.html?report=blocked&from='+T+'&to='+PG.addDays(T,30)+'">Blocked Rooms</a>' +
+'</div></div></div>';
+
 // Quick Operations
 html += '<div class="card"><div class="card-header"><h3>Quick Operations</h3></div><div class="card-body"><div class="quick-ops">' +
   '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +

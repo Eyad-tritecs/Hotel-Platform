@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Reports — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .rp-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:700px){.rp-cards{grid-template-columns:1fr;}}
+  .rp-card{border:1px solid var(--pg-border);border-radius:10px;padding:14px 16px;background:#fff;cursor:pointer;transition:border-color .12s;}
+  .rp-card:hover{border-color:var(--pg-primary);}
+  .rp-card.active{border-color:var(--pg-primary);background:var(--pg-primary-light);}
+  .rp-card h4{font-size:13.5px;margin-bottom:4px;}
+  .rp-card p{font-size:11.8px;color:var(--pg-gray-600);margin:0;}
+  .rp-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;}
+  .rp-filters .form-group{margin-bottom:0;}
+  .rp-filters .form-label{font-size:11px;}
+  .rp-filters input, .rp-filters select{min-width:150px;}
+  .rp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
+  @media (max-width:900px){.rp-kpis{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("payment-reports", ["Reports", "Payment Reports"]);
+var s = PG.getState();
+var STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
+
+var REPORTS = [
+  { key:'revenue', title:'Revenue Summary', purpose:'Collected, outstanding, and refunded amounts for reservations created in the selected range.' },
+  { key:'by-status', title:'Payments by Status', purpose:'Every reservation\'s payment grouped by its current payment status.' }
+];
+
+function custOf(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
+function total(r){
+  var n=PG.dateRange(r.checkIn, r.checkOut), t=0;
+  r.rooms.forEach(function(room){ n.forEach(function(d){ t+=PG.rateFor(s, room.roomTypeId, d)*room.qty; }); });
+  return t+(r.taxAmount||0)+(r.feeAmount||0);
+}
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Payment Reports</h1><div class="sub">Lightweight operational reports — not a business-intelligence or accounting product</div></div></div>';
+html += '<div class="rp-cards" id="rpCards"></div>';
+html += '<div class="card"><div class="card-header"><div><h3 id="rpTitle"></h3><div class="desc" id="rpPurpose"></div></div></div><div class="card-body">' +
+  '<div class="rp-filters" id="rpFilters"></div>' +
+  '<div id="rpKpis"></div>' +
+  '<div class="table-wrap"><table class="dt" id="rpTable"></table></div>' +
+'</div></div>';
+html += '<div class="pg-lightweight-note">Figures are computed live from the same reservation records used everywhere else in the app — there is no separate ledger, settlement reconciliation, or accounting export.</div>';
+page.innerHTML = html;
+
+document.getElementById('rpCards').innerHTML = REPORTS.map(function(r){
+  return '<div class="rp-card" data-report="'+r.key+'"><h4>'+r.title+'</h4><p>'+r.purpose+'</p></div>';
+}).join('');
+document.getElementById('rpCards').addEventListener('click', function(e){
+  var card = e.target.closest('.rp-card'); if (!card) return;
+  selectReport(card.dataset.report);
+});
+
+var qp = new URLSearchParams(location.search);
+var state = { report: qp.get('report') || 'revenue', from: qp.get('from') || PG.addDays(PG.TODAY,-30), to: qp.get('to') || PG.TODAY, status: qp.get('status') || 'All', method: 'All' };
+
+function selectReport(key){
+  state.report = key;
+  document.querySelectorAll('.rp-card').forEach(function(c){ c.classList.toggle('active', c.dataset.report===key); });
+  render();
+}
+function fieldDate(id, label, value){ return '<div class="form-group"><label class="form-label">'+label+'</label><input type="date" class="form-control" id="'+id+'" value="'+value+'"></div>'; }
+function kpiTile(label, value, note){ return '<div class="kpi"><div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+'</div><div class="kpi-note">'+(note||'&nbsp;')+'</div></div>'; }
+
+function render(){
+  s = PG.getState();
+  var def = REPORTS.find(function(r){return r.key===state.report;});
+  document.getElementById('rpTitle').textContent = def.title;
+  document.getElementById('rpPurpose').textContent = def.purpose;
+
+  var filtersHtml = '<div class="form-group"><label class="form-label">Property</label><select class="form-control" disabled><option>'+PG.esc(s.hotel.name)+'</option></select></div>';
+  filtersHtml += fieldDate('rp-from','Created From', state.from) + fieldDate('rp-to','Created To', state.to);
+  filtersHtml += '<div class="form-group"><label class="form-label">Method</label><select class="form-control" id="rp-method"><option value="All">All Methods</option><option value="Pay on Arrival">Pay on Arrival</option><option value="Payment Link">Payment Link</option></select></div>';
+  if (state.report==='by-status'){
+    filtersHtml += '<div class="form-group"><label class="form-label">Status</label><select class="form-control" id="rp-status"><option value="All">All Statuses</option>' +
+      STATUSES.map(function(k){return '<option value="'+k+'"'+(k===state.status?' selected':'')+'>'+k+'</option>';}).join('') + '</select></div>';
+  }
+  filtersHtml += '<button class="btn btn-primary btn-sm" id="rp-export" style="margin-left:auto;">Export CSV</button>';
+  document.getElementById('rpFilters').innerHTML = filtersHtml;
+  PG.enhanceSelects(document.getElementById('rpFilters'));
+
+  var fromEl=document.getElementById('rp-from'), toEl=document.getElementById('rp-to'), methodEl=document.getElementById('rp-method'), statusEl=document.getElementById('rp-status');
+  if (fromEl) fromEl.addEventListener('change', function(){ state.from=this.value; render(); });
+  if (toEl) toEl.addEventListener('change', function(){ state.to=this.value; render(); });
+  if (methodEl) methodEl.addEventListener('change', function(){ state.method=this.value; render(); });
+  if (statusEl) statusEl.addEventListener('change', function(){ state.status=this.value; render(); });
+
+  var result = buildReport(state.report);
+  document.getElementById('rpKpis').innerHTML = result.kpis ? '<div class="rp-kpis">'+result.kpis.map(function(k){return kpiTile(k[0],k[1],k[2]);}).join('')+'</div>' : '';
+  document.getElementById('rpTable').innerHTML = '<thead><tr>' + result.headers.map(function(h){return '<th'+(h.num?' class="num"':'')+'>'+h.label+'</th>';}).join('') + '</tr></thead>' +
+    '<tbody>' + (result.rows.length ? result.rows.map(function(row){ return '<tr>'+row.map(function(c,i){return '<td'+(result.headers[i].num?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>'; }).join('') : '<tr><td colspan="'+result.headers.length+'"><div class="empty-state">No records match this filter.</div></td></tr>') + '</tbody>';
+
+  document.getElementById('rp-export').addEventListener('click', function(){
+    PG.exportCsv(state.report+'-report.csv', result.headers.map(function(h){return h.label;}), result.csvRows);
+  });
+}
+
+function inRangeReservations(){
+  return s.reservations.filter(function(r){
+    if (r.createdAt.slice(0,10)<state.from || r.createdAt.slice(0,10)>state.to) return false;
+    if (state.method!=='All' && r.paymentMethod!==state.method) return false;
+    return true;
+  });
+}
+
+function buildReport(key){
+  var pool = inRangeReservations();
+  if (key==='revenue'){
+    var paid = pool.filter(function(r){return r.paymentStatus==='Paid';});
+    var outstanding = pool.filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';});
+    var refunded = pool.filter(function(r){return r.paymentStatus==='Refunded';});
+    var poa = pool.filter(function(r){return r.paymentMethod==='Pay on Arrival' && r.paymentStatus==='Pay on Arrival';});
+    var paidTotal = paid.reduce(function(a,r){return a+total(r);},0);
+    var outstandingTotal = outstanding.reduce(function(a,r){return a+total(r);},0);
+    var refundedTotal = refunded.reduce(function(a,r){return a+total(r);},0);
+    var rows = pool.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;});
+    return {
+      kpis: [['Collected', PG.fmtMoney(paidTotal)], ['Outstanding', PG.fmtMoney(outstandingTotal)], ['Refunded', PG.fmtMoney(refundedTotal)], ['Pay on Arrival (pending)', PG.fmtMoney(poa.reduce(function(a,r){return a+total(r);},0))]],
+      headers: [{label:'Reservation #'},{label:'Guest'},{label:'Created'},{label:'Method'},{label:'Status'},{label:'Amount',num:true}],
+      rows: rows.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.fmtDateShort(r.createdAt.slice(0,10)), PG.esc(r.paymentMethod||'—'), PG.payBadge(r.paymentStatus), PG.fmtMoney(total(r))]; }),
+      csvRows: rows.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.createdAt.slice(0,10), r.paymentMethod||'—', r.paymentStatus, total(r).toFixed(2)]; })
+    };
+  }
+  // Payments by Status
+  var counts = {};
+  pool.forEach(function(r){ counts[r.paymentStatus]=(counts[r.paymentStatus]||0)+1; });
+  var rows2 = pool.filter(function(r){ return state.status==='All' || r.paymentStatus===state.status; }).sort(function(a,b){return b.createdAt<a.createdAt?-1:1;});
+  return {
+    kpis: Object.keys(counts).map(function(k){ return [k, counts[k]]; }).slice(0,4),
+    headers: [{label:'Reservation #'},{label:'Guest'},{label:'Method'},{label:'Status'},{label:'Transaction Ref'},{label:'Amount',num:true}],
+    rows: rows2.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.esc(r.paymentMethod||'—'), PG.payBadge(r.paymentStatus), PG.esc(r.transactionRef||'—'), PG.fmtMoney(total(r))]; }),
+    csvRows: rows2.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.paymentMethod||'—', r.paymentStatus, r.transactionRef||'—', total(r).toFixed(2)]; })
+  };
+}
+
+selectReport(state.report);
+</script>
+</body>
+</html>

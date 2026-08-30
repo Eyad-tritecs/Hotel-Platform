@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reservation Reports — Palestine Grand Hotel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .rp-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:1100px){.rp-cards{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:650px){.rp-cards{grid-template-columns:1fr;}}
+  .rp-card{border:1px solid var(--pg-border);border-radius:10px;padding:14px 16px;background:#fff;cursor:pointer;transition:border-color .12s;}
+  .rp-card:hover{border-color:var(--pg-primary);}
+  .rp-card.active{border-color:var(--pg-primary);background:var(--pg-primary-light);}
+  .rp-card h4{font-size:13.5px;margin-bottom:4px;}
+  .rp-card p{font-size:11.8px;color:var(--pg-gray-600);margin:0;}
+  .rp-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;}
+  .rp-filters .form-group{margin-bottom:0;}
+  .rp-filters .form-label{font-size:11px;}
+  .rp-filters input, .rp-filters select{min-width:150px;}
+  .rp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;}
+  @media (max-width:900px){.rp-kpis{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div id="pg-app"></div>
+<script src="assets/js/app.js"></script>
+<script>
+var page = PG.mount("reservation-reports", ["Reports", "Reservation Reports"]);
+var s = PG.getState();
+
+var REPORTS = [
+  { key:'arrivals', title:'Arrivals', purpose:'Guests due to arrive within the selected date range.' },
+  { key:'departures', title:'Departures', purpose:'Guests due to depart within the selected date range.' },
+  { key:'by-status', title:'Reservations by Status', purpose:'Every reservation grouped by its current lifecycle status.' },
+  { key:'cancellations', title:'Cancellations and No Shows', purpose:'Reservations that were cancelled or not honored, with reason where recorded.' },
+  { key:'unassigned', title:'Unassigned Reservations', purpose:'Diagnostic only — every active reservation must have a physical room; this should always be empty (see below).' }
+];
+
+function rtName(id){ var rt=s.roomTypes.find(function(r){return r.id===id;}); return rt?rt.name:id; }
+function custOf(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
+function roomsLabel(r){
+  var nums=[];
+  r.rooms.forEach(function(item){
+    s.roomAssignments.filter(function(a){return a.reservationItemId===item.id && a.assignmentStatus!=='Cancelled';}).forEach(function(a){
+      var room=s.physicalRooms.find(function(p){return p.id===a.physicalRoomId;});
+      if (room) nums.push(room.roomNumber);
+    });
+  });
+  return nums.length?nums.join(', '):'—';
+}
+function total(r){
+  var n=PG.dateRange(r.checkIn, r.checkOut), t=0;
+  r.rooms.forEach(function(room){ n.forEach(function(d){ t+=PG.rateFor(s, room.roomTypeId, d)*room.qty; }); });
+  return t+(r.taxAmount||0)+(r.feeAmount||0);
+}
+function reasonFromActivity(r, keywords){
+  var entry = (r.activity||[]).slice().reverse().find(function(a){
+    var low=a.text.toLowerCase();
+    return keywords.some(function(k){return low.indexOf(k)>-1;});
+  });
+  if (!entry) return '—';
+  var m = entry.text.match(/Reason:\s*([^.(]+)/i);
+  return m ? m[1].trim() : entry.text;
+}
+
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Reservation Reports</h1><div class="sub">Lightweight operational reports — not a business-intelligence product</div></div></div>';
+html += '<div class="rp-cards" id="rpCards"></div>';
+html += '<div class="card"><div class="card-header"><div><h3 id="rpTitle"></h3><div class="desc" id="rpPurpose"></div></div></div><div class="card-body">' +
+  '<div class="rp-filters" id="rpFilters"></div>' +
+  '<div id="rpKpis"></div>' +
+  '<div id="rpNote"></div>' +
+  '<div class="table-wrap"><table class="dt" id="rpTable"></table></div>' +
+'</div></div>';
+page.innerHTML = html;
+
+document.getElementById('rpCards').innerHTML = REPORTS.map(function(r){
+  return '<div class="rp-card" data-report="'+r.key+'"><h4>'+r.title+'</h4><p>'+r.purpose+'</p></div>';
+}).join('');
+document.getElementById('rpCards').addEventListener('click', function(e){
+  var card = e.target.closest('.rp-card'); if (!card) return;
+  selectReport(card.dataset.report);
+});
+
+var qp = new URLSearchParams(location.search);
+var state = {
+  report: qp.get('report') || 'arrivals',
+  from: qp.get('from') || PG.TODAY,
+  to: qp.get('to') || PG.addDays(PG.TODAY, 6),
+  status: 'All'
+};
+
+function selectReport(key){
+  state.report = key;
+  document.querySelectorAll('.rp-card').forEach(function(c){ c.classList.toggle('active', c.dataset.report===key); });
+  render();
+}
+
+function fieldDate(id, label, value){
+  return '<div class="form-group"><label class="form-label">'+label+'</label><input type="date" class="form-control" id="'+id+'" value="'+value+'"></div>';
+}
+
+function render(){
+  s = PG.getState();
+  var def = REPORTS.find(function(r){return r.key===state.report;});
+  document.getElementById('rpTitle').textContent = def.title;
+  document.getElementById('rpPurpose').textContent = def.purpose;
+
+  var filtersHtml = '<div class="form-group"><label class="form-label">Property</label><select class="form-control" disabled><option>'+PG.esc(s.hotel.name)+'</option></select></div>';
+  if (state.report!=='unassigned') filtersHtml += fieldDate('rp-from','From', state.from) + fieldDate('rp-to','To', state.to);
+  if (state.report==='by-status' || state.report==='cancellations'){
+    var opts = state.report==='cancellations' ? ['All','Cancelled','No Show'] : ['All','Draft','Pending Payment','Confirmed','Cancelled','Completed','No Show'];
+    filtersHtml += '<div class="form-group"><label class="form-label">Status</label><select class="form-control" id="rp-status">' +
+      opts.map(function(o){return '<option value="'+o+'"'+(o===state.status?' selected':'')+'>'+o+'</option>';}).join('') + '</select></div>';
+  }
+  filtersHtml += '<button class="btn btn-primary btn-sm" id="rp-export" style="margin-left:auto;">Export CSV</button>';
+  document.getElementById('rpFilters').innerHTML = filtersHtml;
+  PG.enhanceSelects(document.getElementById('rpFilters'));
+
+  var fromEl = document.getElementById('rp-from'), toEl = document.getElementById('rp-to'), statusEl = document.getElementById('rp-status');
+  if (fromEl) fromEl.addEventListener('change', function(){ state.from=this.value; render(); });
+  if (toEl) toEl.addEventListener('change', function(){ state.to=this.value; render(); });
+  if (statusEl) statusEl.addEventListener('change', function(){ state.status=this.value; render(); });
+
+  var result = buildReport(state.report);
+  document.getElementById('rpKpis').innerHTML = result.kpis ? '<div class="rp-kpis">'+result.kpis.map(function(k){return kpiTile(k[0],k[1],k[2]);}).join('')+'</div>' : '';
+  document.getElementById('rpNote').innerHTML = result.note ? '<div class="help-note" style="margin-bottom:14px;">'+result.note+'</div>' : '';
+  document.getElementById('rpTable').innerHTML = '<thead><tr>' + result.headers.map(function(h){return '<th'+(h.num?' class="num"':'')+'>'+h.label+'</th>';}).join('') + '</tr></thead>' +
+    '<tbody>' + (result.rows.length ? result.rows.map(function(row){ return '<tr>'+row.map(function(c,i){return '<td'+(result.headers[i].num?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>'; }).join('') : '<tr><td colspan="'+result.headers.length+'"><div class="empty-state">No records match this filter.</div></td></tr>') + '</tbody>';
+
+  document.getElementById('rp-export').addEventListener('click', function(){
+    PG.exportCsv(state.report+'-report.csv', result.headers.map(function(h){return h.label;}), result.csvRows || result.rows.map(function(row){return row.map(function(c){return String(c).replace(/<[^>]+>/g,'');});}));
+  });
+}
+function kpiTile(label, value, note){ return '<div class="kpi"><div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+'</div><div class="kpi-note">'+(note||'&nbsp;')+'</div></div>'; }
+
+function buildReport(key){
+  if (key==='arrivals'){
+    var rows = s.reservations.filter(function(r){ return r.status!=='Cancelled' && r.checkIn>=state.from && r.checkIn<=state.to; }).sort(function(a,b){return a.checkIn<b.checkIn?-1:1;});
+    var pending = rows.filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';}).length;
+    return {
+      kpis: [['Arrivals in Range', rows.length], ['Pending Payment', pending], ['Rooms', rows.reduce(function(a,r){return a+r.rooms.reduce(function(b,x){return b+x.qty;},0);},0)]],
+      headers: [{label:'Reservation #'},{label:'Guest'},{label:'Arrival'},{label:'Room(s)'},{label:'Status'},{label:'Payment'}],
+      rows: rows.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.fmtDateShort(r.checkIn), PG.esc(roomsLabel(r)), PG.statusBadge(r.status), PG.payBadge(r.paymentStatus)]; }),
+      csvRows: rows.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.checkIn, roomsLabel(r), r.status, r.paymentStatus]; })
+    };
+  }
+  if (key==='departures'){
+    var rows2 = s.reservations.filter(function(r){ return r.status!=='Cancelled' && r.checkOut>=state.from && r.checkOut<=state.to; }).sort(function(a,b){return a.checkOut<b.checkOut?-1:1;});
+    return {
+      kpis: [['Departures in Range', rows2.length]],
+      headers: [{label:'Reservation #'},{label:'Guest'},{label:'Departure'},{label:'Room(s)'},{label:'Status'},{label:'Payment'}],
+      rows: rows2.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.fmtDateShort(r.checkOut), PG.esc(roomsLabel(r)), PG.statusBadge(r.status), PG.payBadge(r.paymentStatus)]; }),
+      csvRows: rows2.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.checkOut, roomsLabel(r), r.status, r.paymentStatus]; })
+    };
+  }
+  if (key==='by-status'){
+    var inRange = s.reservations.filter(function(r){ return r.createdAt.slice(0,10)>=state.from && r.createdAt.slice(0,10)<=state.to; });
+    var byStatus = {};
+    inRange.forEach(function(r){ byStatus[r.status]=(byStatus[r.status]||0)+1; });
+    var rows3 = inRange.filter(function(r){ return state.status==='All' || r.status===state.status; }).sort(function(a,b){return b.createdAt<a.createdAt?-1:1;});
+    return {
+      kpis: Object.keys(byStatus).map(function(k){ return [k, byStatus[k]]; }).slice(0,4),
+      headers: [{label:'Reservation #'},{label:'Guest'},{label:'Created'},{label:'Stay Dates'},{label:'Status'},{label:'Payment'},{label:'Total', num:true}],
+      rows: rows3.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.fmtDateShort(r.createdAt.slice(0,10)), PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut), PG.statusBadge(r.status), PG.payBadge(r.paymentStatus), PG.fmtMoney(total(r))]; }),
+      csvRows: rows3.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.createdAt.slice(0,10), r.checkIn+' to '+r.checkOut, r.status, r.paymentStatus, total(r).toFixed(2)]; })
+    };
+  }
+  if (key==='cancellations'){
+    var pool = s.reservations.filter(function(r){ return (r.status==='Cancelled' || r.status==='No Show') && r.createdAt.slice(0,10)>=state.from && r.createdAt.slice(0,10)<=state.to; });
+    var rows4 = pool.filter(function(r){ return state.status==='All' || r.status===state.status; }).sort(function(a,b){return b.createdAt<a.createdAt?-1:1;});
+    return {
+      kpis: [['Cancelled', pool.filter(function(r){return r.status==='Cancelled';}).length], ['No Show', pool.filter(function(r){return r.status==='No Show';}).length]],
+      headers: [{label:'Reservation #'},{label:'Guest'},{label:'Stay Dates'},{label:'Status'},{label:'Reason'},{label:'Payment'}],
+      rows: rows4.map(function(r){ var c=custOf(r); return ['<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>', PG.esc(c?c.name:'—'), PG.fmtDateShort(r.checkIn)+' &rarr; '+PG.fmtDateShort(r.checkOut), PG.statusBadge(r.status), PG.esc(reasonFromActivity(r,['cancelled','no show','marked no show'])), PG.payBadge(r.paymentStatus)]; }),
+      csvRows: rows4.map(function(r){ var c=custOf(r); return [r.id, c?c.name:'—', r.checkIn+' to '+r.checkOut, r.status, reasonFromActivity(r,['cancelled','no show','marked no show']), r.paymentStatus]; })
+    };
+  }
+  // Unassigned Reservations — a diagnostic report only. Every active reservation must have
+  // a physical room (README §4.7's core invariant, self-heal "Needs Attention" flow) — this
+  // report exists to prove that's actually true, not to offer an "Unassigned" workflow. It
+  // should always come back empty in normal operation.
+  var offenders = [];
+  s.reservations.filter(function(r){ return r.status!=='Cancelled' && r.status!=='Completed' && r.status!=='No Show'; }).forEach(function(r){
+    r.rooms.forEach(function(item){
+      var assigns = s.roomAssignments.filter(function(a){return a.reservationItemId===item.id && a.assignmentStatus!=='Cancelled';});
+      if (assigns.length < item.qty) offenders.push({res:r, item:item, have:assigns.length});
+    });
+  });
+  return {
+    note: offenders.length ? '&#9888; '+offenders.length+' room item(s) below are missing a physical-room assignment. This should never happen under normal operation — resolve each one from its Reservation Detail page (Assign Room) immediately.' : '&#10003; No unassigned room items found. Every active reservation currently has a physical room, as required.',
+    headers: [{label:'Reservation #'},{label:'Guest'},{label:'Room Type'},{label:'Assigned / Needed', num:true},{label:'Status'}],
+    rows: offenders.map(function(o){ var c=custOf(o.res); return ['<a href="reservation-detail.html?id='+o.res.id+'">'+o.res.id+'</a>', PG.esc(c?c.name:'—'), PG.esc(rtName(o.item.roomTypeId)), o.have+' / '+o.item.qty, PG.statusBadge(o.res.status)]; }),
+    csvRows: offenders.map(function(o){ var c=custOf(o.res); return [o.res.id, c?c.name:'—', rtName(o.item.roomTypeId), o.have+'/'+o.item.qty, o.res.status]; })
+  };
+}
+
+selectReport(state.report);
+</script>
+</body>
+</html>
