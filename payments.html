@@ -34,7 +34,9 @@
 <script>
 var page = PG.mount("payments", ["Payments", "Payments"]);
 var s = PG.getState();
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_payments');
+var CAN_MANAGE = PG.hasPermission('view_payments'); // generate/resend link is part of viewing+working a payment, not a separate permission in this MVP
+var CAN_REFUND = PG.hasPermission('record_refunds');
 var METHODS = ['Pay on Arrival', 'Payment Link'];
 var STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
 
@@ -257,7 +259,7 @@ function openPaymentDrawer(resId){
       actions += '<button class="btn btn-primary" id="pd-genlink">Generate New Link</button>';
     }
   }
-  if (canAct && r.paymentStatus==='Refund Pending'){
+  if (canAct && CAN_REFUND && r.paymentStatus==='Refund Pending'){
     actions += '<button class="btn btn-danger-outline" id="pd-refund">Record Refund</button>';
   }
 
@@ -314,6 +316,14 @@ function openPaymentDrawer(resId){
 // straight to that reservation's Payment Details drawer. Placed last so payDrawer and
 // every function it depends on are already defined.
 if (qp.get('id') && s.reservations.some(function(r){return r.id===qp.get('id');})) openPaymentDrawer(qp.get('id'));
+
+// Permission-denied state for direct navigation without view_payments — checked last so
+// it overrides whatever the rest of this script already built.
+if (!CAN_VIEW){
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Payments</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to view Payments.<br>Contact a Hotel Admin to request access.</div></div></div>';
+}
 </script>
 </body>
 </html>

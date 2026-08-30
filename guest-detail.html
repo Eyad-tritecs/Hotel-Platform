@@ -35,7 +35,9 @@
 <script>
 var page = PG.mount("guests", ["Reservations", "Guests", "Guest Detail"]);
 var s = PG.getState();
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_guests');
+var CAN_MANAGE = PG.hasPermission('manage_guests'); // create / edit / delete
+var CAN_VIEW_PAYMENTS = PG.hasPermission('view_guest_payment_history');
 var id = new URLSearchParams(location.search).get('id');
 var cust = s.customers.find(function (c) { return c.id === id; });
 
@@ -90,8 +92,11 @@ function render() {
       '</div>' : '') +
     '</div></div>';
 
+  var visibleTabs = ['overview', 'reservations', 'activity'];
+  if (CAN_VIEW_PAYMENTS) visibleTabs.splice(2, 0, 'payments');
+  if (activeTab === 'payments' && !CAN_VIEW_PAYMENTS) activeTab = 'overview';
   html += '<div class="pg-tabs" id="tabsBar">' +
-    ['overview', 'reservations', 'payments', 'activity'].map(function (t) {
+    visibleTabs.map(function (t) {
       var labels = { overview: 'Overview', reservations: 'Reservations', payments: 'Payments', activity: 'Activity' };
       return '<div class="pg-tab' + (t === activeTab ? ' active' : '') + '" data-tab="' + t + '">' + labels[t] + '</div>';
     }).join('') +
@@ -220,7 +225,7 @@ function activityHtml() {
   return body;
 }
 
-if (!CAN_MANAGE) {
+if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Guest Detail</h1></div></div>' +
     '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
     'You don\'t have permission to view Guests.<br>Contact a Hotel Admin to request access.</div></div></div>';

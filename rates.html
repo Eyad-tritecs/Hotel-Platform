@@ -45,7 +45,8 @@
 <script>
 var page = PG.mount("rates", ["Hotel Management", "Rates"]);
 var s = PG.getState();
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_rates');
+var CAN_MANAGE = PG.hasPermission('manage_rates');
 var DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function rtName(id){ var rt = s.roomTypes.find(function(r){return r.id===id;}); return rt ? rt.name : id; }
@@ -166,7 +167,8 @@ function openRateCellDrawer(roomTypeId, dateStr){
     var prev = st.rates[roomTypeId][dateStr] != null ? st.rates[roomTypeId][dateStr] : rt.baseRate;
     st.rates[roomTypeId][dateStr] = val;
     PG.setState(st);
-    PG.addAudit('Rate Changed', rt.name + ' rate for ' + PG.fmtDateShort(dateStr) + ' changed from ' + PG.fmtMoney(prev) + ' to ' + PG.fmtMoney(val) + '.');
+    PG.addAudit('Rate Changed', rt.name + ' rate for ' + PG.fmtDateShort(dateStr) + ' changed from ' + PG.fmtMoney(prev) + ' to ' + PG.fmtMoney(val) + '.', null,
+      { module: 'Rates', recordId: roomTypeId + '|' + dateStr, previousValue: prev, newValue: val });
     PG.toast('Rate updated.', 'success');
     PG.closeModal('rateCellDrawer');
     renderCalendar();
@@ -296,6 +298,15 @@ function applyBulkChange(){
   renderCalendar();
 }
 if (CAN_MANAGE) document.getElementById('bulkBtn').addEventListener('click', openBulkModal);
+
+// Permission-denied state for direct navigation without view_rates — checked last so it
+// overrides whatever the rest of this script already built, consistent with the pattern
+// every other permission-gated page in this app uses (physical-rooms.html, guests.html, …).
+if (!CAN_VIEW){
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Rates</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to view Rates.<br>Contact a Hotel Admin to request access.</div></div></div>';
+}
 </script>
 </body>
 </html>

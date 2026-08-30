@@ -391,7 +391,8 @@ document.getElementById('adjSave').addEventListener('click', function(){
   });
   st.adjustments.push({ts:PG.nowIso(), roomTypeId:rtId, type:typeLabel, qty:qty, from:from, to:to, reason:reason, notes:notes});
   PG.setState(st);
-  PG.addAudit('Inventory Adjusted', typeLabel + ' — ' + rt.name + ', ' + PG.fmtDateShort(from) + ' to ' + PG.fmtDateShort(to) + '. Reason: ' + reason + (notes ? ' (' + notes + ')' : ''));
+  PG.addAudit('Inventory Adjusted', typeLabel + ' — ' + rt.name + ', ' + PG.fmtDateShort(from) + ' to ' + PG.fmtDateShort(to) + '. Reason: ' + reason + (notes ? ' (' + notes + ')' : ''), null,
+    { module: 'Inventory', recordId: rtId + '|' + from + '..' + to, newValue: typeLabel + (qty?' '+qty:''), reason: reason });
   PG.closeModal('adjModal');
   PG.toast(typeLabel + ' applied to ' + rt.name + '.', 'success');
 

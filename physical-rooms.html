@@ -47,7 +47,10 @@ var s = PG.getState();
 // Role gating mirrors the existing superAdminOnly pattern in app.js's NAV — CURRENT_ROLE
 // is hardcoded today (no login/role-switcher UI), so this branch never actually fires,
 // but it's here for when a future prompt wires up real role switching.
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_physical_rooms');
+var CAN_MANAGE = PG.hasPermission('manage_physical_rooms'); // create / edit / deactivate
+var CAN_BLOCK = PG.hasPermission('block_rooms');
+var CAN_VIEW_CALENDAR = PG.hasPermission('view_operations_calendar');
 
 function distinct(arr) {
   var out = [];
@@ -74,7 +77,7 @@ function init() {
   var html = '';
   html += '<div class="pg-page-head"><div><h1>Physical Rooms</h1>' +
     '<div class="sub">Individual rooms that belong to each room type — used to assign a specific room to a reservation.</div></div>' +
-    '<div class="pg-actions"><button class="btn btn-primary" id="addRoomBtn">+ Add Physical Room</button></div></div>';
+    '<div class="pg-actions">' + (CAN_MANAGE ? '<button class="btn btn-primary" id="addRoomBtn">+ Add Physical Room</button>' : '') + '</div></div>';
 
   html += '<div class="sum-grid" id="sumGrid"></div>';
 
@@ -185,8 +188,9 @@ function init() {
     document.getElementById('resultCount').textContent = rows.length + ' room' + (rows.length === 1 ? '' : 's');
     var body = document.getElementById('roomsBody');
     if (!s.physicalRooms.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128274;</div>No physical rooms configured yet.<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button></div></td></tr>';
-      document.getElementById('emptyAddBtn').addEventListener('click', function () { openRoomDrawer(null); });
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128274;</div>No physical rooms configured yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button>' : '') + '</div></td></tr>';
+      var emptyAddBtn = document.getElementById('emptyAddBtn');
+      if (emptyAddBtn) emptyAddBtn.addEventListener('click', function () { openRoomDrawer(null); });
       return;
     }
     if (!rows.length) {
@@ -210,10 +214,10 @@ function init() {
           '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + r.id + '">&#8942;</button>' +
             '<div class="more-menu" data-menu-for="' + r.id + '">' +
               '<a href="new-reservation.html?rt=' + r.roomTypeId + '&room=' + r.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
-              '<button class="edit-action" data-id="' + r.id + '">Edit</button>' +
-              '<button class="block-action" data-id="' + r.id + '">Block Room</button>' +
-              '<a href="operations-calendar.html?room=' + r.id + '">View in Operations Calendar</a>' +
-              '<button class="toggle-active-action" data-id="' + r.id + '">' + (r.isActive ? 'Deactivate' : 'Activate') + '</button>' +
+              (CAN_MANAGE ? '<button class="edit-action" data-id="' + r.id + '">Edit</button>' : '') +
+              (CAN_BLOCK ? '<button class="block-action" data-id="' + r.id + '">Block Room</button>' : '') +
+              (CAN_VIEW_CALENDAR ? '<a href="operations-calendar.html?room=' + r.id + '">View in Operations Calendar</a>' : '') +
+              (CAN_MANAGE ? '<button class="toggle-active-action" data-id="' + r.id + '">' + (r.isActive ? 'Deactivate' : 'Activate') + '</button>' : '') +
             '</div>' +
           '</div>' +
         '</div></td>' +
@@ -378,10 +382,11 @@ function init() {
       isActive: document.getElementById('rm-active').checked
     };
 
-    var roomId, previousConnIds;
+    var roomId, previousConnIds, prevStatus = null;
     if (editingId) {
       var idx = st.physicalRooms.findIndex(function (pr) { return pr.id === editingId; });
       previousConnIds = st.physicalRooms[idx].connectingRoomIds || [];
+      prevStatus = st.physicalRooms[idx].operationalStatus;
       st.physicalRooms[idx] = Object.assign({}, st.physicalRooms[idx], data);
       roomId = editingId;
     } else {
@@ -400,7 +405,8 @@ function init() {
     });
 
     PG.setState(st);
-    PG.addAudit(editingId ? 'Physical Room Updated' : 'Physical Room Created', 'Room ' + number + ' (' + rtName(roomTypeId) + ') ' + (editingId ? 'updated.' : 'created.'));
+    PG.addAudit(editingId ? 'Physical Room Updated' : 'Physical Room Created', 'Room ' + number + ' (' + rtName(roomTypeId) + ') ' + (editingId ? 'updated.' : 'created.'), null,
+      { module: 'Physical Rooms', recordId: roomId, previousValue: prevStatus, newValue: data.operationalStatus });
     PG.toast('Room ' + number + ' ' + (editingId ? 'updated.' : 'created.'), 'success');
     PG.closeModal('roomDrawer');
     renderAll();
@@ -410,7 +416,8 @@ function init() {
     buildRoomDrawer(id ? roomById(id) : null);
     PG.openModal('roomDrawer');
   }
-  document.getElementById('addRoomBtn').addEventListener('click', function () { openRoomDrawer(null); });
+  var addRoomBtn = document.getElementById('addRoomBtn');
+  if (addRoomBtn) addRoomBtn.addEventListener('click', function () { openRoomDrawer(null); });
 
   /* ================================================================ */
   /* Room Details drawer                                                */
@@ -495,15 +502,17 @@ function init() {
       '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">' +
         '<div style="display:flex;gap:8px;">' +
           '<a class="btn btn-primary" style="flex:1;text-align:center;" href="new-reservation.html?rt=' + room.roomTypeId + '&room=' + room.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
-          '<button class="btn btn-light" style="flex:1;" id="detailsEditBtn">Edit</button>' +
-          '<button class="btn btn-danger-outline" style="flex:1;" id="detailsBlockBtn">Block Room</button>' +
+          (CAN_MANAGE ? '<button class="btn btn-light" style="flex:1;" id="detailsEditBtn">Edit</button>' : '') +
+          (CAN_BLOCK ? '<button class="btn btn-danger-outline" style="flex:1;" id="detailsBlockBtn">Block Room</button>' : '') +
         '</div>' +
-        '<a class="btn btn-outline" style="text-align:center;" href="operations-calendar.html?room=' + room.id + '">View on Operations Calendar</a>' +
+        (CAN_VIEW_CALENDAR ? '<a class="btn btn-outline" style="text-align:center;" href="operations-calendar.html?room=' + room.id + '">View on Operations Calendar</a>' : '') +
         '<div class="text-sm muted">Physical rooms can\'t be deleted once they have reservation, assignment, block, or audit history — deactivate a room instead to retire it from service.</div>' +
       '</div>' +
     '</div>';
-    document.getElementById('detailsEditBtn').addEventListener('click', function () { PG.closeModal('detailsDrawer'); openRoomDrawer(room.id); });
-    document.getElementById('detailsBlockBtn').addEventListener('click', function () { PG.closeModal('detailsDrawer'); openBlockModal(room.id); });
+    var detailsEditBtn = document.getElementById('detailsEditBtn');
+    if (detailsEditBtn) detailsEditBtn.addEventListener('click', function () { PG.closeModal('detailsDrawer'); openRoomDrawer(room.id); });
+    var detailsBlockBtn = document.getElementById('detailsBlockBtn');
+    if (detailsBlockBtn) detailsBlockBtn.addEventListener('click', function () { PG.closeModal('detailsDrawer'); openBlockModal(room.id); });
     PG.openModal('detailsDrawer');
   }
 
@@ -629,10 +638,10 @@ function init() {
   }
 }
 
-if (!CAN_MANAGE) {
+if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Physical Rooms</h1></div></div>' +
     '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
-    'You don\'t have permission to manage Physical Rooms.<br>Contact a Hotel Admin to request access.</div></div></div>';
+    'You don\'t have permission to view Physical Rooms.<br>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();
 }

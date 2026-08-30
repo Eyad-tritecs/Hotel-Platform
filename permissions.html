@@ -14,29 +14,55 @@
 <script>
 var page = PG.mount("permissions", ["Administration", "Permissions"]);
 var html = '';
-html += '<div class="pg-page-head"><div><h1>Permissions</h1><div class="sub">Capabilities granted per role</div></div></div>';
-html += '<div class="pg-lightweight-note">Permission management reuses standard platform capabilities and is kept lightweight in this MVP prototype.</div>';
+html += '<div class="pg-page-head"><div><h1>Permissions</h1><div class="sub">The real, named permissions checked throughout this app, and which of the existing roles hold each one</div></div></div>';
+html += '<div class="pg-lightweight-note">This table reads directly from <code>PG.PERMISSIONS</code> — the same map every gated page/action in this app calls <code>PG.hasPermission()</code> against — so it can never drift from what actually happens elsewhere. No role-editing UI exists yet (no login/role-switcher — see README §5.3); both existing roles currently hold every permission below, since this prototype has never needed to distinguish them beyond the Platform Super Admin-only "Hotels" nav item. The matrix exists so a future narrower role (e.g. a read-only Front Desk role) has real infrastructure to plug into.</div>';
 
-var perms = ['Manage Hotel Profile','Manage Room Types & Rates','Manage Availability & Stop Sell','Create Reservations','Cancel Reservations','Process Payments','Manage Users & Roles','View Audit Log'];
-var roles = ['Platform Super Admin','Hotel Admin','Hotel Manager','Reservation Staff'];
-var matrix = {
-  'Manage Hotel Profile':[1,1,0,0],
-  'Manage Room Types & Rates':[1,1,1,0],
-  'Manage Availability & Stop Sell':[1,1,1,0],
-  'Create Reservations':[1,1,1,1],
-  'Cancel Reservations':[1,1,1,0],
-  'Process Payments':[1,1,1,1],
-  'Manage Users & Roles':[1,1,0,0],
-  'View Audit Log':[1,1,1,0]
+var ROLES = ['Hotel Admin', 'Platform Super Admin'];
+var LABELS = {
+  view_physical_rooms: 'View physical rooms',
+  manage_physical_rooms: 'Create / edit / deactivate physical rooms',
+  block_rooms: 'Block / unblock rooms',
+  view_operations_calendar: 'View Operations Calendar',
+  assign_rooms: 'Assign / change rooms',
+  unassign_rooms: 'Unassign rooms',
+  view_guests: 'View guests',
+  manage_guests: 'Create / edit guests',
+  view_guest_payment_history: 'View guest payment history',
+  view_rates: 'View rates',
+  manage_rates: 'Edit rates',
+  view_payments: 'View payments',
+  record_refunds: 'Record refunds',
+  view_reports: 'View reports',
+  export_reports: 'Export reports'
 };
+var GROUPS = [
+  ['Physical Rooms', ['view_physical_rooms', 'manage_physical_rooms', 'block_rooms']],
+  ['Operations Calendar', ['view_operations_calendar', 'assign_rooms', 'unassign_rooms']],
+  ['Guests', ['view_guests', 'manage_guests', 'view_guest_payment_history']],
+  ['Rates', ['view_rates', 'manage_rates']],
+  ['Payments', ['view_payments', 'record_refunds']],
+  ['Reports', ['view_reports', 'export_reports']]
+];
 
-var html2 = '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Capability</th>' + roles.map(function(r){return '<th class="center">'+r+'</th>';}).join('') + '</tr></thead><tbody>';
-perms.forEach(function(p){
-  html2 += '<tr><td style="font-weight:600;">'+p+'</td>' + matrix[p].map(function(v){ return '<td class="center">' + (v ? '<span style="color:#0bb463;font-weight:700;">&#10003;</span>' : '<span style="color:var(--pg-gray-400);">&mdash;</span>') + '</td>'; }).join('') + '</tr>';
+var body = '';
+GROUPS.forEach(function(g){
+  body += '<tr><td colspan="' + (ROLES.length+1) + '" style="background:var(--pg-gray-100);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-600);">' + g[0] + '</td></tr>';
+  g[1].forEach(function(key){
+    var allowed = PG.PERMISSIONS[key] || [];
+    var grantedToNobody = allowed.length === 0;
+    body += '<tr><td style="font-weight:600;">' + LABELS[key] + (grantedToNobody ? ' <span class="badge badge-gray" style="margin-left:6px;"><span class="badge-dot"></span>No action exists</span>' : '') + '</td>' +
+      ROLES.map(function(role){
+        var has = allowed.indexOf(role) > -1;
+        return '<td class="center">' + (has ? '<span style="color:#0bb463;font-weight:700;">&#10003;</span>' : '<span style="color:var(--pg-gray-400);">&mdash;</span>') + '</td>';
+      }).join('') + '</tr>';
+  });
 });
-html2 += '</tbody></table></div></div></div>';
 
-page.innerHTML = html + html2;
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Permission</th>' + ROLES.map(function(r){return '<th class="center">'+r+'</th>';}).join('') + '</tr></thead><tbody>' + body + '</tbody></table></div></div></div>';
+
+html += '<div class="pg-lightweight-note">"Unassign rooms" is granted to no one and checked nowhere in this app on purpose — there is no Unassign Room action anywhere, by design (every active reservation must always hold a specific physical room). The permission key exists only to document that this capability is deliberately absent, not merely forgotten.</div>';
+
+page.innerHTML = html;
 </script>
 </body>
 </html>

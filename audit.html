@@ -7,6 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .filters-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .filters-grid .form-group{margin-bottom:0;}
+  .filters-grid .form-label{font-size:11px;}
+  @media (max-width:900px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+  .audit-delta{font-size:11.5px;color:var(--pg-gray-600);margin-top:3px;}
+  .audit-delta b{color:var(--pg-gray-800);}
+  .audit-reason{font-size:11.5px;color:var(--pg-gray-600);margin-top:2px;font-style:italic;}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
@@ -16,31 +25,91 @@ var page = PG.mount("audit", ["Administration", "Audit"]);
 var s = PG.getState();
 
 var ACTION_BADGE = {
-  'Reservation Created':'badge-blue','Reservation Cancelled':'badge-red','Payment Link Sent':'badge-purple',
-  'Payment Link Resent':'badge-purple','Payment Received':'badge-green','Payment Failed':'badge-red',
-  'Payment Link Expired':'badge-gray','Refund Completed':'badge-gray','Inventory Adjusted':'badge-yellow',
-  'Stop Sell Applied':'badge-red','Inventory Reopened':'badge-green','Rate Updated':'badge-blue','Room Type Updated':'badge-blue'
+  'Reservation Created':'badge-blue','Reservation Cancelled':'badge-red','Reservation Edited':'badge-blue','Reservation Dates Changed':'badge-blue',
+  'Reservation Marked Completed':'badge-blue','Reservation Marked No Show':'badge-red','Reservation Notes Updated':'badge-gray',
+  'Payment Link Sent':'badge-purple','Payment Link Resent':'badge-purple','Payment Received':'badge-green','Payment Failed':'badge-red',
+  'Payment Link Expired':'badge-gray','Refund Recorded':'badge-red','Inventory Adjusted':'badge-yellow',
+  'Stop Sell Applied':'badge-red','Inventory Reopened':'badge-green','Rate Changed':'badge-blue','Tax/Fee Changed':'badge-blue',
+  'Room Assigned':'badge-green','Room Assignment Changed':'badge-blue','Physical Room Blocked':'badge-red','Room Block Updated':'badge-blue','Room Block Ended':'badge-gray',
+  'Physical Room Created':'badge-green','Physical Room Updated':'badge-blue','Physical Room Activated':'badge-green','Physical Room Deactivated':'badge-gray',
+  'Guest Created':'badge-green','Guest Updated':'badge-blue','Guest Deleted':'badge-red'
 };
 
+function distinct(arr){ var out=[]; arr.forEach(function(v){ if(v!=null && v!=='' && out.indexOf(v)===-1) out.push(v); }); return out; }
+var MODULES = distinct(s.audit.map(function(a){return a.module;})).sort();
+var ACTIONS = distinct(s.audit.map(function(a){return a.action;})).sort();
+
+var filters = { module:'All', action:'All', from:'', to:'' };
+
 var html = '';
-html += '<div class="pg-page-head"><div><h1>Audit Log</h1><div class="sub">Chronological record of administrative actions across this hotel tenant</div></div></div>';
+html += '<div class="pg-page-head"><div><h1>Audit Log</h1><div class="sub">Chronological record of administrative actions across this hotel property</div></div></div>';
 html += '<div class="pg-lightweight-note">This log reflects real actions performed in this prototype session — try creating or cancelling a reservation, then return here.</div>';
 
-html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th style="min-width:150px;">Timestamp</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody>';
+html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
+  '<div class="filters-grid">' +
+    '<div class="form-group"><label class="form-label">MODULE</label><select class="form-control" id="f-module"><option value="All">All Modules</option>' +
+      MODULES.map(function(m){return '<option value="'+PG.esc(m)+'">'+PG.esc(m)+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-group"><label class="form-label">ACTION</label><select class="form-control" id="f-action"><option value="All">All Actions</option>' +
+      ACTIONS.map(function(a){return '<option value="'+PG.esc(a)+'">'+PG.esc(a)+'</option>';}).join('') + '</select></div>' +
+    '<div class="form-group"><label class="form-label">FROM</label><input type="date" class="form-control" id="f-from"></div>' +
+    '<div class="form-group"><label class="form-label">TO</label><input type="date" class="form-control" id="f-to"></div>' +
+  '</div>' +
+  '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+    '<span class="muted text-sm" id="resultCount"></span>' +
+  '</div>' +
+'</div></div>';
 
-if (!s.audit.length){
-  html += '<tr><td colspan="4"><div class="empty-state">No activity recorded yet.</div></td></tr>';
-} else {
-  s.audit.forEach(function(a){
-    html += '<tr><td class="text-sm">'+PG.fmtDate(a.ts.slice(0,10),{month:'short',day:'numeric'})+' &middot; '+a.ts.slice(11)+'</td>' +
-      '<td class="text-sm">'+PG.esc(a.actor)+'</td>' +
-      '<td><span class="badge '+(ACTION_BADGE[a.action]||'badge-gray')+'">'+a.action+'</span></td>' +
-      '<td class="text-sm">'+PG.esc(a.details)+'</td></tr>';
-  });
-}
-html += '</tbody></table></div></div></div>';
+html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th style="min-width:150px;">Timestamp</th><th>Property</th><th>Actor</th><th>Module</th><th>Action</th><th>Details</th>' +
+  '</tr></thead><tbody id="auditBody"></tbody></table></div></div></div>';
 
 page.innerHTML = html;
+PG.enhanceSelects(page);
+
+function filteredEntries(){
+  return s.audit.filter(function(a){
+    if (filters.module!=='All' && a.module!==filters.module) return false;
+    if (filters.action!=='All' && a.action!==filters.action) return false;
+    if (filters.from && a.ts.slice(0,10) < filters.from) return false;
+    if (filters.to && a.ts.slice(0,10) > filters.to) return false;
+    return true;
+  });
+}
+
+function renderRows(){
+  var rows = filteredEntries();
+  document.getElementById('resultCount').textContent = rows.length + ' entr' + (rows.length===1?'y':'ies');
+  var body = document.getElementById('auditBody');
+  if (!rows.length){ body.innerHTML = '<tr><td colspan="6"><div class="empty-state">No activity recorded yet.</div></td></tr>'; return; }
+  body.innerHTML = rows.map(function(a){
+    var delta = '';
+    if (a.previousValue !== undefined || a.newValue !== undefined){
+      delta = '<div class="audit-delta">' + (a.previousValue!==undefined ? '<b>'+PG.esc(String(a.previousValue))+'</b>' : '') + (a.previousValue!==undefined && a.newValue!==undefined ? ' &rarr; ' : '') + (a.newValue!==undefined ? '<b>'+PG.esc(String(a.newValue))+'</b>' : '') + '</div>';
+    }
+    var reason = a.reason ? '<div class="audit-reason">Reason: '+PG.esc(a.reason)+'</div>' : '';
+    return '<tr><td class="text-sm">'+PG.fmtDate(a.ts.slice(0,10),{month:'short',day:'numeric'})+' &middot; '+a.ts.slice(11)+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.property||'—')+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.actor)+'</td>' +
+      '<td class="text-sm">'+PG.esc(a.module||'—')+(a.recordId?'<div class="muted text-sm">'+PG.esc(a.recordId)+'</div>':'')+'</td>' +
+      '<td><span class="badge '+(ACTION_BADGE[a.action]||'badge-gray')+'">'+PG.esc(a.action)+'</span></td>' +
+      '<td class="text-sm">'+PG.esc(a.details)+delta+reason+'</td></tr>';
+  }).join('');
+}
+
+document.getElementById('f-module').addEventListener('change', function(){ filters.module=this.value; renderRows(); });
+document.getElementById('f-action').addEventListener('change', function(){ filters.action=this.value; renderRows(); });
+document.getElementById('f-from').addEventListener('change', function(){ filters.from=this.value; renderRows(); });
+document.getElementById('f-to').addEventListener('change', function(){ filters.to=this.value; renderRows(); });
+document.getElementById('clearFilters').addEventListener('click', function(){
+  filters = { module:'All', action:'All', from:'', to:'' };
+  document.getElementById('f-module').value='All'; document.getElementById('f-module').dispatchEvent(new Event('change'));
+  document.getElementById('f-action').value='All'; document.getElementById('f-action').dispatchEvent(new Event('change'));
+  document.getElementById('f-from').value=''; document.getElementById('f-to').value='';
+  renderRows();
+});
+
+renderRows();
 </script>
 </body>
 </html>

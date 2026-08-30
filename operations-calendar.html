@@ -112,7 +112,9 @@
 var page = PG.mount("operations-calendar", ["Hotel Management", "Operations Calendar"]);
 var s = PG.getState();
 // Same dead-code-today role gate as physical-rooms.html — CURRENT_ROLE is hardcoded.
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_operations_calendar');
+var CAN_MANAGE = PG.hasPermission('assign_rooms'); // move/resize/create reservations, assign/change room
+var CAN_BLOCK = PG.hasPermission('block_rooms'); // create/move/resize/edit/end room blocks
 
 var CELL_W = 90, ROOM_COL_W = 210;
 var BLOCK_TYPES = ['Out of Order', 'Out of Service', 'Management Hold', 'Other'];
@@ -459,7 +461,7 @@ function init(){
       '<div class="opc-room-info"><div class="opc-room-num">Room '+PG.esc(room.roomNumber)+'</div>' +
       '<div class="opc-room-meta">'+PG.esc(rtName(room.roomTypeId))+' &middot; Fl '+room.floor+'</div>' +
       PG.roomStatusBadge(PG.roomStatusOn(st, room.id, PG.TODAY)) +
-      (CAN_MANAGE?'<button type="button" class="opc-block-btn" data-block-room="'+room.id+'" title="Block Room '+PG.esc(room.roomNumber)+'" aria-label="Block Room '+PG.esc(room.roomNumber)+'">&#9940;</button>':'') +
+      (CAN_BLOCK?'<button type="button" class="opc-block-btn" data-block-room="'+room.id+'" title="Block Room '+PG.esc(room.roomNumber)+'" aria-label="Block Room '+PG.esc(room.roomNumber)+'">&#9940;</button>':'') +
       (CAN_MANAGE?'<button type="button" class="opc-quickadd" data-quickadd-room="'+room.id+'" data-quickadd-rt="'+room.roomTypeId+'" title="New reservation for Room '+PG.esc(room.roomNumber)+'" aria-label="New reservation for Room '+PG.esc(room.roomNumber)+'">+</button>':'') +
       '</div>' +
       '<div class="opc-track" style="width:'+(dates.length*CELL_W)+'px;">'+cellsHtml+barsHtml+'</div>' +
@@ -491,7 +493,7 @@ function init(){
     root.querySelectorAll('[data-block-room]').forEach(function(el){
       el.addEventListener('click', function(e){
         e.stopPropagation();
-        if (!CAN_MANAGE) return;
+        if (!CAN_BLOCK) return;
         PG.renderBlockRoomModal({ physicalRoomId: el.dataset.blockRoom, defaultStart: dateWindow()[0], defaultEnd: dateWindow()[0], onSaved: function(){ renderGrid(); } });
       });
     });
@@ -513,11 +515,17 @@ function init(){
 
   function attachDragHandlers(){
     document.getElementById('opcGrid').addEventListener('mousedown', function(e){
-      if (!CAN_MANAGE || e.button !== 0) return;
+      if ((!CAN_MANAGE && !CAN_BLOCK) || e.button !== 0) return;
       var bar = e.target.closest('.opc-bar');
-      if (bar){ beginBarDrag(bar, e); return; }
+      if (bar){
+        // A reservation bar needs assign_rooms; a block bar needs block_rooms — each
+        // drag path is gated by the specific permission it actually exercises, not the
+        // page-wide OR check above (that only decides whether dragging is even possible).
+        if (bar.dataset.kind === 'block' ? !CAN_BLOCK : !CAN_MANAGE) return;
+        beginBarDrag(bar, e); return;
+      }
       var cell = e.target.closest('[data-empty-room]');
-      if (cell){ beginRangeDrag(cell, e); }
+      if (cell){ if (!CAN_BLOCK) return; beginRangeDrag(cell, e); }
     });
   }
 
@@ -973,7 +981,13 @@ function init(){
 
     var chg = document.getElementById('opc-change-room'); if (chg) chg.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, assignmentId); });
     var assignBtn = document.getElementById('opc-assign-room'); if (assignBtn) assignBtn.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, null); });
-    var sendBtn = document.getElementById('opc-send-confirm'); if (sendBtn) sendBtn.addEventListener('click', function(){ PG.toast('Sending confirmations is outside this MVP prototype.', 'warn'); });
+    var sendBtn = document.getElementById('opc-send-confirm'); if (sendBtn) sendBtn.addEventListener('click', function(){
+      PG.toast('Sending confirmations is outside this MVP prototype.', 'warn');
+      // Recorded even though nothing was actually sent — a real communications channel is
+      // out of MVP scope, but the attempt itself is still an auditable action (§ audit
+      // coverage: "communications").
+      PG.addAudit('Communication Attempted', resId + ' — guest confirmation send attempted (no real channel exists in this MVP).', null, { module: 'Communications', recordId: resId });
+    });
     var cancelBtn = document.getElementById('opc-cancel-res');
     if (cancelBtn) cancelBtn.addEventListener('click', function(){ showInlineCancel(res); });
 
@@ -1095,8 +1109,8 @@ function init(){
       '<div class="pg-drawer-body">'+body+'</div>' +
       '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">' +
         '<div style="display:flex;gap:8px;">' +
-          (CAN_MANAGE?'<button class="btn btn-outline" style="flex:1;" id="opc-edit-block">Edit Block</button>':'') +
-          (CAN_MANAGE?'<button class="btn btn-danger-outline" style="flex:1;" id="opc-end-block">End / Remove Block</button>':'') +
+          (CAN_BLOCK?'<button class="btn btn-outline" style="flex:1;" id="opc-edit-block">Edit Block</button>':'') +
+          (CAN_BLOCK?'<button class="btn btn-danger-outline" style="flex:1;" id="opc-end-block">End / Remove Block</button>':'') +
           (room?'<a class="btn btn-outline" style="flex:1;text-align:center;" href="physical-rooms.html?room='+room.id+'">View Room</a>':'') +
         '</div>' +
       '</div>' +
@@ -1245,7 +1259,7 @@ function init(){
   }
 }
 
-if (!CAN_MANAGE) {
+if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Operations Calendar</h1></div></div>' +
     '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
     'You don\'t have permission to view the Operations Calendar.<br>Contact a Hotel Admin to request access.</div></div></div>';

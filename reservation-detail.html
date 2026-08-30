@@ -474,7 +474,7 @@ function save(auditAction, auditDetails, syncHoldsToLink){
     st.roomAssignments.forEach(function(a){ if (a.reservationId===r.id && a.assignmentStatus==='Held') a.holdExpiresAt = r.paymentLinkExpiresAt; });
   }
   PG.setState(st);
-  PG.addAudit(auditAction, auditDetails);
+  PG.addAudit(auditAction, auditDetails, null, { module: auditAction.indexOf('Payment')>-1 ? 'Payments' : 'Reservations', recordId: r.id, newValue: r.paymentStatus });
   PG.toast(auditDetails, 'success');
   setTimeout(function(){ location.reload(); }, 500);
 }
@@ -562,6 +562,7 @@ function renderCancelModal(stage){
   function doCancel(){
     var reason = document.getElementById('cancel-reason').value;
     var notes = document.getElementById('cancel-notes').value.trim();
+    var prevStatus = r.status;
     r.status = 'Cancelled';
     var refundNote = '';
     if (r.paymentStatus==='Paid'){
@@ -579,7 +580,8 @@ function renderCancelModal(stage){
     // check), so availability is restored exactly once even if this ever re-runs.
     st.roomAssignments.forEach(function(a){ if (a.reservationId===r.id && a.assignmentStatus!=='Cancelled') a.assignmentStatus = 'Cancelled'; });
     PG.setState(st);
-    PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '. Reason: ' + reason + '.' + refundNote);
+    PG.addAudit('Reservation Cancelled', r.id + ' cancelled — inventory restored for ' + lines().map(function(l){return l.qty+'× '+l.name;}).join(', ') + '. Reason: ' + reason + '.' + refundNote, null,
+      { module: 'Reservations', recordId: r.id, previousValue: prevStatus, newValue: 'Cancelled', reason: reason });
     PG.toast('Reservation cancelled. Inventory has been restored.', 'warn');
     s = PG.getState();
     renderCancelModal('done');

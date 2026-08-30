@@ -77,10 +77,18 @@
   /* Seed data                                                         */
   /* ---------------------------------------------------------------- */
   function buildSeed() {
+    // Every property-scoped record (room types, physical rooms, assignments, blocks,
+    // reservations, guests, rates/ratePlans, taxesFees, audit) carries this same
+    // propertyId — this pilot only ever seeds one property, but every collection is
+    // scoped consistently so a second property could be added later without a
+    // data-model change, only a real property switcher UI (none exists yet — see
+    // README §5.2/§10 and the header's single-property pill, which already gives every
+    // page clear property context).
+    var PROPERTY_ID = "PGH-001";
     var roomTypes = [
-      { id: "std", name: "Standard Room", code: "STD", sellable: 10, baseCapacity: 10, maxAdults: 2, maxChildren: 0, bed: "1 Queen Bed", baseRate: 100, active: true, desc: "Comfortable entry-level room with modern amenities, ideal for solo travelers and couples." },
-      { id: "dlx", name: "Deluxe Room", code: "DLX", sellable: 6, baseCapacity: 6, maxAdults: 2, maxChildren: 1, bed: "1 King Bed", baseRate: 120, active: true, desc: "Spacious upgraded room with premium furnishings and city views." },
-      { id: "fam", name: "Family Room", code: "FAM", sellable: 4, baseCapacity: 4, maxAdults: 2, maxChildren: 2, bed: "1 Queen + 2 Single Beds", baseRate: 150, active: true, desc: "Generous layout designed for families, with separate sleeping areas." }
+      { id: "std", propertyId: PROPERTY_ID, name: "Standard Room", code: "STD", sellable: 10, baseCapacity: 10, maxAdults: 2, maxChildren: 0, bed: "1 Queen Bed", baseRate: 100, active: true, desc: "Comfortable entry-level room with modern amenities, ideal for solo travelers and couples." },
+      { id: "dlx", propertyId: PROPERTY_ID, name: "Deluxe Room", code: "DLX", sellable: 6, baseCapacity: 6, maxAdults: 2, maxChildren: 1, bed: "1 King Bed", baseRate: 120, active: true, desc: "Spacious upgraded room with premium furnishings and city views." },
+      { id: "fam", propertyId: PROPERTY_ID, name: "Family Room", code: "FAM", sellable: 4, baseCapacity: 4, maxAdults: 2, maxChildren: 2, bed: "1 Queen + 2 Single Beds", baseRate: 150, active: true, desc: "Generous layout designed for families, with separate sleeping areas." }
     ];
 
     var rates = {};
@@ -102,23 +110,23 @@
     // state.users (hotel/platform staff accounts, managed on users.html). Never merge
     // these two collections or reuse this shape for a staff account.
     var customers = [
-      { id: "cus-1", name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian",
+      { id: "cus-1", propertyId: PROPERTY_ID, name: "Ahmad Khalil", phone: "+970 59 123 4567", email: "ahmad.khalil@example.com", nationality: "Palestinian",
         preferredLanguage: "Arabic", idRef: "PSE-778812345", communicationPreference: "WhatsApp", consentMarketing: true,
         roomPreferences: "", accessibilityNeeds: "", important: false, notes: "" },
-      { id: "cus-2", name: "Sara Ali", phone: "+970 56 234 5678", email: "sara.ali@example.com", nationality: "Palestinian",
+      { id: "cus-2", propertyId: PROPERTY_ID, name: "Sara Ali", phone: "+970 56 234 5678", email: "sara.ali@example.com", nationality: "Palestinian",
         preferredLanguage: "Arabic", idRef: "PSE-556690012", communicationPreference: "Phone", consentMarketing: false,
         roomPreferences: "Prefers high floor, away from the elevator.", accessibilityNeeds: "", important: true, notes: "Requested late check-out on a previous stay." },
-      { id: "cus-3", name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian",
+      { id: "cus-3", propertyId: PROPERTY_ID, name: "Omar Hassan", phone: "+962 79 345 6789", email: "omar.hassan@example.com", nationality: "Jordanian",
         preferredLanguage: "English", idRef: "JOR-223345678", communicationPreference: "Email", consentMarketing: true,
         roomPreferences: "", accessibilityNeeds: "Wheelchair accessible room required.", important: false, notes: "" },
-      { id: "cus-4", name: "Layla Nasser", phone: "+970 59 876 5432", email: "layla.nasser@example.com", nationality: "Palestinian",
+      { id: "cus-4", propertyId: PROPERTY_ID, name: "Layla Nasser", phone: "+970 59 876 5432", email: "layla.nasser@example.com", nationality: "Palestinian",
         preferredLanguage: "Arabic", idRef: "PSE-990011223", communicationPreference: "WhatsApp", consentMarketing: false,
         roomPreferences: "", accessibilityNeeds: "", important: false, notes: "" }
     ];
 
     var reservations = [
       {
-        id: "RES-10245",
+        id: "RES-10245", propertyId: PROPERTY_ID,
         customerId: "cus-1",
         source: "Phone",
         createdAt: TODAY + "T10:15",
@@ -147,7 +155,7 @@
         ]
       },
       {
-        id: "RES-10246",
+        id: "RES-10246", propertyId: PROPERTY_ID,
         customerId: "cus-2",
         source: "Phone",
         createdAt: TODAY + "T11:40",
@@ -169,7 +177,7 @@
         ]
       },
       {
-        id: "RES-10247",
+        id: "RES-10247", propertyId: PROPERTY_ID,
         customerId: "cus-3",
         source: "Travel Agency",
         createdAt: TODAY + "T08:05",
@@ -193,7 +201,7 @@
         ]
       },
       {
-        id: "RES-10248",
+        id: "RES-10248", propertyId: PROPERTY_ID,
         customerId: "cus-4",
         source: "Phone",
         createdAt: TODAY + "T09:30",
@@ -212,8 +220,6 @@
         ]
       }
     ];
-
-    var PROPERTY_ID = "PGH-001";
 
     // Physical rooms: the operational allocation layer beneath room-type commercial
     // inventory. Counts are seeded close to (but deliberately not always exactly equal
@@ -307,9 +313,9 @@
       reservations: reservations,
       nextResId: 10249,
       ratePlans: [
-        { id: "rp1", name: "Flexible Room Only", roomTypeId: "std", mealPlan: "Room Only", startDate: TODAY, endDate: addDays(TODAY, 90), price: 100, currency: "USD", active: true },
-        { id: "rp2", name: "Flexible + Breakfast", roomTypeId: "dlx", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 120, currency: "USD", active: true },
-        { id: "rp3", name: "Weekend Rate", roomTypeId: "fam", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 150, currency: "USD", active: true }
+        { id: "rp1", propertyId: PROPERTY_ID, name: "Flexible Room Only", roomTypeId: "std", mealPlan: "Room Only", startDate: TODAY, endDate: addDays(TODAY, 90), price: 100, currency: "USD", active: true },
+        { id: "rp2", propertyId: PROPERTY_ID, name: "Flexible + Breakfast", roomTypeId: "dlx", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 120, currency: "USD", active: true },
+        { id: "rp3", propertyId: PROPERTY_ID, name: "Weekend Rate", roomTypeId: "fam", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 150, currency: "USD", active: true }
       ],
       // Real, configurable tax/fee engine (see computePricing) — replaces what used to be
       // a hardcoded 4% tax + $20 fee scattered across new-reservation.html and
@@ -320,10 +326,10 @@
       // samples demonstrating a percentage tax and a percentage fee that aren't applied
       // by default. `effectiveFrom`/`effectiveTo` (nullable) gate a charge to a date range.
       taxesFees: [
-        { id: "tf-vat", name: "VAT", kind: "Tax", calcType: "Percentage", value: 4, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null },
-        { id: "tf-muni", name: "Municipality Tax", kind: "Tax", calcType: "Percentage", value: 2, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
-        { id: "tf-service", name: "Service Charge", kind: "Fee", calcType: "Percentage", value: 5, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
-        { id: "tf-tourism", name: "City Tourism Fee", kind: "Fee", calcType: "Fixed", value: 20, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null }
+        { id: "tf-vat", propertyId: PROPERTY_ID, name: "VAT", kind: "Tax", calcType: "Percentage", value: 4, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-muni", propertyId: PROPERTY_ID, name: "Municipality Tax", kind: "Tax", calcType: "Percentage", value: 2, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-service", propertyId: PROPERTY_ID, name: "Service Charge", kind: "Fee", calcType: "Percentage", value: 5, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-tourism", propertyId: PROPERTY_ID, name: "City Tourism Fee", kind: "Fee", calcType: "Fixed", value: 20, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null }
       ],
       audit: [
         { ts: TODAY + "T08:05", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10247 created via Travel Agency." },
@@ -376,9 +382,22 @@
     localStorage.removeItem(STORAGE_KEY);
     return getState();
   }
-  function addAudit(action, details, actor) {
+  // opts (all optional, backward-compatible — every pre-existing 3-arg call site still
+  // works unchanged): { property, module, recordId, previousValue, newValue, reason }.
+  // `property` defaults to the current property automatically so callers don't have to
+  // pass it explicitly just to get property-scoped audit records (§ audit requirements —
+  // every audit entry records actor, timestamp, property, module/record, action, and
+  // (when supplied) previous/new value and reason).
+  function addAudit(action, details, actor, opts) {
     var s = getState();
-    s.audit.unshift({ ts: nowIso(), actor: actor || "Hotel Admin", action: action, details: details });
+    opts = opts || {};
+    var entry = { ts: nowIso(), actor: actor || CURRENT_ROLE, action: action, details: details, property: opts.property || (s.hotel && s.hotel.propertyCode) || null };
+    if (opts.module != null) entry.module = opts.module;
+    if (opts.recordId != null) entry.recordId = opts.recordId;
+    if (opts.previousValue !== undefined) entry.previousValue = opts.previousValue;
+    if (opts.newValue !== undefined) entry.newValue = opts.newValue;
+    if (opts.reason) entry.reason = opts.reason;
+    s.audit.unshift(entry);
     setState(s);
   }
 
@@ -948,7 +967,8 @@
         var fresh = getState();
         var updated = recordRefund(fresh, opts.reservationId, reason, CURRENT_ROLE);
         setState(fresh);
-        addAudit("Refund Recorded", opts.reservationId + " — refund recorded. Reason: " + reason + ".");
+        addAudit("Refund Recorded", opts.reservationId + " — refund recorded. Reason: " + reason + ".", null,
+          { module: "Payments", recordId: opts.reservationId, previousValue: "Refund Pending", newValue: "Refunded", reason: reason });
         toast("Refund recorded.", "success");
         closeModal("pgRecordRefundModal");
         if (opts.onRecorded) opts.onRecorded(updated);
@@ -1047,6 +1067,45 @@
   /* Sidebar / Header shell                                             */
   /* ---------------------------------------------------------------- */
   var CURRENT_ROLE = "Hotel Admin"; // this prototype's persona; "Platform Super Admin" would also see Hotels
+
+  /* ---------------------------------------------------------------- */
+  /* Named permissions — retains the existing two roles (no new roles      */
+  /* added) but replaces the old blanket "is this role Hotel Admin or      */
+  /* Platform Super Admin" boolean (CAN_MANAGE, still defined per-page for  */
+  /* backward compatibility) with granular, named permissions any future    */
+  /* role (e.g. a read-only Front Desk role) could be given a subset of.    */
+  /* Both existing roles currently hold every permission — this prototype   */
+  /* has never distinguished them beyond the superAdminOnly nav flag — so   */
+  /* wiring pages to PG.hasPermission() changes no observable behavior      */
+  /* today, only what's possible once a narrower role is ever added.        */
+  /* "unassign_rooms" is intentionally granted to nobody and checked        */
+  /* nowhere: no Unassign Room action exists anywhere in this app by        */
+  /* design (README §4.7's core invariant) — the key exists only so the     */
+  /* permission matrix documents that this capability is deliberately       */
+  /* absent, not merely forgotten.                                          */
+  /* ---------------------------------------------------------------- */
+  var ALL_ROLES = ["Hotel Admin", "Platform Super Admin"];
+  var PERMISSIONS = {
+    view_physical_rooms: ALL_ROLES,
+    manage_physical_rooms: ALL_ROLES, // create / edit / deactivate
+    block_rooms: ALL_ROLES, // block / unblock
+    view_operations_calendar: ALL_ROLES,
+    assign_rooms: ALL_ROLES, // assign / change room
+    unassign_rooms: [], // deliberately granted to no one — see comment above
+    view_guests: ALL_ROLES,
+    manage_guests: ALL_ROLES, // create / edit (and delete, guests.html §8.3)
+    view_guest_payment_history: ALL_ROLES,
+    view_rates: ALL_ROLES,
+    manage_rates: ALL_ROLES,
+    view_payments: ALL_ROLES,
+    record_refunds: ALL_ROLES,
+    view_reports: ALL_ROLES,
+    export_reports: ALL_ROLES
+  };
+  function hasPermission(key) {
+    var allowed = PERMISSIONS[key];
+    return !!allowed && allowed.indexOf(CURRENT_ROLE) > -1;
+  }
 
   var NAV = [
     { section: "Hotel Management", items: [
@@ -1317,13 +1376,57 @@
   }
 
   /* ---------------------------------------------------------------- */
-  /* Modal helper                                                       */
+  /* Modal / drawer helper — every modal and drawer in the app (there are   */
+  /* dozens, built inline per page) opens/closes through these two          */
+  /* functions, so accessibility behavior fixed here applies everywhere     */
+  /* automatically: focus moves into the dialog and is trapped there,       */
+  /* Escape closes it, aria-modal/aria-labelledby are set from its own      */
+  /* heading, and focus returns to whatever triggered it on close.          */
   /* ---------------------------------------------------------------- */
+  function focusableEls(container) {
+    if (!container) return [];
+    return Array.prototype.slice.call(container.querySelectorAll(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(function (el) { return el.offsetParent !== null; });
+  }
   function openModal(id) {
-    document.getElementById(id).classList.add("show");
+    var overlay = document.getElementById(id);
+    if (!overlay) return;
+    var lastFocused = document.activeElement;
+    overlay.classList.add("show");
+    var box = overlay.querySelector(".pg-modal, .pg-drawer") || overlay;
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    var heading = box.querySelector("h1, h2, h3");
+    if (heading) {
+      if (!heading.id) heading.id = id + "-title";
+      box.setAttribute("aria-labelledby", heading.id);
+    }
+    var items = focusableEls(box);
+    if (items.length) items[0].focus();
+    else { box.setAttribute("tabindex", "-1"); box.focus(); }
+
+    function onKeydown(e) {
+      if (e.key === "Escape") { closeModal(id); return; }
+      if (e.key !== "Tab") return;
+      var current = focusableEls(box);
+      if (!current.length) return;
+      var first = current[0], last = current[current.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    overlay._pgTrap = onKeydown;
+    overlay._pgLastFocused = lastFocused;
+    document.addEventListener("keydown", onKeydown);
   }
   function closeModal(id) {
-    document.getElementById(id).classList.remove("show");
+    var overlay = document.getElementById(id);
+    if (!overlay) return;
+    overlay.classList.remove("show");
+    if (overlay._pgTrap) { document.removeEventListener("keydown", overlay._pgTrap); overlay._pgTrap = null; }
+    var restore = overlay._pgLastFocused;
+    if (restore && typeof restore.focus === "function" && document.contains(restore)) restore.focus();
+    overlay._pgLastFocused = null;
   }
 
   /* ---------------------------------------------------------------- */
@@ -1750,7 +1853,8 @@
             var idx = st2.reservations.findIndex(function (r) { return r.id === res.id; });
             st2.reservations[idx].activity.push({ ts: nowIso(), text: "Room changed from " + (oldRoom ? oldRoom.roomNumber : "—") + " to " + newRoom.roomNumber + " while resolving a block conflict." });
             setState(st2);
-            addAudit("Room Assignment Changed", res.id + " — room changed from " + (oldRoom ? oldRoom.roomNumber : "—") + " to " + newRoom.roomNumber + " (resolving a block conflict).");
+            addAudit("Room Assignment Changed", res.id + " — room changed from " + (oldRoom ? oldRoom.roomNumber : "—") + " to " + newRoom.roomNumber + " (resolving a block conflict).", null,
+              { module: "Room Assignments", recordId: assignmentId, previousValue: oldRoom ? oldRoom.roomNumber : "—", newValue: newRoom.roomNumber, reason: "Resolving a block conflict" });
             toast("Room " + newRoom.roomNumber + " assigned.", "success");
             if (onDone) onDone();
           } catch (e) {
@@ -1789,7 +1893,8 @@
         };
         fresh.roomBlocks.push(block);
         setState(fresh);
-        addAudit("Physical Room Blocked", "Room " + room.roomNumber + " blocked (" + type + "), " + fmtDateShort(start) + " to " + fmtDateShort(endIncl) + ". Reason: " + reason + ".");
+        addAudit("Physical Room Blocked", "Room " + room.roomNumber + " blocked (" + type + "), " + fmtDateShort(start) + " to " + fmtDateShort(endIncl) + ". Reason: " + reason + ".", null,
+          { module: "Room Blocks", recordId: block.id, newValue: type + " " + start + "–" + endExclusive, reason: reason });
         toast("Room " + room.roomNumber + " blocked for the selected dates.", "warn");
         closeModal("pgBlockRoomModal");
         if (opts.onSaved) opts.onSaved(block);
@@ -1924,13 +2029,13 @@
           st.customers[idx] = Object.assign({}, st.customers[idx], data);
           resultId = editingId;
           setState(st);
-          addAudit("Guest Updated", name + "'s profile was updated.");
+          addAudit("Guest Updated", name + "'s profile was updated.", null, { module: "Guests", recordId: resultId });
           toast("Guest updated.", "success");
         } else {
           resultId = "cus-" + Date.now();
           st.customers.push(Object.assign({ id: resultId }, data));
           setState(st);
-          addAudit("Guest Created", name + " added as a new guest.");
+          addAudit("Guest Created", name + " added as a new guest.", null, { module: "Guests", recordId: resultId, newValue: name });
           toast("Guest added.", "success");
         }
         closeModal("pgGuestDrawer");
@@ -2056,7 +2161,7 @@
           var removedName = fresh.customers[idx].name;
           fresh.customers.splice(idx, 1);
           setState(fresh);
-          addAudit("Guest Deleted", removedName + "’s guest profile was permanently deleted by " + CURRENT_ROLE + ".");
+          addAudit("Guest Deleted", removedName + "’s guest profile was permanently deleted by " + CURRENT_ROLE + ".", null, { module: "Guests", recordId: opts.guestId, previousValue: removedName, newValue: "deleted" });
           toast("Guest deleted.", "success");
           closeModal("pgDeleteGuestModal");
           opts.onDeleted(opts.guestId);
@@ -2076,6 +2181,8 @@
   global.PG = {
     TODAY: TODAY,
     CURRENT_ROLE: CURRENT_ROLE,
+    PERMISSIONS: PERMISSIONS,
+    hasPermission: hasPermission,
     addDays: addDays,
     fmtDate: fmtDate,
     fmtDateShort: fmtDateShort,

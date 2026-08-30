@@ -390,6 +390,20 @@ html[dir="rtl"] .pg-user{border-left:none;border-right:1px solid var(--pg-border
 html[dir="rtl"] .badge-dot{margin-left:0;}
 html[dir="rtl"] table.dt thead th, html[dir="rtl"] table.dt tbody td{text-align:right;}
 html[dir="rtl"] table.dt td.num, html[dir="rtl"] table.dt th.num{text-align:left;}
+html[dir="rtl"] .pg-property-ctx + .pg-breadcrumb{border-left:none;border-right:1px solid var(--pg-border);padding-left:0;padding-right:14px;}
+html[dir="rtl"] .more-menu{right:auto;left:0;}
+html[dir="rtl"] .more-menu a, html[dir="rtl"] .more-menu button{text-align:right;}
+/* Operations Calendar's fixed room-info/corner column is the one piece of that page's
+   layout that's a pure "start-of-row" UI element, not part of the date timeline itself —
+   it mirrors like any other sticky start column. The timeline's own date-indexed bar/cell
+   positioning (computed in JS as pixel offsets from the earliest visible date) is left
+   LTR-only: correctly mirroring which direction dates flow is a real timeline-semantics
+   change, not a CSS swap, and rushing a partial mirror there risks a calendar that reads
+   worse than a consistently-LTR one inside an otherwise-RTL page. */
+html[dir="rtl"] .opc-corner, html[dir="rtl"] .opc-room-info{left:auto;right:0;border-right:none;border-left:1px solid var(--pg-border);}
+html[dir="rtl"] .opc-group-header{left:auto;right:0;}
+html[dir="rtl"] .opc-quickadd{right:auto;left:8px;}
+html[dir="rtl"] .opc-block-btn{right:auto;left:34px;}
 
 @media (max-width:1200px){
   .grid-4{grid-template-columns:repeat(2,1fr);}

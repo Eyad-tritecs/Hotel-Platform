@@ -37,7 +37,8 @@
 var page = PG.mount("guests", ["Reservations", "Guests"]);
 var s = PG.getState();
 // Same dead-code-today role gate used by physical-rooms.html / operations-calendar.html.
-var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var CAN_VIEW = PG.hasPermission('view_guests');
+var CAN_MANAGE = PG.hasPermission('manage_guests'); // create / edit / delete
 
 var LANGUAGES = ['Arabic', 'English', 'Other'];
 
@@ -56,7 +57,7 @@ function init() {
 
   var html = '';
   html += '<div class="pg-page-head"><div><h1>Guests</h1><div class="sub" id="guestCountSub"></div></div>' +
-    '<div class="pg-actions"><button class="btn btn-primary" id="addGuestBtn">+ Add Guest</button></div></div>';
+    '<div class="pg-actions">' + (CAN_MANAGE ? '<button class="btn btn-primary" id="addGuestBtn">+ Add Guest</button>' : '') + '</div></div>';
 
   html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
     '<input class="form-control" id="searchBox" placeholder="Search by name, phone, email, or ID reference">' +
@@ -112,8 +113,9 @@ function init() {
     document.getElementById('resultCount').textContent = rows.length + ' guest' + (rows.length === 1 ? '' : 's');
     var body = document.getElementById('guestsBody');
     if (!s.customers.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128100;</div>No guests yet.<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Guest</button></div></td></tr>';
-      document.getElementById('emptyAddBtn').addEventListener('click', function () { openGuestDrawer(null); });
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128100;</div>No guests yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Guest</button>' : '') + '</div></td></tr>';
+      var emptyAddBtn = document.getElementById('emptyAddBtn');
+      if (emptyAddBtn) emptyAddBtn.addEventListener('click', function () { openGuestDrawer(null); });
       return;
     }
     if (!rows.length) {
@@ -203,7 +205,8 @@ function init() {
       }
     });
   }
-  document.getElementById('addGuestBtn').addEventListener('click', function () { openGuestDrawer(null); });
+  var addGuestBtn = document.getElementById('addGuestBtn');
+  if (addGuestBtn) addGuestBtn.addEventListener('click', function () { openGuestDrawer(null); });
 
   /* ================================================================ */
   /* Delete Guest — shared confirm modal, see PG.renderDeleteGuestModal     */
@@ -242,7 +245,7 @@ function init() {
   }
 }
 
-if (!CAN_MANAGE) {
+if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Guests</h1></div></div>' +
     '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
     'You don\'t have permission to view Guests.<br>Contact a Hotel Admin to request access.</div></div></div>';

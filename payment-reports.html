@@ -29,6 +29,8 @@
 <script>
 var page = PG.mount("payment-reports", ["Reports", "Payment Reports"]);
 var s = PG.getState();
+var CAN_VIEW = PG.hasPermission('view_reports');
+var CAN_EXPORT = PG.hasPermission('export_reports');
 var STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
 
 var REPORTS = [
@@ -86,7 +88,7 @@ function render(){
     filtersHtml += '<div class="form-group"><label class="form-label">Status</label><select class="form-control" id="rp-status"><option value="All">All Statuses</option>' +
       STATUSES.map(function(k){return '<option value="'+k+'"'+(k===state.status?' selected':'')+'>'+k+'</option>';}).join('') + '</select></div>';
   }
-  filtersHtml += '<button class="btn btn-primary btn-sm" id="rp-export" style="margin-left:auto;">Export CSV</button>';
+  if (CAN_EXPORT) filtersHtml += '<button class="btn btn-primary btn-sm" id="rp-export" style="margin-left:auto;">Export CSV</button>';
   document.getElementById('rpFilters').innerHTML = filtersHtml;
   PG.enhanceSelects(document.getElementById('rpFilters'));
 
@@ -101,7 +103,8 @@ function render(){
   document.getElementById('rpTable').innerHTML = '<thead><tr>' + result.headers.map(function(h){return '<th'+(h.num?' class="num"':'')+'>'+h.label+'</th>';}).join('') + '</tr></thead>' +
     '<tbody>' + (result.rows.length ? result.rows.map(function(row){ return '<tr>'+row.map(function(c,i){return '<td'+(result.headers[i].num?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>'; }).join('') : '<tr><td colspan="'+result.headers.length+'"><div class="empty-state">No records match this filter.</div></td></tr>') + '</tbody>';
 
-  document.getElementById('rp-export').addEventListener('click', function(){
+  var exportBtn = document.getElementById('rp-export');
+  if (exportBtn) exportBtn.addEventListener('click', function(){
     PG.exportCsv(state.report+'-report.csv', result.headers.map(function(h){return h.label;}), result.csvRows);
   });
 }
@@ -145,6 +148,12 @@ function buildReport(key){
 }
 
 selectReport(state.report);
+
+if (!CAN_VIEW){
+  page.innerHTML = '<div class="pg-page-head"><div><h1>Payment Reports</h1></div></div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    'You don\'t have permission to view Reports.<br>Contact a Hotel Admin to request access.</div></div></div>';
+}
 </script>
 </body>
 </html>
