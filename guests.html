@@ -247,7 +247,7 @@ function init() {
 
 if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Guests</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view Guests.<br>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();

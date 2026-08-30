@@ -30,11 +30,8 @@
   .skeleton-row td{padding:16px;}
   .skeleton-bar{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--pg-gray-200) 25%,var(--pg-gray-100) 37%,var(--pg-gray-200) 63%);background-size:400% 100%;animation:pg-skel 1.4s ease infinite;}
   @keyframes pg-skel{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
-  .more-wrap{position:relative;display:inline-block;}
-  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:200px;z-index:30;display:none;overflow:hidden;}
-  .more-menu.show{display:block;}
-  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
-  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+  /* .more-wrap / .more-btn / .more-menu now live in style.css so every table row menu
+     in the app is literally the same component. */
 </style>
 </head>
 <body>
@@ -81,25 +78,25 @@ function init() {
 
   html += '<div class="sum-grid" id="sumGrid"></div>';
 
+  // Search first, then the two filters staff reach for constantly as chips. Building,
+  // floor and active state are lower-frequency, so they live in an advanced drawer and
+  // report back as removable chips — no filter is ever invisible state (§8).
   html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
-    '<input class="form-control" id="searchBox" placeholder="Search by Room Number or Code">' +
-    '<div class="filters-grid">' +
-      '<div class="form-group"><label class="form-label">ROOM TYPE</label><select class="form-control" id="rtFilter"><option value="all">All Room Types</option>' +
-        s.roomTypes.map(function (r) { return '<option value="' + r.id + '">' + PG.esc(r.name) + '</option>'; }).join('') +
-      '</select></div>' +
-      '<div class="form-group"><label class="form-label">BUILDING</label><select class="form-control" id="bldgFilter"><option value="all">All Buildings</option>' +
-        distinct(s.physicalRooms.map(function (r) { return r.building; })).sort().map(function (b) { return '<option value="' + PG.esc(b) + '">' + PG.esc(b) + '</option>'; }).join('') +
-      '</select></div>' +
-      '<div class="form-group"><label class="form-label">FLOOR</label><select class="form-control" id="floorFilter"><option value="all">All Floors</option>' +
-        distinct(s.physicalRooms.map(function (r) { return r.floor; })).sort(function (a, b) { return a - b; }).map(function (f) { return '<option value="' + f + '">Floor ' + f + '</option>'; }).join('') +
-      '</select></div>' +
-      '<div class="form-group"><label class="form-label">OPERATIONAL STATUS</label><select class="form-control" id="statusFilter"><option value="all">All Statuses</option>' +
-        STATUS_OPTIONS.map(function (st2) { return '<option value="' + st2 + '">' + st2 + '</option>'; }).join('') +
-      '</select></div>' +
-      '<div class="form-group"><label class="form-label">ACTIVE STATE</label><select class="form-control" id="activeFilter"><option value="all">All</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>' +
+    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
+      '<div class="pg-searchwrap" style="flex:1 1 240px;"><span class="ic">' + PG.icon('search',15) + '</span>' +
+        '<input class="form-control" id="searchBox" type="search" placeholder="Search by room number" aria-label="Search by room number"></div>' +
+      '<button class="btn btn-outline btn-sm" id="advFiltersBtn">' + PG.icon('filter',15) + ' More Filters<span id="advCount"></span></button>' +
     '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+    '<div>' + PG.filterChips('prRoomType',
+      [{value:'all',label:'All Room Types'}].concat(s.roomTypes.map(function(r){
+        return {value:r.id, label:r.name, count: s.physicalRooms.filter(function(p){return p.roomTypeId===r.id;}).length};
+      })), 'all', {ariaLabel:'Filter by room type'}) + '</div>' +
+    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
+      '<span class="text-sm muted" style="font-weight:600;">Today&rsquo;s status</span>' +
+      PG.filterChips('prStatus', [{value:'all',label:'All'}].concat(STATUS_OPTIONS.map(function(st2){return {value:st2,label:st2};})), 'all', {ariaLabel:'Filter by operational status'}) +
+    '</div>' +
+    '<div id="prApplied" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"></div>' +
+    '<div style="display:flex;justify-content:flex-end;align-items:center;">' +
       '<span class="muted text-sm" id="resultCount"></span>' +
     '</div>' +
   '</div></div>';
@@ -186,15 +183,16 @@ function init() {
     s = PG.getState();
     var rows = filteredRooms();
     document.getElementById('resultCount').textContent = rows.length + ' room' + (rows.length === 1 ? '' : 's');
+    renderApplied();
     var body = document.getElementById('roomsBody');
     if (!s.physicalRooms.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128274;</div>No physical rooms configured yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button>' : '') + '</div></td></tr>';
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('door',30) + '</div>No physical rooms configured yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button>' : '') + '</div></td></tr>';
       var emptyAddBtn = document.getElementById('emptyAddBtn');
       if (emptyAddBtn) emptyAddBtn.addEventListener('click', function () { openRoomDrawer(null); });
       return;
     }
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128269;</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('search',30) + '</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
       document.getElementById('emptyClearBtn').addEventListener('click', clearFilters);
       return;
     }
@@ -211,7 +209,7 @@ function init() {
         '<td>' + activeStateHtml(r) + '</td>' +
         '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
           '<button class="btn btn-outline btn-sm view-btn" data-id="' + r.id + '">View</button>' +
-          '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + r.id + '">&#8942;</button>' +
+          '<div class="more-wrap"><button class="more-btn" data-id="' + r.id + '" aria-label="Actions for room ' + r.roomNumber + '" aria-haspopup="menu">' + PG.icon('dots', 16) + '</button>' +
             '<div class="more-menu" data-menu-for="' + r.id + '">' +
               '<a href="new-reservation.html?rt=' + r.roomTypeId + '&room=' + r.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
               (CAN_MANAGE ? '<button class="edit-action" data-id="' + r.id + '">Edit</button>' : '') +
@@ -251,20 +249,100 @@ function init() {
   function clearFilters() {
     filters = { q: '', roomType: 'all', building: 'all', floor: 'all', status: 'all', active: 'all' };
     document.getElementById('searchBox').value = '';
-    document.getElementById('rtFilter').value = 'all'; document.getElementById('rtFilter').dispatchEvent(new Event('change'));
-    document.getElementById('bldgFilter').value = 'all'; document.getElementById('bldgFilter').dispatchEvent(new Event('change'));
-    document.getElementById('floorFilter').value = 'all'; document.getElementById('floorFilter').dispatchEvent(new Event('change'));
-    document.getElementById('statusFilter').value = 'all'; document.getElementById('statusFilter').dispatchEvent(new Event('change'));
-    document.getElementById('activeFilter').value = 'all'; document.getElementById('activeFilter').dispatchEvent(new Event('change'));
+    syncChipUi();
     renderTable();
   }
+  // Repaint chip pressed-states from `filters` rather than tracking them separately, so
+  // a chip, the drawer, and a removable applied-chip can never disagree about state.
+  function syncChipUi(){
+    page.querySelectorAll('[data-chips="prRoomType"] .pg-chip').forEach(function(c){
+      var on = c.dataset.chipValue === filters.roomType;
+      c.classList.toggle('active', on); c.setAttribute('aria-pressed', on);
+    });
+    page.querySelectorAll('[data-chips="prStatus"] .pg-chip').forEach(function(c){
+      var on = c.dataset.chipValue === filters.status;
+      c.classList.toggle('active', on); c.setAttribute('aria-pressed', on);
+    });
+  }
+  // Only drawer-held filters need applied-chips; the chip rows already show their own state.
+  function appliedFilterList(){
+    var out = [];
+    if (filters.building !== 'all') out.push({key:'building', label:'Building', value: filters.building});
+    if (filters.floor !== 'all') out.push({key:'floor', label:'Floor', value: 'Floor ' + filters.floor});
+    if (filters.active !== 'all') out.push({key:'active', label:'State', value: filters.active === 'active' ? 'Active' : 'Inactive'});
+    if (filters.q) out.push({key:'q', label:'Search', value: filters.q});
+    return out;
+  }
+  function renderApplied(){
+    var applied = appliedFilterList();
+    var extra = (filters.roomType !== 'all' ? 1 : 0) + (filters.status !== 'all' ? 1 : 0);
+    var total = applied.length + extra;
+    var box = document.getElementById('prApplied');
+    // Clear Filters appears only while something is actually filtered (§8).
+    box.innerHTML = total
+      ? '<span class="text-sm muted">' + total + ' active filter' + (total===1?'':'s') + '</span>' +
+        PG.appliedChips(applied) +
+        '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button>'
+      : '';
+    var badge = document.getElementById('advCount');
+    if (badge) badge.innerHTML = applied.length ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">' + applied.length + '</span>' : '';
+    box.querySelectorAll('[data-remove-filter]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var k = btn.dataset.removeFilter;
+        if (k === 'q'){ filters.q = ''; document.getElementById('searchBox').value = ''; }
+        else filters[k] = 'all';
+        renderTable();
+      });
+    });
+    var clear = document.getElementById('clearFilters');
+    if (clear) clear.addEventListener('click', clearFilters);
+  }
+
   document.getElementById('searchBox').addEventListener('input', function () { filters.q = this.value; renderTable(); });
-  document.getElementById('rtFilter').addEventListener('change', function () { filters.roomType = this.value; renderTable(); });
-  document.getElementById('bldgFilter').addEventListener('change', function () { filters.building = this.value; renderTable(); });
-  document.getElementById('floorFilter').addEventListener('change', function () { filters.floor = this.value; renderTable(); });
-  document.getElementById('statusFilter').addEventListener('change', function () { filters.status = this.value; renderTable(); });
-  document.getElementById('activeFilter').addEventListener('change', function () { filters.active = this.value; renderTable(); });
-  document.getElementById('clearFilters').addEventListener('click', clearFilters);
+  PG.wireChips(page, 'prRoomType', function(v){ filters.roomType = v; syncChipUi(); renderTable(); });
+  PG.wireChips(page, 'prStatus', function(v){ filters.status = v; syncChipUi(); renderTable(); });
+
+  /* Advanced filters drawer — the lower-frequency dimensions, kept out of the toolbar
+     but always reported back as removable chips (progressive disclosure, §3). */
+  var advDrawer = document.createElement('div');
+  advDrawer.className = 'pg-drawer-overlay';
+  advDrawer.id = 'prAdvDrawer';
+  document.body.appendChild(advDrawer);
+  document.getElementById('advFiltersBtn').addEventListener('click', function(){
+    var buildings = distinct(s.physicalRooms.map(function(r){return r.building;})).sort();
+    var floors = distinct(s.physicalRooms.map(function(r){return r.floor;})).sort(function(a,b){return a-b;});
+    advDrawer.innerHTML = '<div class="pg-drawer" style="max-width:400px;">' +
+      '<div class="pg-drawer-header"><h3>More Filters</h3>' +
+        '<button class="pg-modal-close" onclick="PG.closeModal(\'prAdvDrawer\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
+      '<div class="pg-drawer-body">' +
+        '<div class="form-group"><label class="form-label" for="adv-bldg">Building</label>' +
+          '<select class="form-control" id="adv-bldg"><option value="all">All Buildings</option>' +
+          buildings.map(function(b){ return '<option value="'+PG.esc(b)+'"'+(filters.building===b?' selected':'')+'>'+PG.esc(b)+'</option>'; }).join('') + '</select></div>' +
+        '<div class="form-group"><label class="form-label" for="adv-floor">Floor</label>' +
+          '<select class="form-control" id="adv-floor"><option value="all">All Floors</option>' +
+          floors.map(function(f){ return '<option value="'+f+'"'+(String(filters.floor)===String(f)?' selected':'')+'>Floor '+f+'</option>'; }).join('') + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Active State</label>' +
+          PG.segmented('advActive', [{value:'all',label:'All'},{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}], filters.active, {ariaLabel:'Active state'}) + '</div>' +
+      '</div>' +
+      '<div class="pg-drawer-footer"><button class="btn btn-light" id="adv-clear">Clear</button>' +
+        '<button class="btn btn-primary" id="adv-apply">Apply Filters</button></div>' +
+    '</div>';
+    PG.enhanceSelects(advDrawer);
+    // Edits stay in a pending copy until Apply — Cancel/Escape leaves the grid untouched.
+    var pending = { building: filters.building, floor: filters.floor, active: filters.active };
+    document.getElementById('adv-bldg').addEventListener('change', function(){ pending.building = this.value; });
+    document.getElementById('adv-floor').addEventListener('change', function(){ pending.floor = this.value; });
+    PG.wireSegmented(advDrawer, 'advActive', function(v){ pending.active = v; });
+    document.getElementById('adv-clear').addEventListener('click', function(){
+      filters.building = 'all'; filters.floor = 'all'; filters.active = 'all';
+      PG.closeModal('prAdvDrawer'); renderTable();
+    });
+    document.getElementById('adv-apply').addEventListener('click', function(){
+      filters.building = pending.building; filters.floor = pending.floor; filters.active = pending.active;
+      PG.closeModal('prAdvDrawer'); renderTable();
+    });
+    PG.openModal('prAdvDrawer');
+  });
 
   // ---- Loading state: brief skeleton, then real data ----
   renderSummary();
@@ -640,7 +718,7 @@ function init() {
 
 if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Physical Rooms</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view Physical Rooms.<br>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();

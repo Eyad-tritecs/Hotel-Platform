@@ -38,7 +38,7 @@ var REPORTS = [
   { key:'departures', title:'Departures', purpose:'Guests due to depart within the selected date range.' },
   { key:'by-status', title:'Reservations by Status', purpose:'Every reservation grouped by its current lifecycle status.' },
   { key:'cancellations', title:'Cancellations and No Shows', purpose:'Reservations that were cancelled or not honored, with reason where recorded.' },
-  { key:'unassigned', title:'Unassigned Reservations', purpose:'Diagnostic only — every active reservation must have a physical room; this should always be empty (see below).' }
+  { key:'unassigned', title:'Room Assignment Integrity Check', purpose:'Data-integrity check, not an operational worklist — every active reservation always holds a physical room, so this report should always come back empty.' }
 ];
 
 function rtName(id){ var rt=s.roomTypes.find(function(r){return r.id===id;}); return rt?rt.name:id; }
@@ -53,11 +53,7 @@ function roomsLabel(r){
   });
   return nums.length?nums.join(', '):'—';
 }
-function total(r){
-  var n=PG.dateRange(r.checkIn, r.checkOut), t=0;
-  r.rooms.forEach(function(room){ n.forEach(function(d){ t+=PG.rateFor(s, room.roomTypeId, d)*room.qty; }); });
-  return t+(r.taxAmount||0)+(r.feeAmount||0);
-}
+function total(r){ return PG.reservationTotal(s, r); }
 function reasonFromActivity(r, keywords){
   var entry = (r.activity||[]).slice().reverse().find(function(a){
     var low=a.text.toLowerCase();
@@ -194,7 +190,7 @@ function buildReport(key){
     });
   });
   return {
-    note: offenders.length ? '&#9888; '+offenders.length+' room item(s) below are missing a physical-room assignment. This should never happen under normal operation — resolve each one from its Reservation Detail page (Assign Room) immediately.' : '&#10003; No unassigned room items found. Every active reservation currently has a physical room, as required.',
+    note: offenders.length ? '&#9888; '+offenders.length+' room item(s) below are missing a physical-room assignment. This should never happen under normal operation — resolve each one from its Reservation Detail page (Assign Room) immediately.' : '&#10003; Integrity check passed. Every active reservation currently holds a physical room, as required.',
     headers: [{label:'Reservation #'},{label:'Guest'},{label:'Room Type'},{label:'Assigned / Needed', num:true},{label:'Status'}],
     rows: offenders.map(function(o){ var c=custOf(o.res); return ['<a href="reservation-detail.html?id='+o.res.id+'">'+o.res.id+'</a>', PG.esc(c?c.name:'—'), PG.esc(rtName(o.item.roomTypeId)), o.have+' / '+o.item.qty, PG.statusBadge(o.res.status)]; }),
     csvRows: offenders.map(function(o){ var c=custOf(o.res); return [o.res.id, c?c.name:'—', rtName(o.item.roomTypeId), o.have+'/'+o.item.qty, o.res.status]; })
@@ -205,7 +201,7 @@ selectReport(state.report);
 
 if (!CAN_VIEW){
   page.innerHTML = '<div class="pg-page-head"><div><h1>Reservation Reports</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view Reports.<br>Contact a Hotel Admin to request access.</div></div></div>';
 }
 </script>

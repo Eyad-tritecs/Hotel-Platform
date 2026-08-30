@@ -136,8 +136,8 @@
         paymentStatus: "Paid",
         paymentMethod: "Payment Link",
         rooms: [
-          { id: "RES-10245-itm-1", roomTypeId: "dlx", qty: 2, ratePlanName: "Flexible + Breakfast", adults: 2, children: 0 },
-          { id: "RES-10245-itm-2", roomTypeId: "fam", qty: 1, ratePlanName: "Flexible + Breakfast", adults: 2, children: 2 }
+          { id: "RES-10245-itm-1", roomTypeId: "dlx", qty: 2, ratePlanId: "rp-dlx-flex", adults: 2, children: 0 },
+          { id: "RES-10245-itm-2", roomTypeId: "fam", qty: 1, ratePlanId: "rp-fam-flex", adults: 2, children: 2 }
         ],
         notes: "Guest requested early check-in if possible.",
         taxAmount: 50,
@@ -165,7 +165,7 @@
         paymentStatus: "Pay on Arrival",
         paymentMethod: "Pay on Arrival",
         rooms: [
-          { id: "RES-10246-itm-1", roomTypeId: "std", qty: 1, adults: 2, children: 0 }
+          { id: "RES-10246-itm-1", roomTypeId: "std", qty: 1, ratePlanId: "rp-std-flex", adults: 2, children: 0 }
         ],
         taxAmount: 0,
         feeAmount: 0,
@@ -186,7 +186,7 @@
         status: "Pending Payment",
         paymentStatus: "Expired",
         paymentMethod: "Payment Link",
-        rooms: [{ id: "RES-10247-itm-1", roomTypeId: "fam", qty: 1, adults: 2, children: 1 }],
+        rooms: [{ id: "RES-10247-itm-1", roomTypeId: "fam", qty: 1, ratePlanId: "rp-fam-flex", adults: 2, children: 1 }],
         taxAmount: 0,
         feeAmount: 0,
         notes: "Booked through Al-Quds Travel Agency.",
@@ -210,7 +210,7 @@
         status: "Pending Payment",
         paymentStatus: "Payment Required",
         paymentMethod: "Pay on Arrival",
-        rooms: [{ id: "RES-10248-itm-1", roomTypeId: "std", qty: 1, adults: 2, children: 0 }],
+        rooms: [{ id: "RES-10248-itm-1", roomTypeId: "std", qty: 1, ratePlanId: "rp-std-flex", adults: 2, children: 0 }],
         taxAmount: 0,
         feeAmount: 0,
         notes: "",
@@ -279,7 +279,7 @@
       { id: "blk-3", propertyId: PROPERTY_ID, physicalRoomId: "fam-402", startDate: addDays(TODAY, 1), endDate: addDays(TODAY, 3), type: "Management Hold", reason: "Deep cleaning scheduled", notes: "Conflicts with the tentative hold for RES-10247 on the same room — needs manual resolution.", createdAt: addDays(TODAY, -1) + "T07:50", createdBy: "Hotel Admin" }
     ];
 
-    return {
+    var seed = {
       seededAt: TODAY,
       hotel: {
         name: "Palestine Grand Hotel",
@@ -312,10 +312,119 @@
       customers: customers,
       reservations: reservations,
       nextResId: 10249,
+      // A one-off price typed into a single Price Calendar cell, keyed
+      // "roomTypeId|ratePlanId|date". The most specific of the three pricing
+      // layers (see resolvePrice) — seeded empty; every seeded price below comes
+      // from a named period or the base calendar, so nothing starts out "Manual".
+      rateOverrides: {},
+
+      // Rate Plans are commercial offers attached to a room type; the dates and
+      // money live inside their named Pricing Periods, never on the plan itself
+      // (§6.2/§6.3 — do NOT reintroduce a flat startDate/endDate/price on a plan).
+      //
+      // Seeding rule that must be preserved: every room type's DEFAULT plan is
+      // priced only from addDays(TODAY,31) onward, i.e. entirely outside the base
+      // `rates` calendar's window. Inside that window the default plan falls
+      // through to Base Price, so PG.rateFor() returns byte-identical numbers to
+      // the pre-rate-plan model and no seeded reservation's total moved. Any new
+      // seed period overlapping the base window would silently reprice the demo.
       ratePlans: [
-        { id: "rp1", propertyId: PROPERTY_ID, name: "Flexible Room Only", roomTypeId: "std", mealPlan: "Room Only", startDate: TODAY, endDate: addDays(TODAY, 90), price: 100, currency: "USD", active: true },
-        { id: "rp2", propertyId: PROPERTY_ID, name: "Flexible + Breakfast", roomTypeId: "dlx", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 120, currency: "USD", active: true },
-        { id: "rp3", propertyId: PROPERTY_ID, name: "Weekend Rate", roomTypeId: "fam", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 150, currency: "USD", active: true }
+        /* ---- Standard Room ------------------------------------------------ */
+        { id: "rp-std-flex", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Flexible Rate", code: "FLEX-STD",
+          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+          active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:00:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:20:00.000Z",
+          periods: [
+            { id: "pp-std-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 110 }, active: true,
+              createdAt: addDays(TODAY, -20) + "T10:00:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:20:00.000Z" }
+          ] },
+        { id: "rp-std-nr", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Non-Refundable Rate", code: "NRF-STD",
+          mealPlan: "Room Only", description: "Lower rate in exchange for a non-refundable, non-changeable booking.",
+          active: true, isDefault: false, createdAt: addDays(TODAY, -60) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z",
+          periods: [
+            { id: "pp-std-nr-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 90 }, active: true,
+              createdAt: addDays(TODAY, -30) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z" },
+            { id: "pp-std-nr-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 99 }, active: true,
+              createdAt: addDays(TODAY, -20) + "T09:05:00.000Z", updatedAt: addDays(TODAY, -14) + "T08:40:00.000Z" }
+          ] },
+        // Demonstrates "Different Price by Day" — Thu/Fri carry the regional weekend markup.
+        { id: "rp-std-bb", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Breakfast Included", code: "BB-STD",
+          mealPlan: "Breakfast Included", description: "Includes full breakfast for all occupants.",
+          active: true, isDefault: false, createdAt: addDays(TODAY, -55) + "T12:00:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:10:00.000Z",
+          periods: [
+            { id: "pp-std-bb-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "byday",
+              prices: { "0": 120, "1": 120, "2": 120, "3": 120, "4": 145, "5": 145, "6": 125 }, active: true,
+              createdAt: addDays(TODAY, -30) + "T12:00:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:10:00.000Z" }
+          ] },
+        // Demonstrates the inactive-plan state: configured, priced, but not bookable.
+        { id: "rp-std-early", propertyId: PROPERTY_ID, roomTypeId: "std", name: "Early Bird Offer", code: "EB-STD",
+          mealPlan: "Room Only", description: "Advance-purchase offer — currently switched off.",
+          active: false, isDefault: false, createdAt: addDays(TODAY, -40) + "T14:00:00.000Z", updatedAt: addDays(TODAY, -25) + "T14:00:00.000Z",
+          periods: [
+            { id: "pp-std-early-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 85 }, active: true,
+              createdAt: addDays(TODAY, -40) + "T14:00:00.000Z", updatedAt: addDays(TODAY, -25) + "T14:00:00.000Z" }
+          ] },
+
+        /* ---- Deluxe Room -------------------------------------------------- */
+        { id: "rp-dlx-flex", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Flexible Rate", code: "FLEX-DLX",
+          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+          active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:10:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:22:00.000Z",
+          periods: [
+            { id: "pp-dlx-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 130 }, active: true,
+              createdAt: addDays(TODAY, -20) + "T10:05:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:22:00.000Z" }
+          ] },
+        { id: "rp-dlx-bb", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Breakfast Included", code: "BB-DLX",
+          mealPlan: "Breakfast Included", description: "Includes full breakfast for all occupants.",
+          active: true, isDefault: false, createdAt: addDays(TODAY, -55) + "T12:05:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:12:00.000Z",
+          periods: [
+            { id: "pp-dlx-bb-standard", name: "Standard Season", startDate: TODAY, endDate: addDays(TODAY, 30),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "byday",
+              prices: { "0": 140, "1": 140, "2": 140, "3": 140, "4": 165, "5": 165, "6": 150 }, active: true,
+              createdAt: addDays(TODAY, -30) + "T12:05:00.000Z", updatedAt: addDays(TODAY, -9) + "T15:12:00.000Z" }
+          ] },
+        // Sun–Thu only. Fri/Sat resolve to Base Price, and once the base calendar
+        // runs out they become a real Missing Price state — the demo case for §6.10.
+        { id: "rp-dlx-corp", propertyId: PROPERTY_ID, roomTypeId: "dlx", name: "Corporate Rate", code: "CORP-DLX",
+          mealPlan: "Breakfast Included", description: "Negotiated corporate rate. Business nights only (Sunday–Thursday).",
+          active: true, isDefault: false, strictPeriodPricing: true,
+          createdAt: addDays(TODAY, -45) + "T08:00:00.000Z", updatedAt: addDays(TODAY, -11) + "T09:30:00.000Z",
+          periods: [
+            { id: "pp-dlx-corp-2026", name: "Corporate Contract 2026", startDate: TODAY, endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4], mode: "same", prices: { same: 105 }, active: true,
+              createdAt: addDays(TODAY, -45) + "T08:00:00.000Z", updatedAt: addDays(TODAY, -11) + "T09:30:00.000Z" }
+          ] },
+
+        /* ---- Family Room -------------------------------------------------- */
+        { id: "rp-fam-flex", propertyId: PROPERTY_ID, roomTypeId: "fam", name: "Flexible Rate", code: "FLEX-FAM",
+          mealPlan: "Room Only", description: "Fully flexible, free cancellation up to 24 hours before arrival.",
+          active: true, isDefault: true, createdAt: addDays(TODAY, -60) + "T09:15:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:25:00.000Z",
+          periods: [
+            { id: "pp-fam-flex-autumn", name: "Autumn Season 2026", startDate: addDays(TODAY, 31), endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 160 }, active: true,
+              createdAt: addDays(TODAY, -20) + "T10:10:00.000Z", updatedAt: addDays(TODAY, -6) + "T11:25:00.000Z" }
+          ] },
+        // Two periods on one plan that overlap on DATES but share no weekday —
+        // the legitimate coexistence the overlap rule is written to allow, plus an
+        // expired period so the Expired state is visible out of the box.
+        { id: "rp-fam-weekend", propertyId: PROPERTY_ID, roomTypeId: "fam", name: "Weekend Offer", code: "WKND-FAM",
+          mealPlan: "Breakfast Included", description: "Weekend family package including breakfast.",
+          active: true, isDefault: false, createdAt: addDays(TODAY, -50) + "T16:00:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z",
+          periods: [
+            { id: "pp-fam-weekend-premium", name: "Weekend Premium", startDate: TODAY, endDate: addDays(TODAY, 120),
+              daysOfWeek: [4, 5, 6], mode: "same", prices: { same: 195 }, active: true,
+              createdAt: addDays(TODAY, -50) + "T16:00:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z" },
+            { id: "pp-fam-weekend-midweek", name: "Midweek Family", startDate: TODAY, endDate: addDays(TODAY, 120),
+              daysOfWeek: [0, 1, 2, 3], mode: "same", prices: { same: 165 }, active: true,
+              createdAt: addDays(TODAY, -50) + "T16:05:00.000Z", updatedAt: addDays(TODAY, -4) + "T10:45:00.000Z" },
+            { id: "pp-fam-weekend-eid", name: "Eid Holiday 2026", startDate: addDays(TODAY, -90), endDate: addDays(TODAY, -80),
+              daysOfWeek: [0, 1, 2, 3, 4, 5, 6], mode: "same", prices: { same: 240 }, active: true,
+              createdAt: addDays(TODAY, -120) + "T09:00:00.000Z", updatedAt: addDays(TODAY, -95) + "T09:00:00.000Z" }
+          ] }
       ],
       // Real, configurable tax/fee engine (see computePricing) — replaces what used to be
       // a hardcoded 4% tax + $20 fee scattered across new-reservation.html and
@@ -339,6 +448,15 @@
         { ts: TODAY + "T09:30", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10248 created via Phone. Room 103 held." }
       ]
     };
+
+    // Write each seeded reservation item's booked-price snapshot from the resolver
+    // itself rather than hand-typing nightly maps into the literals above — the two
+    // can then never drift apart, and every seeded reservation demonstrates the same
+    // "price is frozen at booking time" guarantee a wizard-created one gets (§6.11).
+    seed.reservations.forEach(function (res) {
+      res.rooms.forEach(function (room) { snapshotRoomItemPricing(seed, room, res.checkIn, res.checkOut); });
+    });
+    return seed;
   }
 
   /* ---------------------------------------------------------------- */
@@ -476,11 +594,267 @@
     });
     return { ok: problems.length === 0, problems: problems, nights: nights };
   }
-  function rateFor(state, roomTypeId, dateStr) {
-    var table = state.rates[roomTypeId] || {};
+  /* ================================================================ */
+  /* Rate Plans & Pricing engine                                       */
+  /*                                                                   */
+  /*   Room Type  →  Rate Plan  →  Pricing Period  →  Daily Prices     */
+  /*                                                                   */
+  /* A price is resolved by (Room Type + Rate Plan + Date), never by    */
+  /* (Room Type + Date) alone — two plans on the same room type can     */
+  /* legitimately price the same night differently. Resolution walks    */
+  /* three layers, most-specific first, and always reports which layer  */
+  /* produced the number so the UI can label it honestly:               */
+  /*                                                                   */
+  /*   1. Manual Override — state.rateOverrides["rtId|planId|date"],    */
+  /*      a one-off price typed directly into a Price Calendar cell.    */
+  /*   2. Period Override — the plan's active Pricing Period covering   */
+  /*      that date whose daysOfWeek includes that date's weekday.      */
+  /*   3. Base Price     — state.rates[rtId][date], the pre-existing    */
+  /*      per-date calendar, falling back to roomTypes[].baseRate.      */
+  /*                                                                   */
+  /* Layer 3 is the ORIGINAL pricing model, preserved intact as the     */
+  /* fallback rule §6.10 asks for — which is also why introducing rate  */
+  /* plans changed no existing reservation's price by a single cent.    */
+  /* ================================================================ */
+
+  // Layer 3. Also still exported on its own so callers that genuinely want the
+  // room type's own baseline (the Price Calendar's "Base" reference row, the
+  // Pricing Period editor's placeholder) can ask for it without a plan.
+  function basePriceFor(state, roomTypeId, dateStr) {
+    var table = (state.rates || {})[roomTypeId] || {};
     if (table[dateStr] != null) return table[dateStr];
     var rt = state.roomTypes.find(function (r) { return r.id === roomTypeId; });
     return rt ? rt.baseRate : 0;
+  }
+
+  function ratePlansForType(state, roomTypeId, activeOnly) {
+    return (state.ratePlans || []).filter(function (p) {
+      return p.roomTypeId === roomTypeId && (!activeOnly || p.active);
+    });
+  }
+
+  // The plan a bare (roomType, date) price question resolves against — the one
+  // flagged isDefault, else the first active plan, else the first plan at all.
+  function defaultRatePlanFor(state, roomTypeId) {
+    var plans = ratePlansForType(state, roomTypeId, false);
+    return plans.find(function (p) { return p.isDefault && p.active; }) ||
+      plans.find(function (p) { return p.isDefault; }) ||
+      plans.find(function (p) { return p.active; }) ||
+      plans[0] || null;
+  }
+
+  function ratePlanById(state, ratePlanId) {
+    return (state.ratePlans || []).find(function (p) { return p.id === ratePlanId; }) || null;
+  }
+
+  // "active" | "upcoming" | "expired" — relative to TODAY, used for the state
+  // badges §6.6 asks for on every period row.
+  function periodTimeState(period) {
+    if (period.active === false) return "inactive";
+    if (TODAY < period.startDate) return "upcoming";
+    if (TODAY > period.endDate) return "expired";
+    return "active";
+  }
+
+  function periodCoversDate(period, dateStr) {
+    if (period.active === false) return false;
+    if (dateStr < period.startDate || dateStr > period.endDate) return false;
+    var dow = dayOfWeek(dateStr);
+    var days = period.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+    return days.indexOf(dow) > -1;
+  }
+
+  // A period in "same" mode carries one price for every selected day; in "byday"
+  // mode it carries one price per weekday index. Either can legitimately be
+  // missing a value — that surfaces as a Missing Price state, never as $0.
+  function periodPriceForDate(period, dateStr) {
+    var prices = period.prices || {};
+    if (period.mode === "byday") {
+      var v = prices[String(dayOfWeek(dateStr))];
+      return v != null && v !== "" ? Number(v) : null;
+    }
+    return prices.same != null && prices.same !== "" ? Number(prices.same) : null;
+  }
+
+  function overrideKey(roomTypeId, ratePlanId, dateStr) {
+    return roomTypeId + "|" + ratePlanId + "|" + dateStr;
+  }
+
+  // The single price resolver. Returns the number AND its provenance, so no screen
+  // ever has to display a price it can't explain (§3 "recognition instead of recall").
+  //   source: "manual" | "period" | "base" | "missing"
+  function resolvePrice(state, roomTypeId, ratePlanId, dateStr) {
+    var plan = ratePlanById(state, ratePlanId);
+    var out = {
+      price: null, source: "missing", label: "Missing Price",
+      planId: ratePlanId, planName: plan ? plan.name : null, planActive: plan ? !!plan.active : false,
+      periodId: null, periodName: null
+    };
+    if (!plan) return out;
+
+    var ov = (state.rateOverrides || {})[overrideKey(roomTypeId, ratePlanId, dateStr)];
+    if (ov != null) {
+      out.price = Number(ov); out.source = "manual"; out.label = "Manual Override";
+      return out;
+    }
+    var periods = plan.periods || [];
+    for (var i = 0; i < periods.length; i++) {
+      if (!periodCoversDate(periods[i], dateStr)) continue;
+      var p = periodPriceForDate(periods[i], dateStr);
+      if (p == null) continue; // period covers the date but has no price for that weekday
+      out.price = p; out.source = "period"; out.label = "Period Override";
+      out.periodId = periods[i].id; out.periodName = periods[i].name;
+      return out;
+    }
+    // A plan flagged strictPeriodPricing sells ONLY inside its named periods and
+    // never falls back to the room type's base price. That's what makes Missing
+    // Price a real, reachable state rather than a theoretical one: a contracted
+    // plan restricted to Sun–Thu must not quietly sell Friday at the rack rate
+    // just because a base calendar entry happens to exist for that date.
+    if (plan.strictPeriodPricing) return out;
+
+    var base = basePriceFor(state, roomTypeId, dateStr);
+    if (base != null && base > 0) {
+      out.price = base; out.source = "base"; out.label = "Base Price";
+    }
+    return out;
+  }
+
+  // Backward-compatible shim. Every pre-existing PG.rateFor() call site in the app
+  // predates rate plans and asks a (roomType, date) question — it resolves against
+  // the room type's default plan, which is exactly what it always effectively meant.
+  function rateFor(state, roomTypeId, dateStr) {
+    var plan = defaultRatePlanFor(state, roomTypeId);
+    if (!plan) return basePriceFor(state, roomTypeId, dateStr);
+    var r = resolvePrice(state, roomTypeId, plan.id, dateStr);
+    return r.price != null ? r.price : 0;
+  }
+
+  // Per-night detail for one room item, plus the same nights grouped into the
+  // pricing periods they fell into — that grouping is what lets New Reservation
+  // show "this stay spans Standard Season and Weekend Premium" (§6.12).
+  function nightlyBreakdown(state, roomTypeId, ratePlanId, checkIn, checkOut) {
+    var nights = dateRange(checkIn, checkOut).map(function (d) {
+      var r = resolvePrice(state, roomTypeId, ratePlanId, d);
+      return { date: d, price: r.price, source: r.source, label: r.label, periodId: r.periodId, periodName: r.periodName };
+    });
+    var groups = [], byKey = {};
+    nights.forEach(function (n) {
+      var key = (n.periodId || n.source) + "|" + n.price;
+      if (!byKey[key]) {
+        byKey[key] = { label: n.periodName || n.label, source: n.source, price: n.price, nights: 0, dates: [] };
+        groups.push(byKey[key]);
+      }
+      byKey[key].nights++; byKey[key].dates.push(n.date);
+    });
+    var missing = nights.filter(function (n) { return n.price == null; });
+    var subtotal = nights.reduce(function (a, n) { return a + (n.price || 0); }, 0);
+    return { nights: nights, groups: groups, missing: missing, subtotal: subtotal, complete: missing.length === 0 };
+  }
+
+  // Error prevention (§3): a reservation may never be confirmed against a plan that
+  // is inactive, belongs to another room type, or has no price for one of its nights.
+  function validateRatePlanForStay(state, roomTypeId, ratePlanId, checkIn, checkOut) {
+    var plan = ratePlanById(state, ratePlanId);
+    if (!plan) return { ok: false, reason: "This rate plan no longer exists.", missing: [] };
+    if (plan.roomTypeId !== roomTypeId) return { ok: false, reason: "This rate plan belongs to a different room type.", missing: [] };
+    if (!plan.active) return { ok: false, reason: "“" + plan.name + "” is inactive and can’t be used for new reservations.", missing: [] };
+    var bd = nightlyBreakdown(state, roomTypeId, ratePlanId, checkIn, checkOut);
+    if (!bd.complete) {
+      var missingDates = bd.missing.map(function (m) { return m.date; });
+      return {
+        ok: false, missing: missingDates,
+        reason: "“" + plan.name + "” has no price for " + missingDates.length + " night" + (missingDates.length === 1 ? "" : "s") +
+          " of this stay (" + missingDates.slice(0, 3).map(function (d) { return fmtDateShort(d); }).join(", ") +
+          (missingDates.length > 3 ? ", …" : "") + ")."
+      };
+    }
+    return { ok: true, reason: null, missing: [], breakdown: bd };
+  }
+
+  // §6.9 — two ACTIVE periods in the same plan may not overlap on both date range
+  // AND weekday, because there is no priority field in this model to break the tie.
+  // Returns the conflicting periods so the editor can name them rather than just
+  // refusing. Periods that overlap on dates but share no weekday are fine (that's
+  // exactly how "Weekdays" + "Weekend Premium" are meant to coexist).
+  function overlappingPeriods(plan, candidate, excludePeriodId) {
+    if (candidate.active === false) return [];
+    var candDays = candidate.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+    return (plan.periods || []).filter(function (p) {
+      if (p.id === excludePeriodId || p.active === false) return false;
+      if (candidate.endDate < p.startDate || candidate.startDate > p.endDate) return false;
+      var days = p.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+      return days.some(function (d) { return candDays.indexOf(d) > -1; });
+    });
+  }
+
+  // Every date a period currently governs — what "this change affects N nights"
+  // in the period editor's confirmation is counted from.
+  function periodAffectedDates(period) {
+    if (!period.startDate || !period.endDate || period.endDate < period.startDate) return [];
+    return dateRange(period.startDate, addDays(period.endDate, 1)).filter(function (d) {
+      var days = period.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+      return days.indexOf(dayOfWeek(d)) > -1;
+    });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Booked-price snapshots                                            */
+  /*                                                                   */
+  /* §6.11 — changing a rate plan or pricing period must never silently */
+  /* reprice a reservation that is already on the books. Reservation    */
+  /* room items therefore carry a `nightly` map ({date: price}) written */
+  /* at booking time and rewritten only through the explicit Edit flow. */
+  /* This function is the ONE place a reservation's room subtotal is    */
+  /* computed; it prefers the snapshot and falls back to a live resolve */
+  /* only for reservations saved before snapshots existed.              */
+  /* ---------------------------------------------------------------- */
+  function roomItemCharge(state, res, room) {
+    var nights = dateRange(res.checkIn, res.checkOut);
+    var qty = room.qty || 1;
+    if (room.nightly) {
+      var snapTotal = 0, complete = true;
+      nights.forEach(function (d) {
+        if (room.nightly[d] == null) { complete = false; return; }
+        snapTotal += Number(room.nightly[d]) * qty;
+      });
+      if (complete) return snapTotal;
+    }
+    var total = 0;
+    nights.forEach(function (d) {
+      var price = room.ratePlanId
+        ? resolvePrice(state, room.roomTypeId, room.ratePlanId, d).price
+        : rateFor(state, room.roomTypeId, d);
+      total += (price || 0) * qty;
+    });
+    return total;
+  }
+
+  function reservationRoomCharges(state, res) {
+    return (res.rooms || []).reduce(function (a, room) { return a + roomItemCharge(state, res, room); }, 0);
+  }
+
+  // Full booked total including the tax/fee amounts stored on the reservation.
+  // Replaces the identical 3-line loop that used to be copy-pasted into eight pages.
+  function reservationTotal(state, res) {
+    return reservationRoomCharges(state, res) + (res.taxAmount || 0) + (res.feeAmount || 0);
+  }
+
+  // Writes today's resolved prices onto a room item as its booked snapshot.
+  // Called at reservation creation and from the reservation Edit flow — never
+  // implicitly, so a rate change elsewhere can't reach an existing booking.
+  function snapshotRoomItemPricing(state, room, checkIn, checkOut) {
+    var planId = room.ratePlanId || (defaultRatePlanFor(state, room.roomTypeId) || {}).id;
+    room.ratePlanId = planId;
+    var plan = ratePlanById(state, planId);
+    if (plan) room.ratePlanName = plan.name;
+    var nightly = {};
+    dateRange(checkIn, checkOut).forEach(function (d) {
+      var r = resolvePrice(state, room.roomTypeId, planId, d);
+      if (r.price != null) nightly[d] = r.price;
+    });
+    room.nightly = nightly;
+    return room;
   }
 
   /* ---------------------------------------------------------------- */
@@ -1114,7 +1488,10 @@
       { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
       { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
       { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
-      { key: "rates", label: "Rates", href: "rates.html", icon: "tag" },
+      // Renamed from "Rates": this page manages rate plans, named pricing periods,
+      // and per-day prices — "Rates" undersold all three. The route/file name stays
+      // rates.html so every existing deep link and bookmark keeps working.
+      { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
       // Hidden by product decision: Operations Calendar is now the primary availability/inventory
       // workspace. The page, its route, and all its logic are fully intact — only nav visibility
       // is toggled, reusing the same `hidden` mechanism a future prompt can flip back at any time
@@ -1166,8 +1543,44 @@
     layers: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></svg>',
     lock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 1 1 8 0v4"/></svg>',
     clock: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
-    play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/></svg>'
+    play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/></svg>',
+    /* Functional icons (§4). One consistent 24-box line style, 1.8 stroke, no fills
+       except where a glyph genuinely needs one — added so nothing in this app has to
+       fall back to an emoji or a Unicode dingbat for a real control or status. */
+    search: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    filter: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z"/></svg>',
+    chevronLeft: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5-7 7 7 7"/></svg>',
+    chevronRight: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5 7 7-7 7"/></svg>',
+    chevronDown: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 9 7 7 7-7"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 13 4.5 4.5L19 7"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.5 1.8 21h20.4L12 3.5Z"/><path d="M12 10v4.5M12 17.6h.01"/></svg>',
+    info: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+    x: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    ban: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>',
+    wrench: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15.5 3.5a5.5 5.5 0 0 0-5 7.6L3.6 18a2 2 0 1 0 2.8 2.8l6.9-6.9a5.5 5.5 0 0 0 6.6-7.3l-3 3-2.5-2.5 3-3a5.5 5.5 0 0 0-1.9-.6Z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>',
+    money: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2.5v19M16.5 6.8c-.7-1.2-2.3-1.9-4.5-1.9-2.6 0-4.2 1.1-4.2 2.9 0 4.3 9 2.2 9 6.6 0 1.9-1.8 3.1-4.6 3.1-2.4 0-4.1-.8-4.9-2.1"/></svg>',
+    trend: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 16 5.5-5.5 3.5 3.5L21 5"/><path d="M15 5h6v6"/></svg>',
+    logIn: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3h5a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-5"/><path d="M10 8 6 12l4 4M6 12h9"/></svg>',
+    logOut: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h5"/><path d="m15 8 4 4-4 4M19 12H9"/></svg>',
+    inbox: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M4.5 5h15l1.5 8v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5l1.5-8Z"/></svg>',
+    note: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h9l5 5v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L20 8l-4-4L4 16v4Z"/><path d="m14 6 4 4"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>'
   };
+
+  // Inline an icon at an explicit size. Every functional control in this app should
+  // reach for this rather than pasting an emoji or Unicode arrow into a string.
+  function icon(name, size) {
+    var svg = ICONS[name];
+    if (!svg) return "";
+    if (!size) return svg;
+    return svg.replace('width="16" height="16"', 'width="' + size + '" height="' + size + '"');
+  }
 
   function renderSidebar(activeKey) {
     var html = '<aside class="pg-sidebar">';
@@ -1189,7 +1602,7 @@
 
   var CRUMB_LINKS = {
     "Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Management": "hotel-profile.html", "Room Types": "room-types.html",
-    "Physical Rooms": "physical-rooms.html", "Rates": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
+    "Physical Rooms": "physical-rooms.html", "Rate Plans & Pricing": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
     "New Reservation": "new-reservation.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
     "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
     "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Hotels": "hotels.html", "Users": "users.html",
@@ -1253,7 +1666,23 @@
     var payments = state.reservations.filter(function (r) {
       return r.transactionRef && r.transactionRef.toLowerCase().indexOf(q) > -1;
     }).slice(0, GSEARCH_LIMIT);
-    return { reservations: reservations, guests: guests, rooms: rooms, payments: payments };
+    // Rate plans AND the named pricing periods inside them (§6.13) — the whole point
+    // of naming a period is being able to find it again by that name later. A period
+    // hit reports its own plan/room type/time state so the result row is self-explaining.
+    var rateItems = [];
+    (state.ratePlans || []).forEach(function (p) {
+      var rt = state.roomTypes.find(function (x) { return x.id === p.roomTypeId; });
+      var rtName = rt ? rt.name : p.roomTypeId;
+      if ((p.name + " " + (p.code || "")).toLowerCase().indexOf(q) > -1) {
+        rateItems.push({ kind: "plan", planId: p.id, name: p.name, roomTypeName: rtName, state: p.active ? "active" : "inactive" });
+      }
+      (p.periods || []).forEach(function (pp) {
+        if (pp.name.toLowerCase().indexOf(q) > -1) {
+          rateItems.push({ kind: "period", planId: p.id, periodId: pp.id, name: pp.name, planName: p.name, roomTypeName: rtName, state: periodTimeState(pp) });
+        }
+      });
+    });
+    return { reservations: reservations, guests: guests, rooms: rooms, payments: payments, ratePlans: rateItems.slice(0, GSEARCH_LIMIT) };
   }
   function recentSearches() {
     try { return JSON.parse(localStorage.getItem(RECENT_SEARCH_KEY) || "[]"); } catch (e) { return []; }
@@ -1296,6 +1725,13 @@
         var c = st.customers.find(function (x) { return x.id === r.customerId; });
         out.push(resultRow("payment", r.id, r.transactionRef, r.id + (c ? " · " + c.name : "") + " · " + r.paymentStatus));
       });
+      (res.ratePlans || []).forEach(function (it) {
+        var row = it.kind === "period"
+          ? resultRow("rateplan", it.planId, it.name, "Pricing Period · " + it.planName + " · " + it.roomTypeName + " · " + it.state)
+          : resultRow("rateplan", it.planId, it.name, "Rate Plan · " + it.roomTypeName + " · " + it.state);
+        row.periodId = it.periodId || null;
+        out.push(row);
+      });
       return out;
     }
     function openResult(item) {
@@ -1304,12 +1740,15 @@
       else if (item.kind === "guest") location.href = "guest-detail.html?id=" + item.id;
       else if (item.kind === "room") location.href = "physical-rooms.html?room=" + item.id;
       else if (item.kind === "payment") location.href = "payments.html?id=" + item.id;
+      // Opens the plan's own detail drawer, and deep-links straight into the
+      // pricing-period editor when the match was a period name (§6.13).
+      else if (item.kind === "rateplan") location.href = "rates.html?plan=" + item.id + (item.periodId ? "&period=" + item.periodId : "");
     }
     function renderPanel() {
       var q = input.value.trim();
       if (!q) {
         var recents = recentSearches();
-        if (!recents.length) { panel.innerHTML = '<div class="pg-gsearch-empty">Start typing to search reservations, guests, rooms, or payments.</div>'; flat = []; hi = -1; panel.classList.add("show"); return; }
+        if (!recents.length) { panel.innerHTML = '<div class="pg-gsearch-empty">Start typing to search reservations, guests, rooms, payments, or rate plans.</div>'; flat = []; hi = -1; panel.classList.add("show"); return; }
         panel.innerHTML = '<div class="pg-gsearch-recent"><span class="pg-gsearch-group-title" style="padding:0;">Recent Searches</span></div>' +
           '<div style="padding:0 14px 10px;">' + recents.map(function (rterm) { return '<span class="pg-gsearch-recent-chip" data-recent="' + esc(rterm) + '">' + esc(rterm) + "</span>"; }).join("") + "</div>";
         panel.querySelectorAll("[data-recent]").forEach(function (chip) {
@@ -1322,7 +1761,7 @@
       flat = buildFlat(q);
       hi = -1;
       if (!flat.length) { panel.innerHTML = '<div class="pg-gsearch-empty">No matches for "' + esc(q) + '".</div>'; panel.classList.add("show"); return; }
-      var groups = [["reservation", "Reservations"], ["guest", "Guests"], ["room", "Rooms"], ["payment", "Payments"]];
+      var groups = [["reservation", "Reservations"], ["guest", "Guests"], ["room", "Rooms"], ["payment", "Payments"], ["rateplan", "Rate Plans & Pricing"]];
       var html = "";
       groups.forEach(function (g) {
         var items = flat.filter(function (it) { return it.kind === g[0]; });
@@ -1435,6 +1874,197 @@
   /* (hidden) so existing code that reads .value / listens for "change" keeps      */
   /* working untouched — enhancement is purely visual.                            */
   /* ---------------------------------------------------------------- */
+  /* ================================================================ */
+  /* Shared control patterns (§5)                                      */
+  /*                                                                   */
+  /* The rule these encode: pick the control from the shape of the     */
+  /* choice, not from habit. 2–4 short exclusive options → segmented.  */
+  /* Common single-click filters → chips. A long entity list →         */
+  /* searchable combobox. A <select> is now the fallback, not the      */
+  /* default. All three are markup-string builders plus one delegated  */
+  /* wire() call, matching how every other page in this app is built.  */
+  /* ================================================================ */
+
+  // options: [{value, label, icon?}] — renders as a real radio group so arrow
+  // keys and screen readers behave, styled as a segmented control.
+  function segmented(name, options, activeValue, opts) {
+    opts = opts || {};
+    var html = '<div class="pg-seg" role="radiogroup" data-seg="' + esc(name) + '"' +
+      (opts.ariaLabel ? ' aria-label="' + esc(opts.ariaLabel) + '"' : "") + ">";
+    options.forEach(function (o) {
+      var on = String(o.value) === String(activeValue);
+      html += '<button type="button" role="radio" aria-checked="' + (on ? "true" : "false") + '"' +
+        ' class="pg-seg-btn' + (on ? " active" : "") + '" data-seg-value="' + esc(String(o.value)) + '"' +
+        (o.title ? ' title="' + esc(o.title) + '"' : "") + ">" +
+        (o.icon && ICONS[o.icon] ? '<span class="ic">' + ICONS[o.icon] + "</span>" : "") +
+        "<span>" + esc(o.label) + "</span></button>";
+    });
+    return html + "</div>";
+  }
+  function wireSegmented(root, name, onChange) {
+    var group = (root || document).querySelector('[data-seg="' + name + '"]');
+    if (!group) return;
+    group.addEventListener("click", function (e) {
+      var btn = e.target.closest(".pg-seg-btn");
+      if (!btn || btn.classList.contains("active")) return;
+      group.querySelectorAll(".pg-seg-btn").forEach(function (b) {
+        var on = b === btn;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+      });
+      onChange(btn.dataset.segValue);
+    });
+  }
+
+  // Single- or multi-select filter chips. `activeValues` is a single value for
+  // single mode, or an array for multi mode.
+  function filterChips(name, options, activeValues, opts) {
+    opts = opts || {};
+    var multi = !!opts.multi;
+    var active = multi ? (activeValues || []) : [activeValues];
+    var html = '<div class="pg-chips" data-chips="' + esc(name) + '"' +
+      ' role="group"' + (opts.ariaLabel ? ' aria-label="' + esc(opts.ariaLabel) + '"' : "") + ">";
+    options.forEach(function (o) {
+      var on = active.map(String).indexOf(String(o.value)) > -1;
+      html += '<button type="button" class="pg-chip' + (on ? " active" : "") + '"' +
+        ' aria-pressed="' + (on ? "true" : "false") + '" data-chip-value="' + esc(String(o.value)) + '">' +
+        esc(o.label) + (o.count != null ? ' <span class="pg-chip-count">' + o.count + "</span>" : "") + "</button>";
+    });
+    return html + "</div>";
+  }
+  function wireChips(root, name, onChange) {
+    var group = (root || document).querySelector('[data-chips="' + name + '"]');
+    if (!group) return;
+    group.addEventListener("click", function (e) {
+      var chip = e.target.closest(".pg-chip");
+      if (!chip) return;
+      onChange(chip.dataset.chipValue, chip);
+    });
+  }
+
+  // Applied-filter summary chips, each removable — the visible record of what is
+  // currently narrowing a list, so filters set in a drawer never become invisible
+  // state the user has to remember (§3 "recognition instead of recall").
+  // items: [{key, label, value}]
+  function appliedChips(items) {
+    if (!items || !items.length) return "";
+    return '<div class="pg-applied-chips">' + items.map(function (it) {
+      return '<span class="pg-applied-chip">' +
+        '<span class="k">' + esc(it.label) + ":</span> " + esc(it.value) +
+        '<button type="button" class="x" data-remove-filter="' + esc(it.key) + '" aria-label="Remove ' + esc(it.label) + ' filter">&times;</button></span>';
+    }).join("") + "</div>";
+  }
+
+  /* Searchable combobox for long entity lists (guests, physical rooms, rate
+     plans, reservations). Results carry supporting context, never just a name.
+     opts: { items: [{id, label, sub, badge, disabled, reason}], value, placeholder,
+             emptyText, ariaLabel, onSelect(id, item) } */
+  function renderCombobox(container, opts) {
+    if (!container) return null;
+    var items = opts.items || [];
+    var selected = items.find(function (i) { return i.id === opts.value; }) || null;
+    var openList = false, hi = -1, filtered = items.slice();
+
+    container.classList.add("pg-cbx");
+    container.innerHTML =
+      '<div class="pg-cbx-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"' +
+        (opts.ariaLabel ? ' aria-label="' + esc(opts.ariaLabel) + '"' : "") + ">" +
+        '<span class="pg-cbx-value"></span><span class="pg-cbx-caret">&#9662;</span></div>' +
+      '<div class="pg-cbx-panel" role="listbox">' +
+        '<div class="pg-cbx-searchwrap"><input class="pg-cbx-search form-control" type="text" placeholder="' +
+          esc(opts.placeholder || "Search…") + '" aria-label="' + esc(opts.placeholder || "Search") + '"></div>' +
+        '<div class="pg-cbx-list"></div>' +
+      "</div>";
+
+    var trigger = container.querySelector(".pg-cbx-trigger");
+    var valueEl = container.querySelector(".pg-cbx-value");
+    var panel = container.querySelector(".pg-cbx-panel");
+    var search = container.querySelector(".pg-cbx-search");
+    var list = container.querySelector(".pg-cbx-list");
+
+    function paintValue() {
+      valueEl.innerHTML = selected
+        ? '<span class="v-main">' + esc(selected.label) + "</span>" + (selected.sub ? '<span class="v-sub">' + esc(selected.sub) + "</span>" : "")
+        : '<span class="v-placeholder">' + esc(opts.placeholder || "Select…") + "</span>";
+    }
+    function paintList() {
+      if (!filtered.length) {
+        list.innerHTML = '<div class="pg-cbx-empty">' + esc(opts.emptyText || "No matches.") + "</div>";
+        return;
+      }
+      list.innerHTML = filtered.map(function (it, i) {
+        return '<div class="pg-cbx-option' + (it.disabled ? " disabled" : "") + (i === hi ? " hi" : "") +
+          (selected && selected.id === it.id ? " selected" : "") + '" role="option"' +
+          ' aria-selected="' + (selected && selected.id === it.id ? "true" : "false") + '" data-i="' + i + '">' +
+          '<div class="o-main">' + esc(it.label) + (it.badge ? " " + it.badge : "") + "</div>" +
+          (it.sub ? '<div class="o-sub">' + esc(it.sub) + "</div>" : "") +
+          (it.disabled && it.reason ? '<div class="o-reason">' + esc(it.reason) + "</div>" : "") +
+          "</div>";
+      }).join("");
+    }
+    function applyFilter() {
+      var q = search.value.trim().toLowerCase();
+      filtered = !q ? items.slice() : items.filter(function (it) {
+        return ((it.label || "") + " " + (it.sub || "")).toLowerCase().indexOf(q) > -1;
+      });
+      hi = filtered.findIndex(function (it) { return !it.disabled; });
+      paintList();
+    }
+    function setOpen(v) {
+      openList = v;
+      container.classList.toggle("open", v);
+      trigger.setAttribute("aria-expanded", v ? "true" : "false");
+      if (v) { search.value = ""; applyFilter(); setTimeout(function () { search.focus(); }, 0); }
+    }
+    function choose(i) {
+      var it = filtered[i];
+      if (!it || it.disabled) return;
+      selected = it; paintValue(); setOpen(false); trigger.focus();
+      if (opts.onSelect) opts.onSelect(it.id, it);
+    }
+
+    trigger.addEventListener("click", function () { setOpen(!openList); });
+    trigger.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") { e.preventDefault(); setOpen(true); }
+    });
+    search.addEventListener("input", applyFilter);
+    search.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); trigger.focus(); return; }
+      if (e.key === "Enter") { e.preventDefault(); choose(hi); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      var step = e.key === "ArrowDown" ? 1 : -1, n = filtered.length, guard = 0;
+      do { hi = (hi + step + n) % n; guard++; } while (filtered[hi] && filtered[hi].disabled && guard <= n);
+      paintList();
+      var el = list.querySelector(".pg-cbx-option.hi");
+      if (el) el.scrollIntoView({ block: "nearest" });
+    });
+    list.addEventListener("mousedown", function (e) {
+      var row = e.target.closest(".pg-cbx-option");
+      if (!row) return;
+      e.preventDefault();
+      choose(+row.dataset.i);
+    });
+    document.addEventListener("mousedown", function (e) {
+      if (openList && !container.contains(e.target)) setOpen(false);
+    });
+
+    paintValue();
+    return {
+      setItems: function (next, keepValue) {
+        items = next || [];
+        if (!keepValue) selected = null;
+        else selected = items.find(function (i) { return selected && i.id === selected.id; }) || null;
+        paintValue(); applyFilter();
+      },
+      setValue: function (id) {
+        selected = items.find(function (i) { return i.id === id; }) || null;
+        paintValue();
+      },
+      getValue: function () { return selected ? selected.id : null; }
+    };
+  }
+
   function enhanceSelects(root) {
     (root || document).querySelectorAll("select.form-control").forEach(function (sel) {
       if (sel.closest(".pg-select")) return; // already enhanced
@@ -2202,6 +2832,23 @@
     bookedCount: bookedCount,
     isStopSell: isStopSell,
     rateFor: rateFor,
+    basePriceFor: basePriceFor,
+    ratePlansForType: ratePlansForType,
+    defaultRatePlanFor: defaultRatePlanFor,
+    ratePlanById: ratePlanById,
+    periodTimeState: periodTimeState,
+    periodCoversDate: periodCoversDate,
+    periodPriceForDate: periodPriceForDate,
+    overrideKey: overrideKey,
+    resolvePrice: resolvePrice,
+    nightlyBreakdown: nightlyBreakdown,
+    validateRatePlanForStay: validateRatePlanForStay,
+    overlappingPeriods: overlappingPeriods,
+    periodAffectedDates: periodAffectedDates,
+    roomItemCharge: roomItemCharge,
+    reservationRoomCharges: reservationRoomCharges,
+    reservationTotal: reservationTotal,
+    snapshotRoomItemPricing: snapshotRoomItemPricing,
     computePricing: computePricing,
     activeSellablePhysicalCount: activeSellablePhysicalCount,
     availabilityBreakdown: availabilityBreakdown,
@@ -2248,6 +2895,13 @@
     closeModal: closeModal,
     enhanceSelects: enhanceSelects,
     renderManagedSelect: renderManagedSelect,
+    segmented: segmented,
+    wireSegmented: wireSegmented,
+    filterChips: filterChips,
+    wireChips: wireChips,
+    appliedChips: appliedChips,
+    renderCombobox: renderCombobox,
+    icon: icon,
     REF: REF
   };
 })(window);

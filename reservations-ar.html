@@ -23,7 +23,7 @@
       <div class="pg-nav-section"><div class="pg-nav-section-title">إدارة الفندق</div>
         <a class="pg-nav-item" href="hotel-profile.html"><span>الملف التعريفي للفندق</span></a>
         <a class="pg-nav-item" href="room-types.html"><span>أنواع الغرف</span></a>
-        <a class="pg-nav-item" href="rates.html"><span>الأسعار</span></a>
+        <a class="pg-nav-item" href="rates.html"><span>خطط الأسعار والتسعير</span></a>
       </div>
       <div class="pg-nav-section"><div class="pg-nav-section-title">الحجوزات</div>
         <a class="pg-nav-item active" href="reservations-ar.html"><span>الحجوزات</span></a>
@@ -67,12 +67,7 @@ var ROOM_AR = {std:'غرفة عادية', dlx:'غرفة ديلوكس', fam:'غر
 
 function badge(text, cls){ return '<span class="badge '+cls+'"><span class="badge-dot"></span>'+text+'</span>'; }
 function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
-function total(r){
-  var n = PG.dateRange(r.checkIn, r.checkOut);
-  var t = 0;
-  r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
-  return t;
-}
+function total(r){ return PG.reservationRoomCharges(s, r); }
 
 var html = '';
 html += '<div class="pg-page-head"><div><h1>الحجوزات</h1><div class="sub">جميع الحجوزات في فندق فلسطين الكبير</div></div>' +

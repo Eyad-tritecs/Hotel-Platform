@@ -40,12 +40,7 @@ var CAN_REFUND = PG.hasPermission('record_refunds');
 var METHODS = ['Pay on Arrival', 'Payment Link'];
 var STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
 
-function total(r){
-  var n = PG.dateRange(r.checkIn, r.checkOut);
-  var t = 0;
-  r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
-  return t + (r.taxAmount||0) + (r.feeAmount||0);
-}
+function total(r){ return PG.reservationTotal(s, r); }
 function custOf(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
 function paymentRef(r){ return r.transactionRef || '—'; }
 function lastTouched(r){ return r.activity && r.activity.length ? r.activity[r.activity.length-1].ts : r.createdAt; }
@@ -321,7 +316,7 @@ if (qp.get('id') && s.reservations.some(function(r){return r.id===qp.get('id');}
 // it overrides whatever the rest of this script already built.
 if (!CAN_VIEW){
   page.innerHTML = '<div class="pg-page-head"><div><h1>Payments</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view Payments.<br>Contact a Hotel Admin to request access.</div></div></div>';
 }
 </script>

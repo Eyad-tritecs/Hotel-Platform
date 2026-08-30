@@ -74,9 +74,9 @@ html += phase('4 &middot; Generate &amp; Collect Payment', '', [
   {n:21, text:'Check Section 5 (Payment).', expect:'Transaction reference shown (PAY-YYYY-#####)'}
 ]);
 
-html += phase('5 &middot; Verify Inventory Was Committed', '<a class="btn btn-outline btn-sm" href="availability-inventory.html" target="_blank">Open Availability &amp; Inventory &#8599;</a>', [
-  {n:22, text:'Click <b>More &rarr; View Inventory</b> on Reservation Detail, or use the button above.'},
-  {n:23, text:'Look at Deluxe Room and Family Room for 20&ndash;22 Aug.', expect:'Both show reduced availability vs. baseline'}
+html += phase('5 &middot; Verify Inventory Was Committed', '<a class="btn btn-outline btn-sm" href="operations-calendar.html" target="_blank">Open Operations Calendar &#8599;</a>', [
+  {n:22, text:'Open the <b>Operations Calendar</b> using the button above, and set the date range to cover 20&ndash;22 Aug.'},
+  {n:23, text:'Find the Deluxe Room and Family Room groups and read their group-header counts for those nights.', expect:'Reserved counts up, Available counts down, and the new reservation&rsquo;s bars are visible on specific room rows'}
 ]);
 
 html += phase('6 &middot; Cancel the Reservation', '', [
@@ -88,9 +88,9 @@ html += phase('6 &middot; Cancel the Reservation', '', [
   {n:29, text:'Payment updates (it was Paid).', expect:'Payment Status: Refund Pending'}
 ]);
 
-html += phase('7 &middot; Verify Inventory Was Restored', '<a class="btn btn-outline btn-sm" href="availability-inventory.html" target="_blank">Open Availability &amp; Inventory &#8599;</a>', [
-  {n:30, text:'Navigate back to <b>Availability &amp; Inventory</b>.'},
-  {n:31, text:'Look at Deluxe Room and Family Room for 20&ndash;22 Aug again.', expect:'Both restored to their original availability'}
+html += phase('7 &middot; Verify Inventory Was Restored', '<a class="btn btn-outline btn-sm" href="operations-calendar.html" target="_blank">Open Operations Calendar &#8599;</a>', [
+  {n:30, text:'Return to the <b>Operations Calendar</b> for 20&ndash;22 Aug.'},
+  {n:31, text:'Read the Deluxe Room and Family Room group-header counts again.', expect:'Counts restored to their original values, and the cancelled reservation&rsquo;s bars are gone from the room rows'}
 ]);
 
 html += '<div class="pg-lightweight-note">This journey creates a real reservation in the prototype\'s local state. Use <b>Reset Demo Data</b> in the header at any time to start over from a clean slate.</div>';

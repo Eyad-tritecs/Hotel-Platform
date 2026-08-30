@@ -13,6 +13,20 @@
   .item-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
   .item-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
   .item-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--pg-border);}
+  /* Rate plan + named pricing period + nightly rate, on the item itself — so the
+     price shown is always traceable without leaving the wizard. */
+  .rate-detail{margin-top:10px;background:#fff;border:1px solid var(--pg-border);border-radius:6px;padding:10px 12px;font-size:12px;}
+  .rate-detail .rd-head{display:flex;justify-content:space-between;gap:12px;font-weight:700;color:var(--pg-gray-900);
+    padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid var(--pg-gray-200);}
+  .rate-detail .rd-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--pg-gray-700);}
+  .rate-detail .rd-row span:last-child{font-weight:600;color:var(--pg-gray-900);}
+  .rate-detail .rd-note{margin-top:6px;font-size:11px;color:var(--pg-gray-500);}
+  .rev-item{border:1px solid var(--pg-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+  .rev-item-top{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;}
+  .rev-item-meta{font-size:12px;color:var(--pg-gray-600);margin-top:4px;}
+  .rev-item-rate{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--pg-gray-700);margin-top:4px;}
+  .rev-item-rate span:last-child{font-weight:700;color:var(--pg-gray-900);}
+  .rev-item-note{font-size:11px;color:var(--pg-gray-500);margin-top:6px;}
   .avail-tag{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;}
   .avail-tag.ok{background:var(--pg-success-light);color:#0bb463;}
   .avail-tag.bad{background:var(--pg-danger-light);color:var(--pg-danger);}
@@ -51,17 +65,39 @@ var page = PG.mount("new-reservation", ["Reservations", "New Reservation"]);
 var s = PG.getState();
 var SOURCES = ['Admin / Direct Manual','Phone','WhatsApp','Walk-in','Travel Agency','Other Manual'];
 
+/* Only ACTIVE plans can be sold. A plan with no valid price for one of the stay
+   nights stays in the list but is offered disabled with the reason — hiding it would
+   leave the user wondering where a plan they know about went (§6.12). */
 function ratePlansFor(roomTypeId){
-  var list = s.ratePlans.filter(function(rp){ return rp.roomTypeId===roomTypeId && rp.active; });
-  if (!list.length){
-    var rt = s.roomTypes.find(function(r){return r.id===roomTypeId;});
-    return [{id:'default-'+roomTypeId, name:'Standard Rate', roomTypeId:roomTypeId, price:rt.baseRate}];
-  }
-  return list;
+  return PG.ratePlansForType(s, roomTypeId, true);
 }
+/* The wizard's stay dates, readable BEFORE `wizard` itself is constructed.
+   defaultItem() picks a rate plan, which needs the dates — but defaultItem() runs
+   inside the `wizard` object literal, so `wizard` is still undefined at that moment.
+   These accessors fall back to the same defaults the literal is about to set, which
+   is why the wizard can price its very first item without a circular dependency. */
+var DEFAULT_CHECKIN = PG.TODAY, DEFAULT_CHECKOUT = PG.addDays(PG.TODAY, 3);
+function stayIn(){ return typeof wizard !== 'undefined' && wizard ? wizard.checkIn : DEFAULT_CHECKIN; }
+function stayOut(){ return typeof wizard !== 'undefined' && wizard ? wizard.checkOut : DEFAULT_CHECKOUT; }
+function planValidity(roomTypeId, ratePlanId){
+  if (!ratePlanId || stayOut() <= stayIn()) return {ok:false, reason:null};
+  return PG.validateRatePlanForStay(s, roomTypeId, ratePlanId, stayIn(), stayOut());
+}
+function planBreakdown(roomTypeId, ratePlanId){
+  if (stayOut() <= stayIn() || !ratePlanId) return null;
+  return PG.nightlyBreakdown(s, roomTypeId, ratePlanId, stayIn(), stayOut());
+}
+// Average nightly rate for this plan across the stay — the single headline number,
+// with the per-period detail shown alongside it whenever the stay spans more than one.
 function ratePlanPrice(roomTypeId, ratePlanId){
-  var plan = ratePlansFor(roomTypeId).find(function(p){return p.id===ratePlanId;});
-  return plan ? plan.price : s.roomTypes.find(function(r){return r.id===roomTypeId;}).baseRate;
+  var bd = planBreakdown(roomTypeId, ratePlanId);
+  if (!bd || !bd.nights.length) return 0;
+  return bd.subtotal / bd.nights.length;
+}
+function firstSellablePlanId(roomTypeId){
+  var plans = ratePlansFor(roomTypeId);
+  var good = plans.find(function(p){ return planValidity(roomTypeId, p.id).ok; });
+  return (good || plans[0] || {}).id || null;
 }
 function occupancyFor(roomTypeId, qty){
   var rt = s.roomTypes.find(function(r){return r.id===roomTypeId;});
@@ -71,7 +107,7 @@ function occupancyFor(roomTypeId, qty){
 function defaultItem(){
   var rtId = s.roomTypes[1] ? s.roomTypes[1].id : s.roomTypes[0].id;
   var occ = occupancyFor(rtId, 1);
-  return {roomTypeId: rtId, ratePlanId: ratePlansFor(rtId)[0].id, qty: 1, adults: occ.adults, children: occ.children,
+  return {roomTypeId: rtId, ratePlanId: firstSellablePlanId(rtId), qty: 1, adults: occ.adults, children: occ.children,
     requireAccessibility: false, bedConfigPref: null, requireConnecting: false, assignedRoomIds: [], assignmentShortfall: 0};
 }
 
@@ -119,8 +155,8 @@ function roomSummaryChips(pr){
 var wizard = {
   source: null,
   customerId: null,
-  checkIn: PG.TODAY,
-  checkOut: PG.addDays(PG.TODAY, 3),
+  checkIn: DEFAULT_CHECKIN,
+  checkOut: DEFAULT_CHECKOUT,
   items: [defaultItem()],
   paymentMethod: null,
   notes: '',
@@ -137,8 +173,8 @@ if (entryParams.get('demo') === 'ahmad-whatsapp'){
   wizard.checkIn = '2026-08-20';
   wizard.checkOut = '2026-08-23';
   wizard.items = [
-    Object.assign({roomTypeId:'dlx', ratePlanId: ratePlansFor('dlx')[0].id, qty:2, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('dlx',2)),
-    Object.assign({roomTypeId:'fam', ratePlanId: ratePlansFor('fam')[0].id, qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('fam',1))
+    Object.assign({roomTypeId:'dlx', ratePlanId: firstSellablePlanId('dlx'), qty:2, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('dlx',2)),
+    Object.assign({roomTypeId:'fam', ratePlanId: firstSellablePlanId('fam'), qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor('fam',1))
   ];
   wizard.paymentMethod = 'Payment Link';
   demoTaxOverride = 50;
@@ -154,7 +190,7 @@ if (entryParams.get('demo') !== 'ahmad-whatsapp' && entryParams.get('rt')){
   var prefRt = entryParams.get('rt');
   var prefDate = entryParams.get('date');
   if (prefDate){ wizard.checkIn = prefDate; wizard.checkOut = PG.addDays(prefDate, 1); }
-  wizard.items = [Object.assign({roomTypeId:prefRt, ratePlanId: ratePlansFor(prefRt)[0].id, qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor(prefRt,1))];
+  wizard.items = [Object.assign({roomTypeId:prefRt, ratePlanId: firstSellablePlanId(prefRt), qty:1, requireAccessibility:false, bedConfigPref:null, requireConnecting:false, assignedRoomIds:[], assignmentShortfall:0}, occupancyFor(prefRt,1))];
 }
 recomputeAssignments();
 if (entryParams.get('room') && wizard.items[0] && wizard.items[0].assignedRoomIds.indexOf(entryParams.get('room'))===-1){
@@ -254,10 +290,13 @@ function itemAvailability(item){
   return PG.validateAvailability(s, item.roomTypeId, wizard.checkIn, wizard.checkOut, item.qty);
 }
 function itemTotal(item){
-  return ratePlanPrice(item.roomTypeId, item.ratePlanId) * item.qty * nights().length;
+  var bd = planBreakdown(item.roomTypeId, item.ratePlanId);
+  return bd ? bd.subtotal * item.qty : 0;
 }
 function allItemsAvailable(){
-  return wizard.items.every(function(it){ return wizard.checkOut>wizard.checkIn && itemAvailability(it).ok; });
+  return wizard.items.every(function(it){
+    return wizard.checkOut>wizard.checkIn && itemAvailability(it).ok && planValidity(it.roomTypeId, it.ratePlanId).ok;
+  });
 }
 
 // Checks the ALREADY-assigned room against this item's current requirements — used to
@@ -334,7 +373,14 @@ function renderItemCards(){
     var physicallyOk = item.assignmentShortfall===0;
     var ok = commerciallyOk && physicallyOk;
     var rtOptions = s.roomTypes.map(function(r){return '<option value="'+r.id+'"'+(r.id===item.roomTypeId?' selected':'')+'>'+r.name+'</option>';}).join('');
-    var planOptions = plans.map(function(p){return '<option value="'+p.id+'"'+(p.id===item.ratePlanId?' selected':'')+'>'+p.name+' ('+PG.fmtMoney(p.price)+'/night)</option>';}).join('');
+    var planOptions = plans.map(function(p){
+      var v = planValidity(item.roomTypeId, p.id);
+      var avg = v.ok ? ' (' + PG.fmtMoney(ratePlanPrice(item.roomTypeId, p.id)) + '/night)' : ' — not priced for these dates';
+      return '<option value="'+p.id+'"'+(p.id===item.ratePlanId?' selected':'')+(v.ok?'':' disabled')+'>'+PG.esc(p.name)+avg+'</option>';
+    }).join('');
+    var itemPlan = PG.ratePlanById(s, item.ratePlanId);
+    var itemValid = planValidity(item.roomTypeId, item.ratePlanId);
+    var itemBd = planBreakdown(item.roomTypeId, item.ratePlanId);
     var bedOptions = '<option value="">No preference</option>' + bedConfigOptionsFor(item.roomTypeId).map(function(b){return '<option value="'+PG.esc(b)+'"'+(item.bedConfigPref===b?' selected':'')+'>'+PG.esc(b)+'</option>';}).join('');
     return '<div class="item-card'+(ok?'':' insufficient')+'" data-idx="'+idx+'">' +
       '<div class="item-card-head"><strong class="text-sm">Room Item '+(idx+1)+'</strong>' +
@@ -344,7 +390,8 @@ function renderItemCards(){
         '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control it-rt" data-idx="'+idx+'">'+rtOptions+'</select></div>' +
         '<div class="form-group"><label class="form-label">Quantity</label><input type="number" min="1" class="form-control it-qty" data-idx="'+idx+'" value="'+item.qty+'"></div>' +
         '<div class="form-group"><label class="form-label">Rate Plan</label><select class="form-control it-plan" data-idx="'+idx+'">'+planOptions+'</select></div>' +
-        '<div class="form-group"><label class="form-label">Price per Night</label><input class="form-control" disabled value="'+PG.fmtMoney(ratePlanPrice(item.roomTypeId, item.ratePlanId))+'"></div>' +
+        '<div class="form-group"><label class="form-label">Price per Night</label><input class="form-control" disabled value="'+(itemValid.ok ? PG.fmtMoney(ratePlanPrice(item.roomTypeId, item.ratePlanId)) + (itemBd && itemBd.groups.length>1 ? ' avg' : '') : 'Not priced')+'">' +
+          (itemValid.ok && itemBd ? '<div class="form-hint">'+PG.esc(itemBd.groups.map(function(g){return g.label;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', '))+'</div>' : '') + '</div>' +
         '<div class="form-group" style="grid-column:span 2;"><label class="form-label">Occupants <span class="opt">(headcount only, set by room type × quantity — not individual guest profiles)</span></label><input class="form-control" disabled value="'+item.adults+' Adults, '+item.children+' Children"></div>' +
         '<div class="form-group"><label class="form-label">Bed Configuration Preference <span class="opt">(optional)</span></label><select class="form-control it-bed" data-idx="'+idx+'">'+bedOptions+'</select></div>' +
         '<div class="form-check" style="align-self:end;padding-bottom:10px;"><input type="checkbox" class="it-access" data-idx="'+idx+'" id="it-access-'+idx+'"'+(item.requireAccessibility?' checked':'')+'><label class="form-label" style="margin:0;" for="it-access-'+idx+'">Requires Wheelchair Accessible Room</label></div>' +
@@ -357,6 +404,15 @@ function renderItemCards(){
       '</div>' +
       (commerciallyOk ? '' : '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+worst+' '+rt.name+' room(s) available for the selected dates. Reduce quantity, change dates, or remove this item to continue.</div>') +
       (commerciallyOk && !physicallyOk ? '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; Only '+(item.qty-item.assignmentShortfall)+' of '+item.qty+' '+rt.name+' physical room(s) could be assigned for these dates. Reduce quantity, change dates, or choose another room type to continue.</div>' : '') +
+      (itemValid.ok && itemBd
+        ? '<div class="rate-detail">' +
+            '<div class="rd-head"><span>' + PG.esc(itemPlan ? itemPlan.name : '—') + '</span><span>' + PG.fmtMoney(itemBd.subtotal * item.qty) + ' for ' + itemBd.nights.length + ' night' + (itemBd.nights.length===1?'':'s') + (item.qty>1 ? ' × ' + item.qty + ' rooms' : '') + '</span></div>' +
+            itemBd.groups.map(function(g){
+              return '<div class="rd-row"><span>' + PG.esc(g.label) + ' · ' + g.nights + ' night' + (g.nights===1?'':'s') + '</span><span>' + PG.fmtMoney(g.price) + ' / night</span></div>';
+            }).join('') +
+            (itemBd.groups.length>1 ? '<div class="rd-note">This stay spans ' + itemBd.groups.length + ' pricing periods, so the nightly rate is not the same every night.</div>' : '') +
+          '</div>'
+        : (itemValid.reason ? '<div class="avail-msg bad" style="margin-top:10px;background:#fff;border-radius:6px;padding:8px 10px;font-size:12px;color:var(--pg-danger);">&#9888; ' + PG.esc(itemValid.reason) + ' Choose a different rate plan, or change the dates.</div>' : '')) +
       '<div style="margin-top:10px;">'+renderAssignmentBlock(item, idx)+'</div>' +
     '</div>';
   }).join('');
@@ -367,7 +423,7 @@ function renderItemCards(){
 function bindItemEvents(){
   document.querySelectorAll('.it-rt').forEach(function(el){ el.addEventListener('change', function(){
     var idx=+el.dataset.idx; var it = wizard.items[idx];
-    it.roomTypeId = el.value; it.ratePlanId = ratePlansFor(el.value)[0].id;
+    it.roomTypeId = el.value; it.ratePlanId = firstSellablePlanId(el.value);
     it.bedConfigPref = null; it.assignedRoomIds = [];
     Object.assign(it, occupancyFor(it.roomTypeId, it.qty));
     recomputeAssignments(); renderItemCards(); renderSummary();
@@ -565,7 +621,11 @@ function renderSummary(){
   if (wizard.source || guestSelected()) rows += '<div class="divider"></div>';
   rows += srow('Arrival', PG.fmtDateShort(wizard.checkIn)) + srow('Departure', PG.fmtDateShort(wizard.checkOut)) + srow('Nights', nights().length);
   rows += '<div class="divider"></div>';
-  rows += wizard.items.map(function(it){ var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;}); return srow(it.qty+'× '+rt.name, PG.fmtMoney(itemTotal(it))); }).join('');
+  rows += wizard.items.map(function(it){
+    var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;});
+    var pl = PG.ratePlanById(s, it.ratePlanId);
+    return srow(it.qty+'× '+rt.name + (pl ? '<br><span class="muted" style="font-weight:500;font-size:11px;">'+PG.esc(pl.name)+'</span>' : ''), PG.fmtMoney(itemTotal(it)));
+  }).join('');
   if (wizard.paymentMethod){ rows += '<div class="divider"></div>'; rows += srow('Payment Method', wizard.paymentMethod); }
   rows += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;margin-top:6px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
   box.innerHTML = rows;
@@ -590,7 +650,23 @@ function renderReview(){
     revBlock('Payment Method', wizard.paymentMethod) +
   '</div><div class="divider"></div>' +
   '<div class="form-label">Room Items</div>' +
-  wizard.items.map(function(it){ var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;}); return '<div class="text-sm" style="padding:6px 0;">'+it.qty+'× '+rt.name+' — '+it.adults+' Adults'+(it.children?', '+it.children+' Children':'')+' — '+PG.fmtMoney(itemTotal(it))+'</div>'; }).join('') +
+  wizard.items.map(function(it){
+    var rt=s.roomTypes.find(function(r){return r.id===it.roomTypeId;});
+    var pl = PG.ratePlanById(s, it.ratePlanId);
+    var bd = planBreakdown(it.roomTypeId, it.ratePlanId);
+    var rooms = editRoomNumbersFor(it);
+    return '<div class="rev-item">' +
+      '<div class="rev-item-top"><strong>'+it.qty+'× '+PG.esc(rt.name)+'</strong><strong>'+PG.fmtMoney(itemTotal(it))+'</strong></div>' +
+      '<div class="rev-item-meta">' + it.adults + ' Adults' + (it.children?', '+it.children+' Children':'') +
+        (rooms ? ' · Room ' + PG.esc(rooms) : '') + '</div>' +
+      '<div class="rev-item-meta"><strong>Rate Plan:</strong> ' + PG.esc(pl ? pl.name : '—') +
+        (pl && pl.mealPlan ? ' · ' + PG.esc(pl.mealPlan) : '') + '</div>' +
+      (bd ? bd.groups.map(function(g){
+        return '<div class="rev-item-rate"><span><strong>Pricing Period:</strong> ' + PG.esc(g.label) + ' · ' + g.nights + ' night' + (g.nights===1?'':'s') + '</span><span>' + PG.fmtMoney(g.price) + ' / night</span></div>';
+      }).join('') : '') +
+      (bd && bd.groups.length>1 ? '<div class="rev-item-note">Nightly rate varies across this stay because it spans more than one pricing period.</div>' : '') +
+    '</div>';
+  }).join('') +
   '<div class="divider"></div>' +
   prow('Room Charges', PG.fmtMoney(p.roomCharges)) + prow('Taxes', PG.fmtMoney(p.taxes)) + prow('Fees', PG.fmtMoney(p.fees)) +
   '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:16px;margin-top:6px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
@@ -605,6 +681,12 @@ function renderReview(){
     document.getElementById('draftBtn').addEventListener('click', function(){ createReservation('Draft'); });
     document.getElementById('confirmBtn').addEventListener('click', function(){ createReservation('Confirm'); });
   }
+}
+function editRoomNumbersFor(it){
+  return (it.assignedRoomIds||[]).map(function(id){
+    var pr = s.physicalRooms.find(function(p){return p.id===id;});
+    return pr ? pr.roomNumber : null;
+  }).filter(Boolean).join(", ");
 }
 function revBlock(l,v){ return '<div class="form-group"><div class="form-label">'+l+'</div><div style="font-size:13px;">'+v+'</div></div>'; }
 
@@ -631,6 +713,19 @@ function showStep(n){
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
+function blockReason(){
+  var bad = wizard.items.find(function(it){ return !itemAvailability(it).ok; });
+  if (bad){
+    var rt = s.roomTypes.find(function(r){return r.id===bad.roomTypeId;});
+    return 'Not enough ' + (rt?rt.name:'room') + ' inventory for these dates. Reduce the quantity, change the dates, or remove that item.';
+  }
+  var unpriced = wizard.items.find(function(it){ return !planValidity(it.roomTypeId, it.ratePlanId).ok; });
+  if (unpriced){
+    var v = planValidity(unpriced.roomTypeId, unpriced.ratePlanId);
+    return v.reason || 'One room item has no valid rate plan for these dates.';
+  }
+  return 'All reservation items must be available before the reservation can be confirmed.';
+}
 function onNext(){
   if (currentStep===1){
     if (!wizard.source){ PG.toast('Select a reservation source to continue.', 'danger'); return; }
@@ -640,7 +735,7 @@ function onNext(){
   if (currentStep===2){
     if (wizard.checkOut<=wizard.checkIn){ PG.toast('Departure date must be after arrival date.', 'danger'); return; }
     if (!wizard.items.length){ PG.toast('Add at least one room item.', 'danger'); return; }
-    if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
+    if (!allItemsAvailable()){ PG.toast(blockReason(), 'danger'); return; }
     if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before continuing.', 'danger'); return; }
     if (anyNeedsAttention()){ PG.toast('Resolve the room assignment(s) flagged Needs Attention before continuing.', 'danger'); return; }
     showStep(3); return;
@@ -688,10 +783,23 @@ if (wizard.source){ var so = document.querySelector('.source-opt[data-src="'+wiz
 if (wizard.paymentMethod){ var po = document.querySelector('.pay-opt[data-pm="'+wizard.paymentMethod+'"]'); if (po) po.classList.add('active'); }
 
 function createReservation(mode){
-  if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
+  if (!allItemsAvailable()){ PG.toast(blockReason(), 'danger'); return; }
   if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before the reservation can be confirmed.', 'danger'); return; }
   if (anyNeedsAttention()){ PG.toast('Resolve the room assignment(s) flagged Needs Attention before the reservation can be confirmed.', 'danger'); return; }
   var st = PG.getState();
+  // Re-check the rate against fresh state immediately before writing — a plan may have
+  // been deactivated or its pricing period edited since this wizard opened (§6.12).
+  var rateProblem = null;
+  wizard.items.forEach(function(it){
+    if (rateProblem) return;
+    var v = PG.validateRatePlanForStay(st, it.roomTypeId, it.ratePlanId, wizard.checkIn, wizard.checkOut);
+    if (!v.ok) rateProblem = v.reason;
+  });
+  if (rateProblem){
+    s = st; renderItemCards(); renderSummary();
+    PG.toast('Rates changed while you were booking — ' + rateProblem, 'danger');
+    return;
+  }
   var id = 'RES-' + st.nextResId;
   st.nextResId += 1;
 
@@ -713,7 +821,13 @@ function createReservation(mode){
   else activity.push({ts: PG.nowIso(), text: 'Payment method set to Payment Link. Awaiting link generation.'});
 
   var p = pricingBreakdown();
-  var roomItems = wizard.items.map(function(it,i){ return {id: id+'-itm-'+(i+1), roomTypeId:it.roomTypeId, qty:it.qty, adults:it.adults, children:it.children, ratePlanName: ratePlansFor(it.roomTypeId).find(function(rp){return rp.id===it.ratePlanId;}).name}; });
+  var roomItems = wizard.items.map(function(it,i){
+    var item = {id: id+'-itm-'+(i+1), roomTypeId:it.roomTypeId, qty:it.qty, adults:it.adults, children:it.children,
+      ratePlanId: it.ratePlanId, requireAccessibility: it.requireAccessibility, bedConfigPref: it.bedConfigPref, requireConnecting: it.requireConnecting};
+    // Freeze tonight's resolved prices onto the item. From here on, changing the rate
+    // plan or its pricing periods can never move what this guest was quoted (§6.11).
+    return PG.snapshotRoomItemPricing(st, item, wizard.checkIn, wizard.checkOut);
+  });
   var reservation = {
     id: id, customerId: customerId, source: wizard.source, createdAt: PG.nowIso(),
     checkIn: wizard.checkIn, checkOut: wizard.checkOut, status: status, paymentStatus: paymentStatus, paymentMethod: wizard.paymentMethod,

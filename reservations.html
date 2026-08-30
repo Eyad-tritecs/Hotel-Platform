@@ -22,14 +22,7 @@ var page = PG.mount("reservations", ["Reservations", "Reservations"]);
 var s = PG.getState();
 
 function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
-function reservationTotal(r) {
-  var nights = PG.dateRange(r.checkIn, r.checkOut);
-  var total = 0;
-  r.rooms.forEach(function(room){
-    nights.forEach(function(d){ total += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
-  });
-  return total;
-}
+function reservationTotal(r) { return PG.reservationRoomCharges(s, r); }
 
 var STATUSES = ['All','Draft','Pending Payment','Confirmed','Cancelled','Completed','No Show'];
 var PAY_STATUSES = ['All','Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];

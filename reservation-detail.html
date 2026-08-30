@@ -25,6 +25,14 @@
   .room-item-card .ri-top{display:flex;justify-content:space-between;align-items:center;}
   .room-item-card h4{font-size:13.5px;}
   .room-item-card .ri-meta{font-size:12px;color:var(--pg-gray-600);margin-top:4px;}
+  /* Booked pricing facts, shown on the item itself so rate plan, pricing period and
+     nightly rate never require opening another screen to see together. */
+  .booked-pricing{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;padding:8px 10px;background:var(--pg-gray-100);
+    border:1px solid var(--pg-border);border-radius:6px;font-size:12px;}
+  .booked-pricing .bp-item{display:flex;flex-direction:column;gap:1px;font-weight:700;color:var(--pg-gray-900);}
+  .booked-pricing .bp-item .k{font-size:10.5px;font-weight:600;color:var(--pg-gray-500);text-transform:uppercase;letter-spacing:.02em;}
+  .booked-pricing .bp-split{flex-basis:100%;font-size:11.5px;font-weight:500;color:var(--pg-gray-600);
+    border-top:1px dashed var(--pg-gray-300);padding-top:6px;margin-top:2px;}
   .room-item-card .ri-total{font-weight:700;font-size:14px;}
   .room-assign-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:8px;background:#fff;}
   .room-assign-row.needs-attention{border-color:var(--pg-danger);background:var(--pg-danger-light);}
@@ -66,10 +74,53 @@ function ratePlanNameFor(room){
 function lines(){
   var n = nights();
   return r.rooms.map(function(room){
-    var subtotal = 0;
-    n.forEach(function(d){ subtotal += PG.rateFor(s, room.roomTypeId, d) * room.qty; });
-    return {itemId: room.id, roomTypeId: room.roomTypeId, name: roomTypeName(room.roomTypeId), qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room), adults: room.adults, children: room.children};
+    // Booked price, honoring this item’s snapshot — a later rate change must never
+    // silently move what this guest was quoted (§6.11).
+    var subtotal = PG.roomItemCharge(s, r, room);
+    var bd = room.ratePlanId ? PG.nightlyBreakdown(s, room.roomTypeId, room.ratePlanId, r.checkIn, r.checkOut) : null;
+    return {itemId: room.id, roomTypeId: room.roomTypeId, name: roomTypeName(room.roomTypeId), qty: room.qty, nights: n.length, subtotal: subtotal, ratePlan: ratePlanNameFor(room), ratePlanId: room.ratePlanId || null, breakdown: bd, nightly: room.nightly || null, adults: room.adults, children: room.children};
   });
+}
+/* Booked pricing for one reservation item: which rate plan it was sold on, which
+   named pricing period(s) the nights fell into, and the nightly rate actually booked.
+   Reads the item’s stored snapshot, so this keeps showing what the guest was quoted
+   even after the underlying rate plan is repriced (§6.11/§6.12). */
+function bookedPricingBlock(l){
+  var perNight = l.nights ? l.subtotal / l.nights / (l.qty||1) : 0;
+  // Only NAMED pricing periods count here. A night priced from the room type's base
+   // calendar has no period, and labelling that 'Pricing Period: Base Price' would be a
+   // small lie — it gets its own Price Source row instead.
+  var periodNames = [], sourceLabels = [];
+  if (l.breakdown) l.breakdown.groups.forEach(function(g){
+    if (g.source === 'period'){ if (periodNames.indexOf(g.label)===-1) periodNames.push(g.label); }
+    else if (sourceLabels.indexOf(g.label)===-1) sourceLabels.push(g.label);
+  });
+
+  // Where the snapshot and a fresh calculation disagree, the reservation is holding a
+  // price the current rate plan no longer produces — stated plainly rather than hidden.
+  var liveNow = l.ratePlanId ? PG.nightlyBreakdown(s, l.roomTypeId, l.ratePlanId, r.checkIn, r.checkOut).subtotal * (l.qty||1) : null;
+  var moved = liveNow != null && Math.round(liveNow*100) !== Math.round(l.subtotal*100);
+
+  var rows = '<span class="bp-item"><span class="k">Rate Plan</span>' + PG.esc(l.ratePlan) + '</span>';
+  if (periodNames.length) rows += '<span class="bp-item"><span class="k">Pricing Period</span>' + PG.esc(periodNames.join(", ")) + '</span>';
+  if (sourceLabels.length) rows += '<span class="bp-item"><span class="k">Price Source</span>' + PG.esc(sourceLabels.join(", ")) + '</span>';
+  rows += '<span class="bp-item"><span class="k">Booked Nightly</span>' + PG.fmtMoney(perNight) + '</span>';
+  rows += '<span class="bp-item"><span class="k">Booked Total</span>' + PG.fmtMoney(l.subtotal) + '</span>';
+
+  // Multi-period stays get the per-period breakdown §6.12 asks for.
+  var perPeriod = (l.breakdown && l.breakdown.groups.length > 1)
+    ? '<div class="bp-split">This stay spans ' + l.breakdown.groups.length + ' pricing periods: ' +
+      l.breakdown.groups.map(function(g){
+        return PG.esc(g.label) + ' — ' + g.nights + ' night' + (g.nights===1?'':'s') + ' @ ' + PG.fmtMoney(g.price);
+      }).join('; ') + '</div>'
+    : '';
+
+  var drift = moved
+    ? '<div class="bp-split" style="color:var(--pg-gray-700);">This item keeps its booked price. The same plan and dates would price at ' +
+      PG.fmtMoney(liveNow) + ' today — rates changed after this reservation was made.</div>'
+    : '';
+
+  return '<div class="booked-pricing">' + rows + perPeriod + drift + '</div>';
 }
 function assignmentsForItem(itemId){
   return (s.roomAssignments || []).filter(function(a){ return a.reservationItemId===itemId && a.assignmentStatus!=='Cancelled'; });
@@ -171,7 +222,8 @@ function render(){
     attentionWarning + lines().map(function(l){
     var occ = l.adults != null ? l.adults+' Adult'+(l.adults===1?'':'s')+(l.children ? ', '+l.children+' Child'+(l.children===1?'':'ren') : '') : null;
     return '<div class="room-item-card"><div class="ri-top"><h4>'+l.qty+'× '+l.name+'</h4><span class="ri-total">'+PG.fmtMoney(l.subtotal)+'</span></div>' +
-      '<div class="ri-meta">'+l.ratePlan+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div>' +
+      '<div class="ri-meta">'+PG.esc(l.ratePlan)+' &middot; '+PG.fmtDateShort(r.checkIn)+'&ndash;'+PG.fmtDateShort(r.checkOut)+' &middot; '+l.nights+' night'+(l.nights===1?'':'s')+(occ ? ' &middot; '+occ : '')+'</div>' +
+      bookedPricingBlock(l) +
       '<div style="margin-top:4px;">'+renderAssignmentBlock(l)+'</div></div>';
   }).join(''));
 
@@ -657,6 +709,7 @@ function openEditDrawer(){
     items: r.rooms.map(function(room){
       return {
         itemId: room.id, roomTypeId: room.roomTypeId, qty: room.qty,
+        ratePlanId: room.ratePlanId || (PG.defaultRatePlanFor(s, room.roomTypeId)||{}).id || null,
         requireAccessibility: !!room.requireAccessibility, bedConfigPref: room.bedConfigPref || null, requireConnecting: !!room.requireConnecting,
         origAssignedRoomIds: assignmentsForItem(room.id).map(function(a){return a.physicalRoomId;})
       };
@@ -690,18 +743,26 @@ function computeEditPlan(){
     it.assignedRoomIds = result.assignedRoomIds;
     it.shortfall = result.shortfall;
   });
-  var n = validDates ? PG.dateRange(checkIn, checkOut) : [];
+  // Price the edited stay through the item's rate plan. If the room type changed, the
+  // old plan no longer belongs to it, so fall back to that room type's default plan and
+  // say so rather than quietly pricing against a plan that doesn't apply (§6.11).
   items.forEach(function(it){
-    var sub = 0;
-    n.forEach(function(d){ sub += PG.rateFor(s, it.roomTypeId, d) * it.qty; });
-    it.subtotal = sub;
+    var plan = it.ratePlanId ? PG.ratePlanById(s, it.ratePlanId) : null;
+    if (!plan || plan.roomTypeId !== it.roomTypeId){
+      it.ratePlanId = (PG.defaultRatePlanFor(s, it.roomTypeId)||{}).id || null;
+      it.ratePlanReset = true;
+    }
+    if (!validDates || !it.ratePlanId){ it.subtotal = 0; it.rateValid = {ok:false, reason: validDates ? 'This room type has no rate plan.' : null}; return; }
+    it.rateValid = PG.validateRatePlanForStay(s, it.roomTypeId, it.ratePlanId, checkIn, checkOut);
+    it.breakdown = PG.nightlyBreakdown(s, it.roomTypeId, it.ratePlanId, checkIn, checkOut);
+    it.subtotal = it.breakdown.subtotal * it.qty;
   });
   var roomCharges = items.reduce(function(a,it){return a+it.subtotal;},0);
   var pricing = PG.computePricing(s, roomCharges, checkIn);
   var taxes = items.length ? pricing.taxAmount : 0;
   var fees = items.length ? pricing.feeAmount : 0;
   var grandTotal = roomCharges+taxes+fees;
-  var ok = validDates && items.every(function(it){ return it.avail.ok && it.shortfall===0; });
+  var ok = validDates && items.every(function(it){ return it.avail.ok && it.shortfall===0 && it.rateValid && it.rateValid.ok; });
   return { items: items, roomCharges: roomCharges, taxes: taxes, fees: fees, total: grandTotal, oldTotal: total(), ok: ok, validDates: validDates };
 }
 function editRoomNums(ids){
@@ -714,12 +775,24 @@ function renderEditDrawer(){
   var itemsHtml = editState.items.map(function(it, idx){
     var plan_it = plan.items[idx];
     var bedOptions = '<option value="">No preference</option>' + bedConfigOptionsFor(it.roomTypeId).map(function(b){return '<option value="'+PG.esc(b)+'"'+(it.bedConfigPref===b?' selected':'')+'>'+PG.esc(b)+'</option>';}).join('');
+    // Only plans that are active AND priced for every night of the edited stay are
+    // offered; the rest are listed disabled with the reason, never silently hidden.
+    var planOptions = PG.ratePlansForType(s, plan_it.roomTypeId).map(function(p){
+      var v = PG.validateRatePlanForStay(s, plan_it.roomTypeId, p.id, plan.validDates?editState.checkIn:r.checkIn, plan.validDates?editState.checkOut:r.checkOut);
+      return '<option value="'+p.id+'"'+(p.id===plan_it.ratePlanId?' selected':'')+(v.ok?'':' disabled')+'>'+PG.esc(p.name)+(v.ok?'':' — unavailable for these dates')+'</option>';
+    }).join('');
     return '<div class="edit-item-card" data-idx="'+idx+'">' +
       '<div class="item-grid-edit">' +
         '<div class="form-group"><label class="form-label">Room Type</label><select class="form-control ed-rt" data-idx="'+idx+'">'+rtOptions.replace('value="'+it.roomTypeId+'"','value="'+it.roomTypeId+'" selected')+'</select></div>' +
         '<div class="form-group"><label class="form-label">Quantity</label><input type="number" min="1" class="form-control ed-qty" data-idx="'+idx+'" value="'+it.qty+'"></div>' +
         '<div class="form-group"><label class="form-label">Bed Configuration Preference</label><select class="form-control ed-bed" data-idx="'+idx+'">'+bedOptions+'</select></div>' +
       '</div>' +
+      '<div class="form-group"><label class="form-label">Rate Plan</label><select class="form-control ed-plan" data-idx="'+idx+'">'+planOptions+'</select>' +
+        (plan_it.rateValid && plan_it.rateValid.ok && plan_it.breakdown
+          ? '<div class="form-hint">'+PG.esc(plan_it.breakdown.groups.map(function(g){return g.label+' ×'+g.nights+' @ '+PG.fmtMoney(g.price);}).join('  ·  '))+'</div>'
+          : '') + '</div>' +
+      (plan_it.ratePlanReset ? '<div class="help-note help-note-warning" style="margin-top:10px;">The previous rate plan doesn’t belong to this room type. It has been switched to this room type’s default plan — pick a different one if that’s not what you want.</div>' : '') +
+      (plan_it.rateValid && !plan_it.rateValid.ok && plan_it.rateValid.reason ? '<div class="help-note help-note-danger" style="margin-top:10px;">'+PG.esc(plan_it.rateValid.reason)+' Choose a rate plan that covers every night of this stay.</div>' : '') +
       '<div class="form-check" style="margin-top:4px;"><input type="checkbox" class="ed-access" data-idx="'+idx+'" id="ed-access-'+idx+'"'+(it.requireAccessibility?' checked':'')+'><label class="form-label" style="margin:0;" for="ed-access-'+idx+'">Requires Wheelchair Accessible Room</label></div>' +
       (it.qty>1 ? '<div class="form-check" style="margin-top:8px;"><input type="checkbox" class="ed-connect" data-idx="'+idx+'" id="ed-connect-'+idx+'"'+(it.requireConnecting?' checked':'')+'><label class="form-label" style="margin:0;" for="ed-connect-'+idx+'">Request Connecting Rooms</label></div>' : '') +
       (!plan_it.avail.ok ? '<div class="help-note help-note-danger" style="margin-top:10px;">Insufficient room-type inventory for the selected dates/quantity.</div>' : '') +
@@ -735,8 +808,10 @@ function renderEditDrawer(){
     var oldRooms = editRoomNums(it.origAssignedRoomIds).join(', ') || 'none';
     var newRooms = editRoomNums(it.assignedRoomIds).join(', ') || 'none';
     if (oldRooms !== newRooms) bits.push('Room(s): '+oldRooms+' <span class="chg">&rarr; '+newRooms+'</span>');
-    var origSubtotal = 0;
-    nights().forEach(function(d){ origSubtotal += PG.rateFor(s, orig.roomTypeId, d) * orig.qty; });
+    var origSubtotal = PG.roomItemCharge(s, r, orig);
+    var origPlanName = ratePlanNameFor(orig);
+    var newPlanName = (PG.ratePlanById(s, it.ratePlanId)||{}).name || '—';
+    if (origPlanName !== newPlanName) bits.push('Rate Plan: '+PG.esc(origPlanName)+' <span class="chg">&rarr; '+PG.esc(newPlanName)+'</span>');
     if (Math.round(origSubtotal*100) !== Math.round(it.subtotal*100)) bits.push('Item Total: '+PG.fmtMoney(origSubtotal)+' <span class="chg">&rarr; '+PG.fmtMoney(it.subtotal)+'</span>');
     if (!bits.length) return '';
     return '<div class="impact-row"><span>Room Item '+(idx+1)+'</span><span style="text-align:right;">'+bits.join('<br>')+'</span></div>';
@@ -775,6 +850,7 @@ function renderEditDrawer(){
   editModal.querySelectorAll('.ed-rt').forEach(function(el){ el.addEventListener('change', function(){ editState.items[+el.dataset.idx].roomTypeId = el.value; editState.items[+el.dataset.idx].bedConfigPref = null; renderEditDrawer(); }); });
   editModal.querySelectorAll('.ed-qty').forEach(function(el){ el.addEventListener('input', function(){ editState.items[+el.dataset.idx].qty = Math.max(1, parseInt(el.value,10)||1); renderEditDrawer(); }); });
   editModal.querySelectorAll('.ed-bed').forEach(function(el){ el.addEventListener('change', function(){ editState.items[+el.dataset.idx].bedConfigPref = el.value || null; renderEditDrawer(); }); });
+  editModal.querySelectorAll('.ed-plan').forEach(function(el){ el.addEventListener('change', function(){ var it = editState.items[+el.dataset.idx]; it.ratePlanId = el.value; it.ratePlanReset = false; renderEditDrawer(); }); });
   editModal.querySelectorAll('.ed-access').forEach(function(el){ el.addEventListener('change', function(){ editState.items[+el.dataset.idx].requireAccessibility = el.checked; renderEditDrawer(); }); });
   editModal.querySelectorAll('.ed-connect').forEach(function(el){ el.addEventListener('change', function(){ editState.items[+el.dataset.idx].requireConnecting = el.checked; renderEditDrawer(); }); });
   var saveBtn = document.getElementById('editSaveBtn');
@@ -798,15 +874,23 @@ function saveEdit(plan){
       var room = liveR.rooms.find(function(x){return x.id===pi.itemId;});
       if (room.roomTypeId !== pi.roomTypeId){
         changeLines.push('Room Item ('+room.id+'): room type changed from '+roomTypeName(room.roomTypeId)+' to '+roomTypeName(pi.roomTypeId)+'.');
-        room.ratePlanName = firstRatePlanNameForType(pi.roomTypeId);
       }
       if (room.qty !== pi.qty) changeLines.push('Room Item ('+room.id+'): quantity changed from '+room.qty+' to '+pi.qty+'.');
       var oldRoomNums = editRoomNums(pi.origAssignedRoomIds).join(', ') || 'none';
       var newRoomNums = editRoomNums(pi.assignedRoomIds).join(', ') || 'none';
       if (oldRoomNums !== newRoomNums) changeLines.push('Room Item ('+room.id+'): room assignment changed from ['+oldRoomNums+'] to ['+newRoomNums+'].');
 
+      var prevCharge = PG.roomItemCharge(s, r, room);
       room.roomTypeId = pi.roomTypeId; room.qty = pi.qty; room.adults = pi.adults; room.children = pi.children;
       room.requireAccessibility = pi.requireAccessibility; room.bedConfigPref = pi.bedConfigPref; room.requireConnecting = pi.requireConnecting;
+      room.ratePlanId = pi.ratePlanId;
+      // Rewrite the booked-price snapshot — this explicit Edit flow is the ONLY path
+      // that may move an existing reservation's price (§6.11).
+      PG.snapshotRoomItemPricing(st, room, editState.checkIn, editState.checkOut);
+      var newCharge = PG.roomItemCharge(st, liveR, room);
+      if (Math.round(prevCharge*100) !== Math.round(newCharge*100)){
+        changeLines.push('Room Item ('+room.id+'): booked price changed from '+PG.fmtMoney(prevCharge)+' to '+PG.fmtMoney(newCharge)+' on rate plan '+(room.ratePlanName||'—')+'.');
+      }
 
       st.roomAssignments.forEach(function(a){ if (a.reservationItemId===pi.itemId && a.assignmentStatus!=='Cancelled') a.assignmentStatus = 'Cancelled'; });
       pi.assignedRoomIds.forEach(function(rid){

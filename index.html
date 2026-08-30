@@ -53,11 +53,7 @@ function assignedRoomsLabel(r){
   });
   return nums.length ? nums.join(', ') : '—';
 }
-function reservationTotal(r){
-  var n = PG.dateRange(r.checkIn, r.checkOut), t=0;
-  r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
-  return t;
-}
+function reservationTotal(r){ return PG.reservationRoomCharges(s, r); }
 function active(list){ return list.filter(function(r){return r.status!=='Cancelled';}); }
 
 var arrivalsToday = active(s.reservations).filter(function(r){return r.checkIn===T;});
@@ -231,22 +227,26 @@ html += '</tbody></table></div></div></div>';
 // Saved Operational Views — predefined filtered views into existing worklists/reports,
 // not a new saved-views feature — each link just carries the query params those pages
 // already understand.
+// The "Unassigned Reservations" view that used to sit here has been removed: every
+// active reservation always holds a physical room by design, so a saved view built
+// around that state advertised a concept this product does not have.
 html += '<div class="card"><div class="card-header"><h3>Saved Views</h3><div class="desc">Predefined operational filters, one click away</div></div><div class="card-body"><div class="quick-ops">' +
-  '<a class="btn btn-light" href="reservation-reports.html?report=arrivals&from='+T+'&to='+T+'">Today\'s Arrivals</a>' +
-  '<a class="btn btn-light" href="reservation-reports.html?report=departures&from='+T+'&to='+T+'">Today\'s Departures</a>' +
-  '<a class="btn btn-light" href="reservation-reports.html?report=unassigned">Unassigned Reservations</a>' +
-  '<a class="btn btn-light" href="payments.html?status=Issues">Payment Issues</a>' +
-  '<a class="btn btn-light" href="inventory-reports.html?report=blocked&from='+T+'&to='+PG.addDays(T,30)+'">Blocked Rooms</a>' +
+  '<a class="btn btn-light" href="reservation-reports.html?report=arrivals&from='+T+'&to='+T+'">'+PG.icon('logIn',15)+' Today\'s Arrivals</a>' +
+  '<a class="btn btn-light" href="reservation-reports.html?report=departures&from='+T+'&to='+T+'">'+PG.icon('logOut',15)+' Today\'s Departures</a>' +
+  '<a class="btn btn-light" href="payments.html?status=Issues">'+PG.icon('alert',15)+' Payment Issues</a>' +
+  '<a class="btn btn-light" href="inventory-reports.html?report=blocked&from='+T+'&to='+PG.addDays(T,30)+'">'+PG.icon('ban',15)+' Blocked Rooms</a>' +
+  '<a class="btn btn-light" href="reservations.html?status=Pending Payment">'+PG.icon('clock',15)+' Awaiting Payment</a>' +
 '</div></div></div>';
 
 // Quick Operations
 html += '<div class="card"><div class="card-header"><h3>Quick Operations</h3></div><div class="card-body"><div class="quick-ops">' +
-  '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
-  '<a class="btn btn-light" href="operations-calendar.html">Open Operations Calendar</a>' +
-  '<a class="btn btn-light" href="physical-rooms.html">Physical Rooms</a>' +
-  '<a class="btn btn-light" href="payments.html?status=Payment Required">View Pending Payments</a>' +
-  '<a class="btn btn-light" href="reservations.html?arrival='+T+'">View Today\'s Arrivals</a>' +
-  '<a class="btn btn-light" href="demo-journey.html">Guided Journey Demo</a>' +
+  '<a class="btn btn-primary" href="new-reservation.html">'+PG.icon('plus',15)+' Create Reservation</a>' +
+  '<a class="btn btn-light" href="operations-calendar.html">'+PG.icon('calendar',15)+' Open Operations Calendar</a>' +
+  '<a class="btn btn-light" href="physical-rooms.html">'+PG.icon('door',15)+' Open Physical Rooms</a>' +
+  '<a class="btn btn-light" href="rates.html">'+PG.icon('tag',15)+' Manage Rate Plans &amp; Pricing</a>' +
+  '<a class="btn btn-light" href="payments.html?status=Payment Required">'+PG.icon('card',15)+' View Pending Payments</a>' +
+  '<a class="btn btn-light" href="inventory-reports.html?report=blocked&from='+T+'&to='+PG.addDays(T,30)+'">'+PG.icon('ban',15)+' View Blocked Rooms</a>' +
+  '<a class="btn btn-light" href="demo-journey.html">'+PG.icon('play',15)+' Guided Journey Demo</a>' +
 '</div></div></div>';
 
 page.innerHTML = html;

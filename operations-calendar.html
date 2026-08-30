@@ -142,15 +142,15 @@ function init(){
   html += '<div class="card"><div class="card-body">' +
     '<div class="opc-toolbar">' +
       '<div class="opc-toolbar-left">' +
-        '<button class="btn btn-outline btn-sm" id="prevBtn" aria-label="Previous period">&larr; Prev</button>' +
+        '<button class="btn btn-outline btn-sm ic-dir" id="prevBtn" aria-label="Previous period" title="Previous period">' + PG.icon('chevronLeft',15) + '</button>' +
         '<button class="btn btn-outline btn-sm" id="todayBtn">Today</button>' +
-        '<button class="btn btn-outline btn-sm" id="nextBtn" aria-label="Next period">Next &rarr;</button>' +
+        '<button class="btn btn-outline btn-sm ic-dir" id="nextBtn" aria-label="Next period" title="Next period">' + PG.icon('chevronRight',15) + '</button>' +
         '<input type="date" class="form-control" id="datePicker" aria-label="Jump to date" value="'+startDate+'">' +
-        '<div class="pill-toggle" id="viewPill"><button type="button" data-v="7">7 Days</button><button type="button" data-v="14" class="active">14 Days</button><button type="button" data-v="30">30 Days</button></div>' +
+        PG.segmented('opcSpan', [{value:'7',label:'7 Days'},{value:'14',label:'14 Days'},{value:'30',label:'30 Days'}], String(viewDays), {ariaLabel:'Date range length'}) +
       '</div>' +
       '<div class="opc-toolbar-right">' +
-        '<input class="form-control opc-search" id="opcSearch" placeholder="Search guest, RES#, phone, room…" aria-label="Search calendar">' +
-        '<button class="btn btn-outline btn-sm" id="filtersBtn">Filters</button>' +
+        '<input class="form-control opc-search" id="opcSearch" type="search" placeholder="Search guest, RES#, phone, room…" aria-label="Search calendar">' +
+        '<button class="btn btn-outline btn-sm" id="filtersBtn">' + PG.icon('filter',15) + ' Filters<span id="filterCount"></span></button>' +
       '</div>' +
     '</div>' +
     '<div class="opc-legend" id="opcLegend"></div>' +
@@ -187,11 +187,7 @@ function init(){
   document.getElementById('nextBtn').addEventListener('click', function(){ startDate = PG.addDays(startDate, viewDays); syncDatePicker(); renderGrid(); });
   document.getElementById('todayBtn').addEventListener('click', function(){ startDate = PG.TODAY; syncDatePicker(); renderGrid(); });
   document.getElementById('datePicker').addEventListener('change', function(){ if(this.value){ startDate = this.value; renderGrid(); } });
-  document.getElementById('viewPill').addEventListener('click', function(e){
-    var btn = e.target.closest('button'); if(!btn) return;
-    document.querySelectorAll('#viewPill button').forEach(function(b){b.classList.remove('active');});
-    btn.classList.add('active'); viewDays = parseInt(btn.dataset.v,10); renderGrid();
-  });
+  PG.wireSegmented(page, 'opcSpan', function(v){ viewDays = parseInt(v,10); renderGrid(); });
   function syncDatePicker(){ document.getElementById('datePicker').value = startDate; }
   document.getElementById('opcSearch').addEventListener('input', function(){ searchQuery = this.value.trim().toLowerCase(); renderGrid(); });
   document.getElementById('filtersBtn').addEventListener('click', openFiltersDrawer);
@@ -281,8 +277,15 @@ function init(){
     if (filters.payStatus!=='all') chip('payStatus', 'Payment: '+filters.payStatus);
     if (filters.arrDep!=='all') chip('arrDep', filters.arrDep==='arrivals'?'Arrivals in view':'Departures in view');
     var box = document.getElementById('opcChips');
-    if (!chips.length){ box.innerHTML=''; return; }
+    if (!chips.length){
+      box.innerHTML='';
+      var zeroEl = document.getElementById('filterCount');
+      if (zeroEl) zeroEl.innerHTML = '';
+      return;
+    }
     box.innerHTML = chips.join('') + '<button class="btn btn-outline btn-sm" id="chipsClearAll">Clear All</button>';
+    var countEl = document.getElementById('filterCount');
+    if (countEl) countEl.innerHTML = chips.length ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">' + chips.length + '</span>' : '';
     box.querySelectorAll('[data-clear]').forEach(function(btn){
       btn.addEventListener('click', function(){
         var k = btn.dataset.clear;
@@ -407,7 +410,7 @@ function init(){
 
     var rooms = visibleRooms(st);
     if (!rooms.length){
-      bodyHtml += '<div class="empty-state"><div class="ic">&#128269;</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="opcClearInline">Clear Filters</button></div>';
+      bodyHtml += '<div class="empty-state"><div class="ic">' + PG.icon('search',30) + '</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="opcClearInline">Clear Filters</button></div>';
     } else {
       st.roomTypes.forEach(function(typeDef){
         var typeRooms = rooms.filter(function(r){return r.roomTypeId===typeDef.id;}).sort(function(a,b){
@@ -930,9 +933,7 @@ function init(){
     var room = assignment ? st.physicalRooms.find(function(p){return p.id===assignment.physicalRoomId;}) : null;
     var nights = PG.nightsBetween(res.checkIn, res.checkOut);
     var guests = res.rooms.reduce(function(a,x){return a+x.adults+(x.children||0);},0);
-    var total = 0;
-    PG.dateRange(res.checkIn, res.checkOut).forEach(function(d){ res.rooms.forEach(function(x){ total += PG.rateFor(st, x.roomTypeId, d) * x.qty; }); });
-    total += (res.taxAmount||0) + (res.feeAmount||0);
+    var total = PG.reservationTotal(st, res);
     var needsAttention = room ? !PG.roomEligibleForStay(st, room, res.checkIn, res.checkOut, assignment.id) : false;
     var conflictBars = room ? barsForRoomLocal(st, room.id).filter(function(b){ return b.conflict && ((b.assignment&&b.assignment.id===assignment.id) || false); }) : [];
 
@@ -1261,7 +1262,7 @@ function init(){
 
 if (!CAN_VIEW) {
   page.innerHTML = '<div class="pg-page-head"><div><h1>Operations Calendar</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view the Operations Calendar.<br>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();

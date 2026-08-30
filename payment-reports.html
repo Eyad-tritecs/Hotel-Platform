@@ -39,11 +39,7 @@ var REPORTS = [
 ];
 
 function custOf(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
-function total(r){
-  var n=PG.dateRange(r.checkIn, r.checkOut), t=0;
-  r.rooms.forEach(function(room){ n.forEach(function(d){ t+=PG.rateFor(s, room.roomTypeId, d)*room.qty; }); });
-  return t+(r.taxAmount||0)+(r.feeAmount||0);
-}
+function total(r){ return PG.reservationTotal(s, r); }
 
 var html = '';
 html += '<div class="pg-page-head"><div><h1>Payment Reports</h1><div class="sub">Lightweight operational reports — not a business-intelligence or accounting product</div></div></div>';
@@ -151,7 +147,7 @@ selectReport(state.report);
 
 if (!CAN_VIEW){
   page.innerHTML = '<div class="pg-page-head"><div><h1>Payment Reports</h1></div></div>' +
-    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">&#128274;</div>' +
+    '<div class="card"><div class="card-body"><div class="empty-state"><div class="ic">' + PG.icon('lock',30) + '</div>' +
     'You don\'t have permission to view Reports.<br>Contact a Hotel Admin to request access.</div></div></div>';
 }
 </script>
