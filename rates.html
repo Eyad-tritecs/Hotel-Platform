@@ -7,6 +7,37 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .toolbar .form-group{margin-bottom:0;}
+  .toolbar .form-label{font-size:11px;}
+  .rc-wrap{overflow-x:auto;}
+  .rc-table{border-collapse:collapse;width:100%;}
+  .rc-table th, .rc-table td{border:1px solid var(--pg-border);padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap;}
+  .rc-corner{position:sticky;left:0;top:var(--pg-header-height);z-index:22;background:var(--pg-gray-100);text-align:left;min-width:170px;}
+  .rc-datehead{position:sticky;top:var(--pg-header-height);z-index:15;background:var(--pg-gray-100);min-width:88px;font-weight:600;}
+  .rc-datehead .dow{display:block;font-size:10px;color:var(--pg-gray-500);font-weight:500;text-transform:uppercase;}
+  .rc-rtcell{position:sticky;left:0;z-index:10;background:#fff;text-align:left;min-width:170px;}
+  .rc-rtcell .rn{font-weight:700;font-size:13px;}
+  .rc-rtcell .rb{font-size:11px;color:var(--pg-gray-500);margin-top:2px;}
+  .rc-cell{cursor:pointer;min-width:88px;}
+  .rc-cell:hover{background:var(--pg-primary-light);}
+  .rc-rate{font-weight:700;font-size:13px;}
+  .rc-rate.override{color:var(--pg-primary);}
+  .rc-flags{display:flex;gap:5px;justify-content:center;align-items:center;margin-top:4px;}
+  .rc-dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+  .rc-dot.ok{background:#0bb463;}
+  .rc-dot.low{background:#f0ad4e;}
+  .rc-dot.stop{background:var(--pg-danger);}
+  .rc-stopflag{color:var(--pg-danger);font-size:9.5px;font-weight:800;letter-spacing:.03em;}
+  .rc-legend{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:12px;margin:10px 0 14px;}
+  .rc-legend .li{display:flex;align-items:center;gap:6px;}
+  .dow-grid{display:flex;gap:6px;flex-wrap:wrap;}
+  .dow-chip{border:1px solid var(--pg-border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;user-select:none;}
+  .dow-chip.active{border-color:var(--pg-primary);background:var(--pg-primary-light);color:var(--pg-primary);font-weight:700;}
+  .rt-check-list{display:flex;flex-direction:column;gap:6px;}
+  .preview-box{border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;background:var(--pg-gray-100);font-size:12.5px;max-height:160px;overflow-y:auto;}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
@@ -14,19 +45,45 @@
 <script>
 var page = PG.mount("rates", ["Hotel Management", "Rates"]);
 var s = PG.getState();
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function rtName(id){ var rt = s.roomTypes.find(function(r){return r.id===id;}); return rt ? rt.name : id; }
 
-var html = '';
-html += '<div class="pg-page-head"><div><h1>Rate Plans</h1><div class="sub">Simple per-room-type rate plans for Palestine Grand Hotel</div></div>' +
-  '<div class="pg-actions"><a class="btn btn-primary" href="rate-plan-form.html">+ Add Rate Plan</a></div></div>';
+var cal = { from: PG.TODAY, to: PG.addDays(PG.TODAY, 13) };
 
-html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+var html = '';
+html += '<div class="pg-page-head"><div><h1>Rates</h1><div class="sub">Per-date rate calendar and rate plans for Palestine Grand Hotel</div></div>' +
+  (CAN_MANAGE ? '<div class="pg-actions"><button class="btn btn-outline" id="bulkBtn">Bulk Rate Change</button><a class="btn btn-primary" href="rate-plan-form.html">+ Add Rate Plan</a></div>' : '') +
+'</div>';
+
+html += '<div class="help-note" style="margin-bottom:16px;">This calendar edits the actual per-date rate used in pricing (<code>PG.rateFor</code>). Rate Plans below are the admin-facing display name/meal plan shown to guests — see the Rate Plans section for that layer.</div>';
+
+html += '<div class="card"><div class="card-body"><div class="toolbar">' +
+  '<div class="form-group"><label class="form-label">FROM</label><input type="date" class="form-control" id="calFrom" value="'+cal.from+'"></div>' +
+  '<div class="form-group"><label class="form-label">TO</label><input type="date" class="form-control" id="calTo" value="'+cal.to+'"></div>' +
+  '<button class="btn btn-outline" id="calRefresh">&#8635; Refresh</button>' +
+'</div></div></div>';
+
+html += '<div class="rc-legend">' +
+  '<div class="li"><span class="rc-dot ok"></span>Good availability</div>' +
+  '<div class="li"><span class="rc-dot low"></span>Low (&le;2)</div>' +
+  '<div class="li"><span class="rc-dot stop"></span>Stop Sell / Sold out</div>' +
+  '<div class="li"><span class="rc-rate override" style="font-size:12px;">$120</span>Date override (not base rate)</div>' +
+'</div>';
+
+html += '<div class="card"><div class="card-body no-pad"><div class="rc-wrap"><table class="rc-table" id="rcTable"></table></div></div></div>';
+
+html += '<div class="card" style="margin-top:24px;"><div class="card-header"><h3>Rate Plans</h3><div class="desc">Admin-facing display name, meal plan, and date range shown to guests</div></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
   '<th>Rate Plan</th><th>Room Type</th><th>Meal Plan</th><th>Date Range</th><th class="num">Price</th><th>Status</th><th></th>' +
-'</tr></thead><tbody>';
+'</tr></thead><tbody id="ratePlanBody"></tbody></table></div></div></div>';
+html += '<div class="pg-lightweight-note">Rate plans define a display name/meal plan for a date range; the calendar above is what actually prices reservations. Dynamic pricing, promotions, and discount engines are outside the Initial MVP.</div>';
+
+page.innerHTML = html;
+PG.enhanceSelects(page);
 
 s.ratePlans.forEach(function(rp){
-  html += '<tr>' +
+  document.getElementById('ratePlanBody').innerHTML += '<tr>' +
     '<td style="font-weight:600;">'+rp.name+'</td>' +
     '<td>'+rtName(rp.roomTypeId)+'</td>' +
     '<td>'+rp.mealPlan+'</td>' +
@@ -37,10 +94,208 @@ s.ratePlans.forEach(function(rp){
   '</tr>';
 });
 
-html += '</tbody></table></div></div></div>';
-html += '<div class="pg-lightweight-note">Rate plans define a single price per night, per room type, for a date range — enough to make reservation pricing understandable. Dynamic pricing, promotions, and discount engines are outside the Initial MVP.</div>';
+function renderCalendar(){
+  s = PG.getState();
+  var days = PG.dateRange(cal.from, PG.addDays(cal.to, 1));
+  var table = document.getElementById('rcTable');
+  var thead = '<thead><tr><th class="rc-corner">Room Type</th>' + days.map(function(d){
+    return '<th class="rc-datehead">'+PG.fmtDateShort(d)+'<span class="dow">'+PG.weekdayOf(d)+'</span></th>';
+  }).join('') + '</tr></thead>';
+  var tbody = '<tbody>' + s.roomTypes.map(function(rt){
+    var row = '<tr><td class="rc-rtcell"><div class="rn">'+PG.esc(rt.name)+'</div><div class="rb">Base '+PG.fmtMoney(rt.baseRate)+'/night</div></td>';
+    days.forEach(function(d){
+      var rate = PG.rateFor(s, rt.id, d);
+      var isOverride = s.rates[rt.id] && s.rates[rt.id][d] != null;
+      var a = PG.computeAvailability(s, rt.id, d);
+      var dotCls = a.stopSell ? 'stop' : (a.available<=2 ? 'low' : 'ok');
+      row += '<td class="rc-cell" data-rt="'+rt.id+'" data-date="'+d+'">' +
+        '<div class="rc-rate'+(isOverride?' override':'')+'">'+PG.fmtMoney(rate)+'</div>' +
+        '<div class="rc-flags"><span class="rc-dot '+dotCls+'"></span>'+(a.stopSell?'<span class="rc-stopflag">STOP</span>':'')+'</div>' +
+      '</td>';
+    });
+    row += '</tr>';
+    return row;
+  }).join('') + '</tbody>';
+  table.innerHTML = thead + tbody;
 
-page.innerHTML = html;
+  if (CAN_MANAGE){
+    table.querySelectorAll('tbody .rc-cell').forEach(function(td){
+      td.addEventListener('click', function(){ openRateCellDrawer(td.dataset.rt, td.dataset.date); });
+    });
+  }
+}
+renderCalendar();
+
+document.getElementById('calFrom').addEventListener('change', function(){ cal.from=this.value; renderCalendar(); });
+document.getElementById('calTo').addEventListener('change', function(){ cal.to=this.value; renderCalendar(); });
+document.getElementById('calRefresh').addEventListener('click', function(){ renderCalendar(); PG.toast('Rate calendar refreshed.', 'success'); });
+
+/* ================================================================== */
+/* Rate cell edit — a focused drawer, not spreadsheet-style inline edit. */
+/* Every save/reset is confirmed by its own button click and logged.     */
+/* ================================================================== */
+var rateCellDrawer = null;
+if (CAN_MANAGE){
+  rateCellDrawer = document.createElement('div');
+  rateCellDrawer.className = 'pg-drawer-overlay';
+  rateCellDrawer.id = 'rateCellDrawer';
+  document.body.appendChild(rateCellDrawer);
+}
+function openRateCellDrawer(roomTypeId, dateStr){
+  var rt = s.roomTypes.find(function(r){return r.id===roomTypeId;});
+  var hasOverride = s.rates[roomTypeId] && s.rates[roomTypeId][dateStr] != null;
+  var current = PG.rateFor(s, roomTypeId, dateStr);
+  rateCellDrawer.innerHTML = '<div class="pg-drawer" style="max-width:420px;">' +
+    '<div class="pg-drawer-header"><div><h3>Edit Rate</h3><div class="muted text-sm">'+PG.esc(rt.name)+' &middot; '+PG.fmtDate(dateStr)+'</div></div><button class="pg-modal-close" id="rcdClose">&times;</button></div>' +
+    '<div class="pg-drawer-body">' +
+      '<div class="form-group"><label class="form-label">Base Rate <span class="opt">(reference)</span></label><input class="form-control" value="'+PG.fmtMoney(rt.baseRate)+' / night" disabled></div>' +
+      '<div class="form-group"><label class="form-label">Rate for This Date</label><input type="number" min="1" step="0.01" class="form-control" id="rcd-amount" value="'+current+'"></div>' +
+      (hasOverride ? '<div class="help-note">This date currently has a specific override, different from the base rate.</div>' : '<div class="help-note">This date currently uses the base rate — saving a different amount creates a date-specific override.</div>') +
+    '</div>' +
+    '<div class="pg-drawer-footer">' +
+      (hasOverride ? '<button class="btn btn-outline" id="rcdReset">Reset to Base Rate</button>' : '<span></span>') +
+      '<button class="btn btn-primary" id="rcdSave">Save Rate</button>' +
+    '</div>' +
+  '</div>';
+  document.getElementById('rcdClose').addEventListener('click', function(){ PG.closeModal('rateCellDrawer'); });
+  document.getElementById('rcdSave').addEventListener('click', function(){
+    var val = parseFloat(document.getElementById('rcd-amount').value);
+    if (!(val > 0)){ PG.toast('Enter a valid rate greater than 0.', 'danger'); return; }
+    var st = PG.getState();
+    st.rates[roomTypeId] = st.rates[roomTypeId] || {};
+    var prev = st.rates[roomTypeId][dateStr] != null ? st.rates[roomTypeId][dateStr] : rt.baseRate;
+    st.rates[roomTypeId][dateStr] = val;
+    PG.setState(st);
+    PG.addAudit('Rate Changed', rt.name + ' rate for ' + PG.fmtDateShort(dateStr) + ' changed from ' + PG.fmtMoney(prev) + ' to ' + PG.fmtMoney(val) + '.');
+    PG.toast('Rate updated.', 'success');
+    PG.closeModal('rateCellDrawer');
+    renderCalendar();
+  });
+  var resetBtn = document.getElementById('rcdReset');
+  if (resetBtn) resetBtn.addEventListener('click', function(){
+    var st = PG.getState();
+    var prev = st.rates[roomTypeId][dateStr];
+    delete st.rates[roomTypeId][dateStr];
+    PG.setState(st);
+    PG.addAudit('Rate Changed', rt.name + ' rate for ' + PG.fmtDateShort(dateStr) + ' reset from ' + PG.fmtMoney(prev) + ' to base rate ' + PG.fmtMoney(rt.baseRate) + '.');
+    PG.toast('Rate reset to base.', 'success');
+    PG.closeModal('rateCellDrawer');
+    renderCalendar();
+  });
+  PG.openModal('rateCellDrawer');
+}
+
+/* ================================================================== */
+/* Bulk Rate Change — range-based, never unrestricted inline editing.    */
+/* Room types + date range + days of week + amount/adjustment, always    */
+/* previewed and explicitly confirmed before anything is written.        */
+/* ================================================================== */
+var bulkModal = null;
+var bulkDow = [0,1,2,3,4,5,6]; // Sun..Sat, all selected by default
+if (CAN_MANAGE){
+  bulkModal = document.createElement('div');
+  bulkModal.className = 'pg-modal-overlay';
+  bulkModal.id = 'bulkModal';
+  document.body.appendChild(bulkModal);
+}
+function bulkAffectedDates(){
+  var from = document.getElementById('bulk-from').value;
+  var to = document.getElementById('bulk-to').value;
+  if (!from || !to || to < from) return [];
+  return PG.dateRange(from, PG.addDays(to,1)).filter(function(d){ return bulkDow.indexOf(PG.dayOfWeek(d))>-1; });
+}
+function bulkSelectedRoomTypes(){
+  return Array.from(bulkModal.querySelectorAll('.bulk-rt:checked')).map(function(el){ return el.value; });
+}
+function renderBulkPreview(){
+  var dates = bulkAffectedDates();
+  var rtIds = bulkSelectedRoomTypes();
+  var box = document.getElementById('bulkPreview');
+  var confirmBtn = document.getElementById('bulkConfirm');
+  if (!dates.length || !rtIds.length){
+    box.innerHTML = '<div class="muted text-sm">Choose at least one room type and a valid date range to preview affected dates.</div>';
+    confirmBtn.disabled = true;
+    return;
+  }
+  box.innerHTML = '<div style="margin-bottom:6px;"><strong>'+rtIds.length+'</strong> room type(s) &times; <strong>'+dates.length+'</strong> date(s) = <strong>'+(rtIds.length*dates.length)+'</strong> rate entries will be updated.</div>' +
+    dates.slice(0,20).map(function(d){ return '<span class="chip" style="margin:2px;">'+PG.fmtDateShort(d)+'</span>'; }).join('') +
+    (dates.length>20 ? ' <span class="muted text-sm">+'+(dates.length-20)+' more</span>' : '');
+  confirmBtn.disabled = false;
+}
+function openBulkModal(){
+  bulkDow = [0,1,2,3,4,5,6];
+  var rtChecks = s.roomTypes.map(function(rt){ return '<label class="form-check" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" class="bulk-rt" value="'+rt.id+'" checked><span>'+PG.esc(rt.name)+'</span></label>'; }).join('');
+  bulkModal.innerHTML = '<div class="pg-modal" style="max-width:560px;">' +
+    '<div class="pg-modal-header"><h3>Bulk Rate Change</h3><button class="pg-modal-close" onclick="PG.closeModal(\'bulkModal\')">&times;</button></div>' +
+    '<div class="pg-modal-body">' +
+      '<div class="form-group"><label class="form-label">Room Types</label><div class="rt-check-list">'+rtChecks+'</div></div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="bulk-from" value="'+cal.from+'"></div>' +
+        '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="bulk-to" value="'+cal.to+'"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Days of Week</label><div class="dow-grid" id="bulkDowGrid">' +
+        DOW_LABELS.map(function(lbl,i){ return '<div class="dow-chip active" data-dow="'+i+'">'+lbl+'</div>'; }).join('') +
+      '</div></div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Change Type</label><select class="form-control" id="bulk-mode">' +
+          '<option value="set">Set to exact amount</option>' +
+          '<option value="increase">Increase by amount</option>' +
+          '<option value="decrease">Decrease by amount</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label class="form-label">Amount</label><input type="number" min="0.01" step="0.01" class="form-control" id="bulk-amount" value="10"></div>' +
+      '</div>' +
+      '<div class="form-label">Preview</div>' +
+      '<div class="preview-box" id="bulkPreview"></div>' +
+    '</div>' +
+    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'bulkModal\')">Cancel</button><button class="btn btn-primary" id="bulkConfirm" disabled>Confirm Rate Change</button></div>' +
+  '</div>';
+  PG.enhanceSelects(bulkModal);
+  renderBulkPreview();
+
+  bulkModal.querySelectorAll('.bulk-rt').forEach(function(el){ el.addEventListener('change', renderBulkPreview); });
+  document.getElementById('bulk-from').addEventListener('change', renderBulkPreview);
+  document.getElementById('bulk-to').addEventListener('change', renderBulkPreview);
+  document.getElementById('bulkDowGrid').addEventListener('click', function(e){
+    var chip = e.target.closest('.dow-chip'); if (!chip) return;
+    var d = +chip.dataset.dow;
+    var idx = bulkDow.indexOf(d);
+    if (idx>-1){ bulkDow.splice(idx,1); chip.classList.remove('active'); }
+    else { bulkDow.push(d); chip.classList.add('active'); }
+    renderBulkPreview();
+  });
+  document.getElementById('bulkConfirm').addEventListener('click', applyBulkChange);
+  PG.openModal('bulkModal');
+}
+function applyBulkChange(){
+  var dates = bulkAffectedDates();
+  var rtIds = bulkSelectedRoomTypes();
+  var mode = document.getElementById('bulk-mode').value;
+  var amount = parseFloat(document.getElementById('bulk-amount').value);
+  if (!(amount > 0)){ PG.toast('Enter a valid amount greater than 0.', 'danger'); return; }
+  if (!dates.length || !rtIds.length){ PG.toast('Choose at least one room type and a valid date range.', 'danger'); return; }
+  var modeLabel = {set:'set to', increase:'increased by', decrease:'decreased by'}[mode];
+  if (!confirm('Apply this rate change to ' + rtIds.length + ' room type(s) across ' + dates.length + ' date(s)? This cannot be undone automatically.')) return;
+
+  var st = PG.getState();
+  var count = 0, blockedByFloor = 0;
+  rtIds.forEach(function(rtId){
+    st.rates[rtId] = st.rates[rtId] || {};
+    dates.forEach(function(d){
+      var current = st.rates[rtId][d] != null ? st.rates[rtId][d] : (st.roomTypes.find(function(r){return r.id===rtId;}).baseRate);
+      var next = mode==='set' ? amount : (mode==='increase' ? current+amount : current-amount);
+      if (next <= 0){ blockedByFloor++; return; } // never write a zero/negative rate
+      st.rates[rtId][d] = Math.round(next*100)/100;
+      count++;
+    });
+  });
+  PG.setState(st);
+  var rtNames = rtIds.map(rtName).join(', ');
+  PG.addAudit('Rate Changed', 'Bulk rate change — ' + rtNames + ', ' + PG.fmtDateShort(dates[0]) + ' to ' + PG.fmtDateShort(dates[dates.length-1]) + ', amount ' + modeLabel + ' ' + PG.fmtMoney(amount) + '. ' + count + ' rate entr' + (count===1?'y':'ies') + ' updated.' + (blockedByFloor ? ' ' + blockedByFloor + ' skipped (would go to $0 or below).' : ''));
+  PG.toast(count + ' rate entr' + (count===1?'y':'ies') + ' updated.' + (blockedByFloor ? ' ' + blockedByFloor + ' skipped.' : ''), 'success');
+  PG.closeModal('bulkModal');
+  renderCalendar();
+}
+if (CAN_MANAGE) document.getElementById('bulkBtn').addEventListener('click', openBulkModal);
 </script>
 </body>
 </html>

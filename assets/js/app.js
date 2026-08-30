@@ -254,8 +254,13 @@
       { id: "asn-2", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-1", physicalRoomId: "dlx-302", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
       { id: "asn-3", propertyId: PROPERTY_ID, reservationId: "RES-10245", reservationItemId: "RES-10245-itm-2", physicalRoomId: "fam-401", arrivalDate: "2026-08-20", departureDate: "2026-08-23", assignmentStatus: "Assigned", assignedAt: TODAY + "T10:20", assignedBy: "Hotel Admin", changeReason: "" },
       { id: "asn-4", propertyId: PROPERTY_ID, reservationId: "RES-10246", reservationItemId: "RES-10246-itm-1", physicalRoomId: "std-101", arrivalDate: "2026-08-22", departureDate: "2026-08-24", assignmentStatus: "Assigned", assignedAt: TODAY + "T11:41", assignedBy: "Hotel Admin", changeReason: "" },
-      { id: "asn-5", propertyId: PROPERTY_ID, reservationId: "RES-10247", reservationItemId: "RES-10247-itm-1", physicalRoomId: "fam-402", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 2), assignmentStatus: "Held", assignedAt: addDays(TODAY, -1) + "T08:05", assignedBy: "Hotel Admin", changeReason: "Tentative hold pending payment confirmation." },
-      { id: "asn-6", propertyId: PROPERTY_ID, reservationId: "RES-10248", reservationItemId: "RES-10248-itm-1", physicalRoomId: "std-103", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 3), assignmentStatus: "Held", assignedAt: TODAY + "T09:31", assignedBy: "Hotel Admin", changeReason: "" }
+      // holdExpiresAt demonstrates the temporary-hold mechanism (see releaseExpiredHolds):
+      // asn-5's expiry mirrors RES-10247's own paymentLinkExpiresAt (already in the past),
+      // so it self-heals — its physical room is auto-released the moment any page loads,
+      // demonstrating "automatic release after expiry" out of the box. asn-6 is given a
+      // same-day-but-later expiry so it demos as a still-active, not-yet-expired hold.
+      { id: "asn-5", propertyId: PROPERTY_ID, reservationId: "RES-10247", reservationItemId: "RES-10247-itm-1", physicalRoomId: "fam-402", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 2), assignmentStatus: "Held", assignedAt: addDays(TODAY, -1) + "T08:05", assignedBy: "Hotel Admin", changeReason: "Tentative hold pending payment confirmation.", holdExpiresAt: TODAY + "T08:07" },
+      { id: "asn-6", propertyId: PROPERTY_ID, reservationId: "RES-10248", reservationItemId: "RES-10248-itm-1", physicalRoomId: "std-103", arrivalDate: addDays(TODAY, 1), departureDate: addDays(TODAY, 3), assignmentStatus: "Held", assignedAt: TODAY + "T09:31", assignedBy: "Hotel Admin", changeReason: "", holdExpiresAt: TODAY + "T23:59" }
     ];
 
     // Room blocks: operational holds against a physical room independent of any
@@ -306,6 +311,20 @@
         { id: "rp2", name: "Flexible + Breakfast", roomTypeId: "dlx", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 120, currency: "USD", active: true },
         { id: "rp3", name: "Weekend Rate", roomTypeId: "fam", mealPlan: "Breakfast Included", startDate: TODAY, endDate: addDays(TODAY, 90), price: 150, currency: "USD", active: true }
       ],
+      // Real, configurable tax/fee engine (see computePricing) — replaces what used to be
+      // a hardcoded 4% tax + $20 fee scattered across new-reservation.html and
+      // reservation-detail.html. Seeded so the hotel-default-applied set (VAT + City
+      // Tourism Fee) reproduces that exact prior total, keeping existing seeded
+      // reservations' stored pricing snapshots numerically consistent with a fresh
+      // calculation. Municipality Tax and Service Charge are configured-but-inactive
+      // samples demonstrating a percentage tax and a percentage fee that aren't applied
+      // by default. `effectiveFrom`/`effectiveTo` (nullable) gate a charge to a date range.
+      taxesFees: [
+        { id: "tf-vat", name: "VAT", kind: "Tax", calcType: "Percentage", value: 4, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-muni", name: "Municipality Tax", kind: "Tax", calcType: "Percentage", value: 2, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-service", name: "Service Charge", kind: "Fee", calcType: "Percentage", value: 5, appliesByDefault: false, active: false, effectiveFrom: null, effectiveTo: null },
+        { id: "tf-tourism", name: "City Tourism Fee", kind: "Fee", calcType: "Fixed", value: 20, appliesByDefault: true, active: true, effectiveFrom: null, effectiveTo: null }
+      ],
       audit: [
         { ts: TODAY + "T08:05", actor: "Hotel Admin", action: "Reservation Created", details: "RES-10247 created via Travel Agency." },
         { ts: TODAY + "T08:07", actor: "Hotel Admin", action: "Payment Link Sent", details: "Payment link sent for RES-10247." },
@@ -321,29 +340,34 @@
   /* ---------------------------------------------------------------- */
   function getState() {
     var raw = localStorage.getItem(STORAGE_KEY);
+    var state, dirty;
     if (!raw) {
-      var seed = buildSeed();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
-      return seed;
+      state = buildSeed();
+      dirty = true;
+    } else {
+      try {
+        state = JSON.parse(raw);
+        // Migration: browsers with state saved before a field was introduced (e.g.
+        // bedConfigs, mealPlans, dateAdjustments) would otherwise crash every page
+        // that reads it. Backfill any missing top-level keys from a fresh seed
+        // without touching the user's existing reservations/edits.
+        var fresh = buildSeed();
+        dirty = false;
+        Object.keys(fresh).forEach(function (k) {
+          if (!(k in state)) { state[k] = fresh[k]; dirty = true; }
+        });
+      } catch (e) {
+        state = buildSeed();
+        dirty = true;
+      }
     }
-    try {
-      var parsed = JSON.parse(raw);
-      // Migration: browsers with state saved before a field was introduced (e.g.
-      // bedConfigs, mealPlans, dateAdjustments) would otherwise crash every page
-      // that reads it. Backfill any missing top-level keys from a fresh seed
-      // without touching the user's existing reservations/edits.
-      var fresh = buildSeed();
-      var migrated = false;
-      Object.keys(fresh).forEach(function (k) {
-        if (!(k in parsed)) { parsed[k] = fresh[k]; migrated = true; }
-      });
-      if (migrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-      return parsed;
-    } catch (e) {
-      var seed2 = buildSeed();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seed2));
-      return seed2;
-    }
+    // Temporary-hold expiry check runs on every read (see releaseExpiredHolds) — the
+    // simplest realistic simulation of "automatic release" available to a backend-less,
+    // localStorage-only prototype: no reservation ever holds a physical room past its
+    // holdExpiresAt for longer than the time until the next page load/read.
+    if (releaseExpiredHolds(state)) dirty = true;
+    if (dirty) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return state;
   }
   function setState(state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -356,6 +380,40 @@
     var s = getState();
     s.audit.unshift({ ts: nowIso(), actor: actor || "Hotel Admin", action: action, details: details });
     setState(s);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Temporary holds — a Held roomAssignment (Draft/Pending Payment           */
+  /* reservation) carries its own holdExpiresAt. Releasing it on expiry is    */
+  /* the physical-layer half of "automatic release after expiry"; nothing     */
+  /* else about the reservation record changes, so history is preserved.     */
+  /* ---------------------------------------------------------------- */
+  var HOLD_MINUTES = 30;
+  function holdExpiryFromNow() {
+    var d = new Date(nowIso() + ":00Z");
+    d.setUTCMinutes(d.getUTCMinutes() + HOLD_MINUTES);
+    return d.toISOString().slice(0, 16);
+  }
+  // Cancels any Held assignment whose holdExpiresAt has passed, restoring its room to
+  // availability. Guarded by the same assignmentStatus!=='Cancelled'-style idempotency
+  // every other release path in this codebase uses (see reservation-detail.html's
+  // cancellation handler) — re-running this against the same state a second time finds
+  // nothing left to release, so availability is never double-restored. Returns whether
+  // anything changed, so callers only persist when there's an actual change to save.
+  function releaseExpiredHolds(state) {
+    var now = nowIso();
+    var changed = false;
+    (state.roomAssignments || []).forEach(function (a) {
+      if (a.assignmentStatus !== "Held" || !a.holdExpiresAt || a.holdExpiresAt > now) return;
+      a.assignmentStatus = "Cancelled";
+      changed = true;
+      var res = (state.reservations || []).find(function (r) { return r.id === a.reservationId; });
+      if (res) {
+        var pr = (state.physicalRooms || []).find(function (p) { return p.id === a.physicalRoomId; });
+        res.activity.push({ ts: now, text: "Temporary hold on Room " + (pr ? pr.roomNumber : a.physicalRoomId) + " expired and was automatically released." });
+      }
+    });
+    return changed;
   }
 
   /* ---------------------------------------------------------------- */
@@ -404,6 +462,36 @@
     if (table[dateStr] != null) return table[dateStr];
     var rt = state.roomTypes.find(function (r) { return r.id === roomTypeId; });
     return rt ? rt.baseRate : 0;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Taxes & Fees engine — the single source of truth for tax/fee amounts,    */
+  /* replacing what used to be a hardcoded 4% tax + $20 fee duplicated across */
+  /* new-reservation.html and reservation-detail.html. See state.taxesFees.  */
+  /* ---------------------------------------------------------------- */
+  function taxFeeIsEffective(tf, dateStr) {
+    if (tf.effectiveFrom && dateStr < tf.effectiveFrom) return false;
+    if (tf.effectiveTo && dateStr > tf.effectiveTo) return false;
+    return true;
+  }
+  // roomCharges: pre-tax room subtotal for the whole stay. refDate: the date effective-date
+  // windows are checked against — callers pass the reservation's checkIn date. Only charges
+  // that are both `active` and `appliesByDefault` (this MVP has no per-reservation override —
+  // every reservation gets the hotel's default charge set) are included.
+  function computePricing(state, roomCharges, refDate) {
+    var date = refDate || TODAY;
+    var breakdown = [];
+    var taxAmount = 0, feeAmount = 0;
+    (state.taxesFees || []).forEach(function (tf) {
+      if (!tf.active || !tf.appliesByDefault) return;
+      if (!taxFeeIsEffective(tf, date)) return;
+      var amount = tf.calcType === "Percentage" ? Math.round(roomCharges * (tf.value / 100) * 100) / 100 : tf.value;
+      if (tf.kind === "Tax") taxAmount += amount; else feeAmount += amount;
+      breakdown.push({ id: tf.id, name: tf.name, kind: tf.kind, calcType: tf.calcType, value: tf.value, amount: amount });
+    });
+    taxAmount = Math.round(taxAmount * 100) / 100;
+    feeAmount = Math.round(feeAmount * 100) / 100;
+    return { taxAmount: taxAmount, feeAmount: feeAmount, total: roomCharges + taxAmount + feeAmount, breakdown: breakdown };
   }
 
   /* ---------------------------------------------------------------- */
@@ -476,6 +564,51 @@
   }
   function eligiblePhysicalRoomCount(state, roomTypeId, dateStr) {
     return eligiblePhysicalRooms(state, roomTypeId, dateStr).length;
+  }
+  // Active + sellable physical rooms of this type, independent of any date (blocks and
+  // assignments are date-specific and excluded here) — the physical-layer capacity ceiling
+  // that a manual sellable-inventory increase is not allowed to exceed (see
+  // availability-inventory.html's Adjust Inventory save handler).
+  function activeSellablePhysicalCount(state, roomTypeId) {
+    return physicalRoomsForType(state, roomTypeId).filter(function (pr) { return pr.isActive && pr.isSellable; }).length;
+  }
+  // A fuller, admin-facing accounting of why a room type's availability on one date is what
+  // it is — every input computeAvailability() folds into a single number, laid out
+  // separately: physical-layer capacity/blocks cross-referenced against the commercial
+  // layer's confirmed/held commitments, manual adjustment, and Stop Sell. Additive only —
+  // does not change computeAvailability()'s own formula or any caller of it.
+  function availabilityBreakdown(state, roomTypeId, dateStr) {
+    var rt = state.roomTypes.find(function (r) { return r.id === roomTypeId; });
+    var typeRooms = physicalRoomsForType(state, roomTypeId);
+    var activeSellablePhysical = typeRooms.filter(function (pr) { return pr.isActive && pr.isSellable; }).length;
+    var blockedPhysical = typeRooms.filter(function (pr) {
+      var blk = physicalRoomBlockOn(state, pr.id, dateStr);
+      return blk && blk.type !== "Other";
+    }).length;
+    var confirmedCommitted = 0, heldCommitted = 0;
+    (state.roomAssignments || []).forEach(function (a) {
+      if (a.assignmentStatus === "Cancelled") return;
+      if (dateStr < a.arrivalDate || dateStr >= a.departureDate) return;
+      var pr = state.physicalRooms.find(function (p) { return p.id === a.physicalRoomId; });
+      if (!pr || pr.roomTypeId !== roomTypeId) return;
+      if (a.assignmentStatus === "Assigned") confirmedCommitted++;
+      else if (a.assignmentStatus === "Held") heldCommitted++;
+    });
+    var manualAdjustment = dateAdjustmentFor(state, roomTypeId, dateStr);
+    var stopSellEntry = state.inventoryOverrides[roomTypeId + "|" + dateStr] || null;
+    var commercial = computeAvailability(state, roomTypeId, dateStr);
+    return {
+      roomTypeId: roomTypeId, date: dateStr,
+      activeSellablePhysical: activeSellablePhysical,
+      blockedPhysical: blockedPhysical,
+      confirmedCommitted: confirmedCommitted,
+      heldCommitted: heldCommitted,
+      configuredSellable: rt.sellable,
+      manualAdjustment: manualAdjustment,
+      stopSell: !!stopSellEntry,
+      stopSellReason: stopSellEntry ? stopSellEntry.reason : null,
+      finalAvailable: commercial.available
+    };
   }
   // Guards against confirming more room assignments than physically exist for the
   // stay — the physical-layer counterpart to validateAvailability's commercial check.
@@ -1316,6 +1449,12 @@
     bookedCount: bookedCount,
     isStopSell: isStopSell,
     rateFor: rateFor,
+    computePricing: computePricing,
+    activeSellablePhysicalCount: activeSellablePhysicalCount,
+    availabilityBreakdown: availabilityBreakdown,
+    HOLD_MINUTES: HOLD_MINUTES,
+    holdExpiryFromNow: holdExpiryFromNow,
+    releaseExpiredHolds: releaseExpiredHolds,
     physicalRoomsForType: physicalRoomsForType,
     isPhysicalRoomBlocked: isPhysicalRoomBlocked,
     isPhysicalRoomAssigned: isPhysicalRoomAssigned,

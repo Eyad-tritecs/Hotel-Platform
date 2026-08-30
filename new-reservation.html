@@ -441,9 +441,10 @@ document.getElementById('checkOut').addEventListener('change', function(){ wizar
 
 function pricingBreakdown(){
   var roomCharges = wizard.items.reduce(function(a,it){return a+itemTotal(it);},0);
-  var taxes = demoTaxOverride!=null ? demoTaxOverride : Math.round(roomCharges*0.04*100)/100;
-  var fees = wizard.items.length ? 20 : 0;
-  return {roomCharges:roomCharges, taxes:taxes, fees:fees, total:roomCharges+taxes+fees};
+  var p = PG.computePricing(s, roomCharges, wizard.checkIn);
+  var taxes = demoTaxOverride!=null ? demoTaxOverride : p.taxAmount;
+  var fees = wizard.items.length ? p.feeAmount : 0;
+  return {roomCharges:roomCharges, taxes:taxes, fees:fees, total:roomCharges+taxes+fees, breakdown:p.breakdown};
 }
 function renderPricing(){
   var p = pricingBreakdown();
@@ -726,6 +727,10 @@ function createReservation(mode){
   // reservations get a firm "Assigned" record; Draft/Pending Payment get a
   // tentative "Held" one, matching the Reservation/Payment status convention.
   var assignmentStatus = status==='Confirmed' ? 'Assigned' : 'Held';
+  // Held assignments (Draft/Pending Payment) carry a short temporary hold — released
+  // automatically if the reservation never gets confirmed/paid in time (see
+  // PG.releaseExpiredHolds, checked on every PG.getState() call).
+  var holdExpiresAt = assignmentStatus==='Held' ? PG.holdExpiryFromNow() : null;
   var assignedRoomNumbers = [];
   wizard.items.forEach(function(it, i){
     it.assignedRoomIds.forEach(function(roomId){
@@ -736,10 +741,12 @@ function createReservation(mode){
         id: 'asn-' + Date.now() + '-' + st.roomAssignments.length,
         propertyId: st.hotel.propertyCode, reservationId: id, reservationItemId: roomItems[i].id,
         physicalRoomId: roomId, arrivalDate: wizard.checkIn, departureDate: wizard.checkOut,
-        assignmentStatus: assignmentStatus, assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: ''
+        assignmentStatus: assignmentStatus, assignedAt: PG.nowIso(), assignedBy: 'Hotel Admin', changeReason: '',
+        holdExpiresAt: holdExpiresAt
       });
     });
   });
+  if (holdExpiresAt) reservation.activity.push({ts: PG.nowIso(), text: 'Room hold set to expire at ' + holdExpiresAt.slice(11) + ' if not confirmed.'});
   reservation.activity.push({ts: PG.nowIso(), text: 'Room(s) assigned: ' + assignedRoomNumbers.join(', ') + '.'});
 
   PG.setState(st);

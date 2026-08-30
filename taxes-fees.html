@@ -7,30 +7,167 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .example-row{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;}
+  .example-row .l{color:var(--pg-gray-600);}
+  .example-row .v{font-weight:600;}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
 var page = PG.mount("taxes", ["Settings", "Taxes & Fees"]);
-var html = '';
-html += '<div class="pg-page-head"><div><h1>Taxes &amp; Fees</h1><div class="sub">Configured charges applied to reservations at this hotel</div></div></div>';
-html += '<div class="pg-lightweight-note">Tax and fee configuration reuses standard platform capabilities and is kept lightweight in this MVP prototype. Rates shown below are sample values and are not applied to pricing calculations elsewhere in this prototype.</div>';
+var s = PG.getState();
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
 
-var rows = [
-  {name:'VAT', type:'Percentage', value:'16%', appliesTo:'Room Rate', status:'Active'},
-  {name:'Municipality Tax', type:'Percentage', value:'5%', appliesTo:'Room Rate', status:'Active'},
-  {name:'Service Charge', type:'Percentage', value:'10%', appliesTo:'Room Rate', status:'Active'},
-  {name:'City Tourism Fee', type:'Fixed / Night', value:'$2.00', appliesTo:'Per Room / Night', status:'Inactive'}
-];
+function valueLabel(tf){ return tf.calcType==='Percentage' ? tf.value+'%' : PG.fmtMoney(tf.value); }
+function effectiveLabel(tf){
+  if (!tf.effectiveFrom && !tf.effectiveTo) return 'Always';
+  return (tf.effectiveFrom ? PG.fmtDateShort(tf.effectiveFrom) : '…') + ' – ' + (tf.effectiveTo ? PG.fmtDateShort(tf.effectiveTo) : '…');
+}
 
-var html2 = '<div class="card"><div class="card-header"><div><h3>Configured Charges</h3></div></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr><th>Name</th><th>Type</th><th>Value</th><th>Applies To</th><th>Status</th></tr></thead><tbody>';
-rows.forEach(function(r){
-  html2 += '<tr><td style="font-weight:600;">'+r.name+'</td><td>'+r.type+'</td><td>'+r.value+'</td><td>'+r.appliesTo+'</td><td>'+(r.status==='Active'?'<span class="badge badge-green"><span class="badge-dot"></span>Active</span>':'<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>')+'</td></tr>';
-});
-html2 += '</tbody></table></div></div></div>';
+function render(){
+  s = PG.getState();
+  var html = '';
+  html += '<div class="pg-page-head"><div><h1>Taxes &amp; Fees</h1><div class="sub">Charges applied to reservation pricing at Palestine Grand Hotel</div></div>' +
+    (CAN_MANAGE ? '<div class="pg-actions"><button class="btn btn-primary" id="addBtn">+ Add Charge</button></div>' : '') +
+  '</div>';
 
-page.innerHTML = html + html2;
+  html += '<div class="help-note" style="margin-bottom:18px;">A charge applies to every reservation\'s pricing only when both <b>Active</b> and <b>Applies by Default</b> are set — this MVP has one hotel-level default charge set, no per-reservation override. See <b>PG.computePricing()</b> for the calculation used everywhere pricing is shown (New Reservation, Reservation Detail).</div>';
+
+  html += '<div class="row"><div class="col" style="flex:2;">';
+  html += '<div class="card"><div class="card-header"><h3>Configured Charges</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+    '<th>Name</th><th>Kind</th><th>Calc Type</th><th class="num">Value</th><th>Applies by Default</th><th>Effective</th><th>Status</th>'+(CAN_MANAGE?'<th></th>':'')+
+  '</tr></thead><tbody id="tfBody"></tbody></table></div></div></div>';
+  html += '</div>';
+
+  html += '<div class="col"><div class="card" style="position:sticky;top:80px;"><div class="card-header"><h3>Example Pricing Breakdown</h3><div class="desc">$100 room subtotal, today\'s default charge set</div></div><div class="card-body" id="exampleBody"></div></div></div>';
+  html += '</div>';
+
+  page.innerHTML = html;
+  renderTable();
+  renderExample();
+  if (CAN_MANAGE) document.getElementById('addBtn').addEventListener('click', function(){ openTfDrawer(null); });
+}
+
+function renderTable(){
+  var body = document.getElementById('tfBody');
+  if (!s.taxesFees.length){ body.innerHTML = '<tr><td colspan="8"><div class="empty-state">No taxes or fees configured yet.</div></td></tr>'; return; }
+  body.innerHTML = s.taxesFees.map(function(tf){
+    return '<tr>' +
+      '<td style="font-weight:600;">'+PG.esc(tf.name)+'</td>' +
+      '<td>'+(tf.kind==='Tax' ? '<span class="badge badge-blue"><span class="badge-dot"></span>Tax</span>' : '<span class="badge badge-purple"><span class="badge-dot"></span>Fee</span>')+'</td>' +
+      '<td class="text-sm">'+tf.calcType+'</td>' +
+      '<td class="num">'+valueLabel(tf)+'</td>' +
+      '<td>'+(tf.appliesByDefault ? '<span class="badge badge-green"><span class="badge-dot"></span>Yes</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>No</span>')+'</td>' +
+      '<td class="text-sm">'+effectiveLabel(tf)+'</td>' +
+      '<td>'+(tf.active ? '<span class="badge badge-green"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>')+'</td>' +
+      (CAN_MANAGE ? '<td><button class="btn btn-light btn-sm edit-tf" data-id="'+tf.id+'">Edit</button></td>' : '') +
+    '</tr>';
+  }).join('');
+  if (CAN_MANAGE) body.querySelectorAll('.edit-tf').forEach(function(el){ el.addEventListener('click', function(){ openTfDrawer(el.dataset.id); }); });
+}
+
+function renderExample(){
+  var p = PG.computePricing(s, 100, PG.TODAY);
+  var box = document.getElementById('exampleBody');
+  var rows = exRow('Room Subtotal', PG.fmtMoney(100));
+  if (p.breakdown.length){
+    p.breakdown.forEach(function(b){ rows += exRow(b.name + ' (' + (b.calcType==='Percentage' ? b.value+'%' : 'fixed') + ')', PG.fmtMoney(b.amount)); });
+  } else {
+    rows += '<div class="muted text-sm" style="padding:6px 0;">No charges are currently Active + Applies by Default.</div>';
+  }
+  rows += '<div class="divider"></div>' + exRow('Taxes', PG.fmtMoney(p.taxAmount)) + exRow('Fees', PG.fmtMoney(p.feeAmount));
+  rows += '<div class="divider"></div><div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;"><span>Total</span><span>'+PG.fmtMoney(p.total)+'</span></div>';
+  box.innerHTML = rows;
+}
+function exRow(l,v){ return '<div class="example-row"><span class="l">'+l+'</span><span class="v">'+v+'</span></div>'; }
+
+/* ================================================================== */
+/* Add / Edit Charge drawer — percentage tax, fixed fee, percentage fee, */
+/* hotel-level default applicability, and optional effective dates.     */
+/* ================================================================== */
+var tfDrawer = null;
+if (CAN_MANAGE){
+  tfDrawer = document.createElement('div');
+  tfDrawer.className = 'pg-drawer-overlay';
+  tfDrawer.id = 'tfDrawer';
+  document.body.appendChild(tfDrawer);
+}
+function openTfDrawer(editId){
+  var tf = editId ? s.taxesFees.find(function(x){return x.id===editId;}) : null;
+  tfDrawer.innerHTML = '<div class="pg-drawer">' +
+    '<div class="pg-drawer-header"><h3>'+(tf?'Edit Charge':'Add Charge')+'</h3><button class="pg-modal-close" id="tfClose">&times;</button></div>' +
+    '<div class="pg-drawer-body">' +
+      '<div class="form-group"><label class="form-label">Name <span class="opt">(required)</span></label><input class="form-control" id="tf-name" value="'+(tf?PG.esc(tf.name):'')+'"><div class="field-error" id="tf-err-name"></div></div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Kind</label><select class="form-control" id="tf-kind"><option value="Tax"'+(tf&&tf.kind==='Tax'?' selected':'')+'>Tax</option><option value="Fee"'+(tf&&tf.kind==='Fee'?' selected':'')+'>Fee</option></select></div>' +
+        '<div class="form-group"><label class="form-label">Calculation Type</label><select class="form-control" id="tf-calc"><option value="Percentage"'+(tf&&tf.calcType==='Percentage'?' selected':'')+'>Percentage of room subtotal</option><option value="Fixed"'+(tf&&tf.calcType==='Fixed'?' selected':'')+'>Fixed amount per stay</option></select></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label" id="tf-value-label">Value</label><input type="number" min="0" step="0.01" class="form-control" id="tf-value" value="'+(tf?tf.value:'')+'"><div class="field-error" id="tf-err-value"></div></div>' +
+      '<div class="grid-2">' +
+        '<div class="form-group"><label class="form-label">Effective From <span class="opt">(optional)</span></label><input type="date" class="form-control" id="tf-from" value="'+(tf&&tf.effectiveFrom?tf.effectiveFrom:'')+'"></div>' +
+        '<div class="form-group"><label class="form-label">Effective To <span class="opt">(optional)</span></label><input type="date" class="form-control" id="tf-to" value="'+(tf&&tf.effectiveTo?tf.effectiveTo:'')+'"></div>' +
+      '</div>' +
+      '<div class="form-check"><input type="checkbox" id="tf-default"'+(!tf||tf.appliesByDefault?' checked':'')+'><label class="form-label" style="margin:0;" for="tf-default">Applies by default (hotel-level)</label></div>' +
+      '<div class="form-check" style="margin-top:10px;"><input type="checkbox" id="tf-active"'+(!tf||tf.active?' checked':'')+'><label class="form-label" style="margin:0;" for="tf-active">Active</label></div>' +
+      '<div class="help-note" style="margin-top:14px;">Only charges that are both Active and Applies by Default are included in pricing anywhere in the app.</div>' +
+    '</div>' +
+    '<div class="pg-drawer-footer"><button class="btn btn-light" id="tfCancel">Cancel</button><button class="btn btn-primary" id="tfSave">'+(tf?'Save Changes':'Add Charge')+'</button></div>' +
+  '</div>';
+  PG.enhanceSelects(tfDrawer);
+
+  function syncValueLabel(){
+    document.getElementById('tf-value-label').textContent = document.getElementById('tf-calc').value==='Percentage' ? 'Value (%)' : 'Value ($, per stay)';
+  }
+  syncValueLabel();
+  document.getElementById('tf-calc').addEventListener('change', syncValueLabel);
+  document.getElementById('tfClose').addEventListener('click', function(){ PG.closeModal('tfDrawer'); });
+  document.getElementById('tfCancel').addEventListener('click', function(){ PG.closeModal('tfDrawer'); });
+  document.getElementById('tfSave').addEventListener('click', function(){ saveTf(editId); });
+  PG.openModal('tfDrawer');
+}
+function saveTf(editId){
+  document.getElementById('tf-err-name').textContent = '';
+  document.getElementById('tf-err-value').textContent = '';
+  var name = document.getElementById('tf-name').value.trim();
+  var value = parseFloat(document.getElementById('tf-value').value);
+  var hasError = false;
+  if (!name){ document.getElementById('tf-err-name').textContent = 'Name is required.'; hasError = true; }
+  if (!(value >= 0)){ document.getElementById('tf-err-value').textContent = 'Enter a value of 0 or more.'; hasError = true; }
+  if (hasError){ PG.toast('Please fix the highlighted fields.', 'danger'); return; }
+
+  var data = {
+    name: name,
+    kind: document.getElementById('tf-kind').value,
+    calcType: document.getElementById('tf-calc').value,
+    value: value,
+    effectiveFrom: document.getElementById('tf-from').value || null,
+    effectiveTo: document.getElementById('tf-to').value || null,
+    appliesByDefault: document.getElementById('tf-default').checked,
+    active: document.getElementById('tf-active').checked
+  };
+  var st = PG.getState();
+  var auditText;
+  if (editId){
+    var idx = st.taxesFees.findIndex(function(x){return x.id===editId;});
+    var before = st.taxesFees[idx];
+    st.taxesFees[idx] = Object.assign({}, before, data);
+    auditText = data.name + ' updated — ' + (data.calcType==='Percentage' ? data.value+'%' : PG.fmtMoney(data.value)) + ' ' + data.kind + ', ' + (data.active?'Active':'Inactive') + ', Applies by Default: ' + (data.appliesByDefault?'Yes':'No') + '.';
+  } else {
+    var id = 'tf-' + Date.now();
+    st.taxesFees.push(Object.assign({id:id}, data));
+    auditText = data.name + ' added as a new ' + data.kind.toLowerCase() + ' — ' + (data.calcType==='Percentage' ? data.value+'%' : PG.fmtMoney(data.value)) + ', ' + (data.active?'Active':'Inactive') + ', Applies by Default: ' + (data.appliesByDefault?'Yes':'No') + '.';
+  }
+  PG.setState(st);
+  PG.addAudit('Tax/Fee Changed', auditText);
+  PG.toast(editId ? 'Charge updated.' : 'Charge added.', 'success');
+  PG.closeModal('tfDrawer');
+  render();
+}
+
+render();
 </script>
 </body>
 </html>

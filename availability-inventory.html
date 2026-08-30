@@ -102,6 +102,7 @@ function renderGrid(){
   });
 }
 
+var breakdownOpen = false;
 function renderDetail(){
   var card = document.getElementById('detailCard');
   var stopBtn = document.getElementById('stopSellBtn');
@@ -121,10 +122,33 @@ function renderDetail(){
     row('Authorized Adjustments', (adjustments>0?'+':'')+adjustments) +
     row('Committed Reservations', a.booked) +
     row('Available Quantity', a.available) +
-    row('Stop Sell', a.stopSell ? '<span class="badge badge-red"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>');
+    row('Stop Sell', a.stopSell ? '<span class="badge badge-red"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>') +
+    '<div style="margin-top:10px;"><button class="btn btn-outline btn-sm" id="breakdownToggle">'+(breakdownOpen?'Hide Breakdown':'View Breakdown')+'</button></div>' +
+    '<div id="breakdownPanel"></div>';
 
   stopBtn.disabled = a.stopSell;
   reopenBtn.disabled = !a.stopSell;
+
+  document.getElementById('breakdownToggle').addEventListener('click', function(){ breakdownOpen = !breakdownOpen; renderDetail(); });
+  if (breakdownOpen) renderBreakdownPanel(rt.id, selected.date);
+}
+// "View Breakdown" — the full physical-room-connected accounting behind the single
+// Available Quantity number above: physical capacity, blocks, confirmed vs. held
+// commitments, manual adjustment, and Stop Sell, ending at the same final figure.
+function renderBreakdownPanel(roomTypeId, dateStr){
+  var b = PG.availabilityBreakdown(s, roomTypeId, dateStr);
+  document.getElementById('breakdownPanel').innerHTML =
+    '<div class="help-note" style="margin:10px 0;">Sellable inventory (commercial layer) and physical rooms (operational layer) are tracked separately — see <a href="physical-rooms.html">Physical Rooms</a>. This breakdown cross-references both.</div>' +
+    row('Active &amp; Sellable Physical Rooms', b.activeSellablePhysical) +
+    row('Physical-Room Blocks Overlapping This Date', b.blockedPhysical + (b.blockedPhysical ? ' <a href="operations-calendar.html">(view on Calendar)</a>' : '')) +
+    '<div class="divider"></div>' +
+    row('Configured Sellable (Room Type)', b.configuredSellable) +
+    row('Manual Inventory Adjustment', (b.manualAdjustment>0?'+':'')+b.manualAdjustment) +
+    row('Confirmed Reservation Commitments', b.confirmedCommitted) +
+    row('Temporary Reservation Holds', b.heldCommitted) +
+    row('Stop Sell', b.stopSell ? '<span class="badge badge-red"><span class="badge-dot"></span>Active'+(b.stopSellReason?' — '+PG.esc(b.stopSellReason):'')+'</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>') +
+    '<div class="divider"></div>' +
+    '<div class="detail-row"><span class="muted" style="font-weight:700;">Final Sellable Availability</span><span class="v" style="font-size:16px;">'+b.finalAvailable+'</span></div>';
 }
 function row(label, value){
   return '<div class="detail-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>';
@@ -342,6 +366,21 @@ document.getElementById('adjSave').addEventListener('click', function(){
   var st = PG.getState();
   var rt = st.roomTypes.find(function(r){return r.id===rtId;});
   var typeLabel = {increase:'Increase Sellable Inventory', decrease:'Decrease Sellable Inventory', block:'Block Inventory', restore:'Restore Inventory'}[type];
+
+  // No overbooking in this MVP: a normal manual increase can never push sellable
+  // inventory past how many physical rooms of this type actually exist (active + sellable).
+  if (type==='increase'){
+    var physicalCap = PG.activeSellablePhysicalCount(st, rtId);
+    var overCapDate = dates.find(function(d){
+      var key = rtId + '|' + d;
+      var wouldBe = rt.sellable + (st.dateAdjustments[key]||0) + qty;
+      return wouldBe > physicalCap;
+    });
+    if (overCapDate){
+      PG.toast('Cannot increase sellable inventory past the ' + physicalCap + ' active, sellable physical ' + rt.name + ' room(s) (' + PG.fmtDateShort(overCapDate) + '). Reduce the quantity or activate more physical rooms first.', 'danger');
+      return;
+    }
+  }
 
   dates.forEach(function(d){
     var key = rtId + '|' + d;

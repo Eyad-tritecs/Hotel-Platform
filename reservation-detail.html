@@ -107,6 +107,7 @@ function renderAssignmentBlock(l){
         '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-weight:700;font-size:13px;">'+(pr ? 'Room '+PG.esc(pr.roomNumber)+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span>' : 'Room no longer exists')+'</span>'+assignBadge(a.assignmentStatus)+'</div>' +
         (pr ? '<div style="margin-top:6px;">'+roomAttrChips(pr)+'</div>' : '') +
         '<div class="muted text-sm" style="margin-top:6px;">'+PG.fmtDateShort(a.arrivalDate)+' &ndash; '+PG.fmtDateShort(a.departureDate)+'</div>' +
+        (a.assignmentStatus==='Held' && a.holdExpiresAt ? '<div class="text-sm" style="margin-top:6px;">Temporary hold — expires '+a.holdExpiresAt.slice(11)+' (reservation '+r.id+') unless confirmed. Released automatically if not.</div>' : '') +
         (needsAttention ? '<div class="text-sm" style="color:var(--pg-danger);font-weight:600;margin-top:6px;">&#9888; Needs Attention — no longer eligible for these dates. Choose a replacement.</div>' : '') +
       '</div>' +
       (canManage() ? '<button class="btn btn-outline btn-sm change-room-btn" data-assignment="'+a.id+'" data-item="'+l.itemId+'" data-rt="'+l.roomTypeId+'">Change Room</button>' : '') +
@@ -126,8 +127,8 @@ function renderAssignmentBlock(l){
 // nothing about rooms, dates, or pricing can change once a reservation reaches them.
 function canManage(){ return CAN_MANAGE && r.status!=='Cancelled' && r.status!=='Completed' && r.status!=='No Show'; }
 function roomCharges(){ return lines().reduce(function(a,l){return a+l.subtotal;},0); }
-function taxAmount(){ return r.taxAmount != null ? r.taxAmount : Math.round(roomCharges()*0.04*100)/100; }
-function feeAmount(){ return r.feeAmount != null ? r.feeAmount : (r.rooms.length ? 20 : 0); }
+function taxAmount(){ return r.taxAmount != null ? r.taxAmount : (r.rooms.length ? PG.computePricing(s, roomCharges(), r.checkIn).taxAmount : 0); }
+function feeAmount(){ return r.feeAmount != null ? r.feeAmount : (r.rooms.length ? PG.computePricing(s, roomCharges(), r.checkIn).feeAmount : 0); }
 function total(){ return roomCharges() + taxAmount() + feeAmount(); }
 
 function render(){
@@ -307,6 +308,13 @@ function openChangeRoomForAssignment(assignmentId, itemId, roomTypeId){
     }
   });
 }
+// A Held assignment's temporary hold tracks the reservation's own payment-link expiry
+// once one has been sent, so the physical hold and the payment deadline move together;
+// otherwise it gets a fresh short window (PG.HOLD_MINUTES) from right now.
+function holdExpiryForReservation(){
+  if (r.paymentLinkExpiresAt && r.paymentStatus==='Link Sent') return r.paymentLinkExpiresAt;
+  return PG.holdExpiryFromNow();
+}
 function openAssignRoomFor(itemId, roomTypeId){
   PG.renderChangeRoomDrawer({
     roomTypeId: roomTypeId, checkIn: r.checkIn, checkOut: r.checkOut,
@@ -325,7 +333,7 @@ function openAssignRoomFor(itemId, roomTypeId){
       persistAssignmentChange(function(st){
         st.roomAssignments.push({id:'asn-'+Date.now(), propertyId: st.hotel.propertyCode, reservationId: r.id, reservationItemId: itemId,
           physicalRoomId: newRoomId, arrivalDate: r.checkIn, departureDate: r.checkOut, assignmentStatus: assignmentStatus,
-          assignedAt: PG.nowIso(), assignedBy: ACTOR, changeReason: ''});
+          assignedAt: PG.nowIso(), assignedBy: ACTOR, changeReason: '', holdExpiresAt: assignmentStatus==='Held' ? holdExpiryForReservation() : null});
       }, 'Room Assigned', r.id + ' — room ' + pr.roomNumber + ' assigned.');
     }
   });
@@ -393,15 +401,12 @@ function renderPaymentActions(){
     PG.toast('Payment link copied to clipboard.', 'success');
   });
   if (b=document.getElementById('sendLinkBtn')) b.addEventListener('click', function(){ r.activity.push({ts:PG.nowIso(), text:'Payment link sent to guest.'}); save('Payment Link Sent', r.id + ' — payment link sent to guest.'); });
-  if (b=document.getElementById('resendLinkBtn')) b.addEventListener('click', function(){ r.paymentLinkExpiresAt = PG.nowIso(); r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest.'}); save('Payment Link Resent', r.id + ' — payment link resent.'); });
-  if (b=document.getElementById('quickResendBtn')) b.addEventListener('click', function(){
-    r.paymentLinkUrl = 'https://pay.example.com/' + r.id;
-    r.paymentLinkGeneratedAt = PG.nowIso();
+  if (b=document.getElementById('resendLinkBtn')) b.addEventListener('click', function(){
     var expiryDate = new Date(PG.nowIso() + ':00Z');
     expiryDate.setUTCHours(expiryDate.getUTCHours() + 24);
     r.paymentLinkExpiresAt = expiryDate.toISOString().slice(0,16);
-    transition('Link Sent', 'Pending Payment', 'Payment link resent to guest with a new 24-hour expiry.');
-    save('Payment Link Resent', r.id + ' — payment link resent with a new expiry.');
+    r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest with a new 24-hour expiry.'});
+    save('Payment Link Resent', r.id + ' — payment link resent with a new expiry.', true);
   });
   if (b=document.getElementById('markPaid')) b.addEventListener('click', function(){
     r.paymentPaidAt = PG.nowIso();
@@ -455,7 +460,7 @@ if (r && r.paymentMethod==='Payment Link'){
     if (viaSms) via.push('SMS');
     r.activity.push({ts: PG.nowIso(), text: 'Payment Link sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.'});
     PG.closeModal('genLinkModal');
-    save('Payment Link Sent', r.id + ' — payment link generated and sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.');
+    save('Payment Link Sent', r.id + ' — payment link generated and sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.', true);
   });
 }
 function openGenLinkModal(){ PG.openModal('genLinkModal'); }
@@ -465,10 +470,16 @@ function transition(paymentStatus, status, note){
   r.status = status;
   r.activity.push({ts: PG.nowIso(), text: note});
 }
-function save(auditAction, auditDetails){
+function save(auditAction, auditDetails, syncHoldsToLink){
   var st = PG.getState();
   var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
   st.reservations[idx] = r;
+  // Keep the physical-room temporary hold in step with the payment link that governs
+  // it — generating/resending a link is the moment the guest's payment deadline
+  // (re)starts, so the room hold should expire at the same time, not drift separately.
+  if (syncHoldsToLink && r.paymentLinkExpiresAt){
+    st.roomAssignments.forEach(function(a){ if (a.reservationId===r.id && a.assignmentStatus==='Held') a.holdExpiresAt = r.paymentLinkExpiresAt; });
+  }
   PG.setState(st);
   PG.addAudit(auditAction, auditDetails);
   PG.toast(auditDetails, 'success');
@@ -691,8 +702,9 @@ function computeEditPlan(){
     it.subtotal = sub;
   });
   var roomCharges = items.reduce(function(a,it){return a+it.subtotal;},0);
-  var taxes = Math.round(roomCharges*0.04*100)/100;
-  var fees = items.length ? 20 : 0;
+  var pricing = PG.computePricing(s, roomCharges, checkIn);
+  var taxes = items.length ? pricing.taxAmount : 0;
+  var fees = items.length ? pricing.feeAmount : 0;
   var grandTotal = roomCharges+taxes+fees;
   var ok = validDates && items.every(function(it){ return it.avail.ok && it.shortfall===0; });
   return { items: items, roomCharges: roomCharges, taxes: taxes, fees: fees, total: grandTotal, oldTotal: total(), ok: ok, validDates: validDates };
@@ -785,6 +797,7 @@ function saveEdit(plan){
     liveR.checkIn = editState.checkIn;
     liveR.checkOut = editState.checkOut;
     var assignmentStatus = liveR.status==='Confirmed' ? 'Assigned' : 'Held';
+    var newHoldExpiresAt = assignmentStatus==='Held' ? holdExpiryForReservation() : null;
     var asnCounter = 0;
     plan.items.forEach(function(pi){
       var room = liveR.rooms.find(function(x){return x.id===pi.itemId;});
@@ -805,7 +818,7 @@ function saveEdit(plan){
         asnCounter++;
         st.roomAssignments.push({id:'asn-'+Date.now()+'-'+asnCounter, propertyId: st.hotel.propertyCode, reservationId: liveR.id, reservationItemId: pi.itemId,
           physicalRoomId: rid, arrivalDate: editState.checkIn, departureDate: editState.checkOut, assignmentStatus: assignmentStatus,
-          assignedAt: PG.nowIso(), assignedBy: ACTOR, changeReason: 'Reservation edited'});
+          assignedAt: PG.nowIso(), assignedBy: ACTOR, changeReason: 'Reservation edited', holdExpiresAt: newHoldExpiresAt});
       });
     });
     liveR.taxAmount = plan.taxes;
