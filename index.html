@@ -83,12 +83,27 @@ active(s.reservations).forEach(function(r){
     if (hoursLeft>0 && hoursLeft<=6){
       var mins = Math.round(hoursLeft*60);
       alerts.push({sev:'danger', icon:'&#9200;', title:'Payment Link Expiring', desc: r.id+' — '+cust(r).name+' — expires in '+(mins>=60?Math.round(mins/60)+'h':mins+'m'),
-        primary:{label:'View Payment', href:'reservation-detail.html?id='+r.id}, dismissable:false});
+        primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
     }
   }
   if (r.paymentStatus==='Failed'){
     alerts.push({sev:'danger', icon:'&#9888;', title:'Failed Payment Needs Follow-up', desc: r.id+' — '+cust(r).name+' — payment attempt failed',
-      primary:{label:'View Reservation', href:'reservation-detail.html?id='+r.id}, dismissable:false});
+      primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
+  }
+  if (r.paymentStatus==='Expired'){
+    alerts.push({sev:'warning', icon:'&#8987;', title:'Payment Link Expired', desc: r.id+' — '+cust(r).name+' — link expired without payment',
+      primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
+  }
+  if (r.paymentStatus==='Refund Pending'){
+    alerts.push({sev:'danger', icon:'&#8617;', title:'Refund Pending', desc: r.id+' — '+cust(r).name+' — refund needs to be recorded',
+      primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:false});
+  }
+  if (r.paymentStatus==='Payment Required'){
+    var ageH = (nowMs - new Date(r.createdAt+':00').getTime())/3600000;
+    if (ageH>24){
+      alerts.push({sev:'warning', icon:'&#128179;', title:'Payment Link Not Yet Sent', desc: r.id+' — '+cust(r).name+' — payment required for over 24 hours',
+        primary:{label:'View Payment', href:'payments.html?id='+r.id}, dismissable:true, dedupeKey:'payreq-'+r.id});
+    }
   }
 });
 PG.dateRange(T, PG.addDays(T,7)).forEach(function(d){

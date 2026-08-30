@@ -7,6 +7,26 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .filters-grid .form-group{margin-bottom:0;}
+  .filters-grid .form-label{font-size:11px;}
+  @media (max-width:1300px){.filters-grid{grid-template-columns:repeat(3,1fr);}}
+  @media (max-width:800px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+  .pd-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--pg-gray-200);font-size:13px;}
+  .pd-row:last-child{border-bottom:none;}
+  .pd-row .v{font-weight:700;text-align:right;}
+  .pd-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-500);margin:18px 0 8px;}
+  .pd-section-title:first-child{margin-top:0;}
+  .pd-timeline{position:relative;padding-left:20px;}
+  .pd-timeline::before{content:"";position:absolute;left:4px;top:4px;bottom:4px;width:2px;background:var(--pg-gray-200);}
+  .pd-t-item{position:relative;padding-bottom:14px;}
+  .pd-t-item:last-child{padding-bottom:0;}
+  .pd-t-item::before{content:"";position:absolute;left:-20px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--pg-primary);border:2px solid #fff;box-shadow:0 0 0 1px var(--pg-primary);}
+  .pd-t-item.warn::before{background:var(--pg-danger);box-shadow:0 0 0 1px var(--pg-danger);}
+  .pd-t-time{font-size:11px;color:var(--pg-gray-500);}
+  .pd-t-text{font-size:12.5px;color:var(--pg-gray-800);margin-top:2px;}
+</style>
 </head>
 <body>
 <div id="pg-app"></div>
@@ -14,18 +34,25 @@
 <script>
 var page = PG.mount("payments", ["Payments", "Payments"]);
 var s = PG.getState();
+var CAN_MANAGE = (PG.CURRENT_ROLE === 'Hotel Admin' || PG.CURRENT_ROLE === 'Platform Super Admin');
+var METHODS = ['Pay on Arrival', 'Payment Link'];
+var STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
 
 function total(r){
   var n = PG.dateRange(r.checkIn, r.checkOut);
   var t = 0;
   r.rooms.forEach(function(room){ n.forEach(function(d){ t += PG.rateFor(s, room.roomTypeId, d) * room.qty; }); });
-  return t;
+  return t + (r.taxAmount||0) + (r.feeAmount||0);
 }
+function custOf(r){ return s.customers.find(function(c){return c.id===r.customerId;}); }
+function paymentRef(r){ return r.transactionRef || '—'; }
+function lastTouched(r){ return r.activity && r.activity.length ? r.activity[r.activity.length-1].ts : r.createdAt; }
+
+var filters = { q:'', status:'All', method:'All', from:'', to:'' };
 
 var counts = {};
-['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'].forEach(function(k){counts[k]=0;});
+STATUSES.forEach(function(k){counts[k]=0;});
 s.reservations.forEach(function(r){ counts[r.paymentStatus] = (counts[r.paymentStatus]||0)+1; });
-
 var paidTotal = s.reservations.filter(function(r){return r.paymentStatus==='Paid';}).reduce(function(a,r){return a+total(r);},0);
 var awaiting = s.reservations.filter(function(r){return r.paymentStatus==='Payment Required'||r.paymentStatus==='Link Sent';}).length;
 
@@ -39,48 +66,253 @@ html += '<div class="kpi"><div class="kpi-label">Pay on Arrival</div><div class=
 html += '<div class="kpi"><div class="kpi-label">Failed / Expired</div><div class="kpi-value">'+(counts['Failed']+counts['Expired'])+'</div><div class="kpi-note">Needs a new payment link</div></div>';
 html += '</div>';
 
-html += '<div class="card"><div class="card-header"><div><h3>All Payments</h3></div>' +
-  '<select class="form-control" id="payStatusFilter" style="max-width:220px;"><option value="All">All Statuses</option>' +
-    ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'].map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('') +
-  '</select>' +
-'</div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-  '<th>Reservation</th><th>Guest</th><th>Method</th><th>Status</th><th>Reservation Status</th><th class="num">Amount</th><th></th>' +
+html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
+  '<input class="form-control" id="searchBox" placeholder="Search reservation #, guest, or payment reference">' +
+  '<div class="filters-grid">' +
+    '<div class="form-group"><label class="form-label">STATUS</label><select class="form-control" id="f-status"><option value="All">All Statuses</option>' +
+      STATUSES.map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('') +
+    '</select></div>' +
+    '<div class="form-group"><label class="form-label">METHOD</label><select class="form-control" id="f-method"><option value="All">All Methods</option>' +
+      METHODS.map(function(m){return '<option value="'+m+'">'+m+'</option>';}).join('') +
+    '</select></div>' +
+    '<div class="form-group"><label class="form-label">CREATED FROM</label><input type="date" class="form-control" id="f-from"></div>' +
+    '<div class="form-group"><label class="form-label">CREATED TO</label><input type="date" class="form-control" id="f-to"></div>' +
+    '<div class="form-group"><label class="form-label">PROPERTY</label><select class="form-control" id="f-property" disabled><option>'+PG.esc(s.hotel.name)+'</option></select></div>' +
+  '</div>' +
+  '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+    '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+    '<span class="muted text-sm" id="resultCount"></span>' +
+  '</div>' +
+'</div></div>';
+
+html += '<div class="card"><div class="card-header"><h3>All Payments</h3></div><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
+  '<th>Payment Ref</th><th>Reservation</th><th>Guest</th><th>Method</th><th class="num">Amount</th><th>Status</th><th>Created</th><th>Updated</th><th></th>' +
   '</tr></thead><tbody id="payBody"></tbody></table></div></div></div>';
 
-html += '<div class="pg-lightweight-note">Payment collection in the MVP is limited to two manual methods: Pay on Arrival and Payment Link. Card-on-file, refund automation, and payment gateway reconciliation are out of scope for this pilot.</div>';
+html += '<div class="pg-lightweight-note">Payment collection in the MVP is limited to two manual methods: Pay on Arrival and Payment Link. Card-on-file, split tender, settlement reconciliation, chargebacks, and accounting exports are out of scope for this pilot — refunds are recorded as a full Refund Pending → Refunded status change only.</div>';
 
 page.innerHTML = html;
 PG.enhanceSelects(page);
 
-function renderPayRows(){
-  var f = document.getElementById('payStatusFilter').value;
-  var rows = s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).filter(function(r){
-    if (f==='All') return true;
-    if (f==='Payment Required') return r.paymentStatus==='Payment Required' || r.paymentStatus==='Link Sent'; // "outstanding" grouping
-    return r.paymentStatus===f;
-  });
-  document.getElementById('payBody').innerHTML = rows.map(function(r){
-    var c = s.customers.find(function(x){return x.id===r.customerId;});
-    return '<tr>' +
-      '<td class="row-link" onclick="location.href=\'reservation-detail.html?id='+r.id+'\'" style="cursor:pointer;">'+r.id+'</td>' +
-      '<td>'+PG.esc(c.name)+'</td>' +
-      '<td class="text-sm">'+r.paymentMethod+'</td>' +
-      '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
-      '<td>'+PG.statusBadge(r.status)+'</td>' +
-      '<td class="num">'+PG.fmtMoney(total(r))+'</td>' +
-      '<td><a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+r.id+'">Manage</a></td>' +
-    '</tr>';
-  }).join('') || '<tr><td colspan="7"><div class="empty-state">No payments match this filter.</div></td></tr>';
+function filteredRows(){
+  var q = filters.q.trim().toLowerCase();
+  return s.reservations.filter(function(r){
+    if (filters.status!=='All'){
+      if (filters.status==='Payment Required'){ if (r.paymentStatus!=='Payment Required' && r.paymentStatus!=='Link Sent') return false; }
+      else if (r.paymentStatus!==filters.status) return false;
+    }
+    if (filters.method!=='All' && r.paymentMethod!==filters.method) return false;
+    if (filters.from && r.createdAt.slice(0,10) < filters.from) return false;
+    if (filters.to && r.createdAt.slice(0,10) > filters.to) return false;
+    if (q){
+      var c = custOf(r);
+      var hay = [r.id, c?c.name:'', r.transactionRef||''].join(' ').toLowerCase();
+      if (hay.indexOf(q)===-1) return false;
+    }
+    return true;
+  }).sort(function(a,b){return b.createdAt<a.createdAt?-1:1;});
 }
-document.getElementById('payStatusFilter').addEventListener('change', renderPayRows);
+
+function renderPayRows(){
+  s = PG.getState();
+  var rows = filteredRows();
+  document.getElementById('resultCount').textContent = rows.length + ' payment' + (rows.length===1?'':'s');
+  var body = document.getElementById('payBody');
+  if (!rows.length){ body.innerHTML = '<tr><td colspan="9"><div class="empty-state">No payments match this filter.</div></td></tr>'; return; }
+  body.innerHTML = rows.map(function(r){
+    var c = custOf(r);
+    return '<tr>' +
+      '<td class="text-sm">'+PG.esc(paymentRef(r))+'</td>' +
+      '<td class="row-link view-pay" data-id="'+r.id+'" style="cursor:pointer;">'+r.id+'</td>' +
+      '<td>'+PG.esc(c?c.name:'—')+'</td>' +
+      '<td class="text-sm">'+PG.esc(r.paymentMethod||'—')+'</td>' +
+      '<td class="num">'+PG.fmtMoney(total(r))+' '+PG.esc(s.hotel.currency)+'</td>' +
+      '<td>'+PG.payBadge(r.paymentStatus)+'</td>' +
+      '<td class="text-sm">'+PG.fmtDateShort(r.createdAt.slice(0,10))+'</td>' +
+      '<td class="text-sm">'+PG.fmtDateShort(lastTouched(r).slice(0,10))+'</td>' +
+      '<td><button class="btn btn-outline btn-sm view-pay" data-id="'+r.id+'">Details</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+document.getElementById('payBody').addEventListener('click', function(e){
+  var t = e.target.closest('.view-pay');
+  if (t) openPaymentDrawer(t.dataset.id);
+});
+
+function clearFilters(){
+  filters = { q:'', status:'All', method:'All', from:'', to:'' };
+  document.getElementById('searchBox').value = '';
+  document.getElementById('f-status').value = 'All'; document.getElementById('f-status').dispatchEvent(new Event('change'));
+  document.getElementById('f-method').value = 'All'; document.getElementById('f-method').dispatchEvent(new Event('change'));
+  document.getElementById('f-from').value = ''; document.getElementById('f-to').value = '';
+  renderPayRows();
+}
+document.getElementById('searchBox').addEventListener('input', function(){ filters.q=this.value; renderPayRows(); });
+document.getElementById('f-status').addEventListener('change', function(){ filters.status=this.value; renderPayRows(); });
+document.getElementById('f-method').addEventListener('change', function(){ filters.method=this.value; renderPayRows(); });
+document.getElementById('f-from').addEventListener('change', function(){ filters.from=this.value; renderPayRows(); });
+document.getElementById('f-to').addEventListener('change', function(){ filters.to=this.value; renderPayRows(); });
+document.getElementById('clearFilters').addEventListener('click', clearFilters);
 
 // Deep link, e.g. payments.html?status=Payment%20Required (also matches Link Sent — "outstanding")
 var qp = new URLSearchParams(location.search);
 if (qp.get('status')){
-  document.getElementById('payStatusFilter').value = qp.get('status');
-  document.getElementById('payStatusFilter').dispatchEvent(new Event('change'));
+  filters.status = qp.get('status');
+  document.getElementById('f-status').value = filters.status;
+  document.getElementById('f-status').dispatchEvent(new Event('change'));
 }
 renderPayRows();
+
+
+/* ================================================================ */
+/* Payment Details drawer — preserves worklist context (right-side       */
+/* drawer, not a page navigation). Actions reuse the same shared engine  */
+/* functions (PG.generatePaymentLink, PG.renderRecordRefundModal) that   */
+/* reservation-detail.html's Payment section calls, so both surfaces run */
+/* one implementation of the payment-link/refund rules.                  */
+/* ================================================================ */
+var payDrawer = document.createElement('div');
+payDrawer.className = 'pg-drawer-overlay';
+payDrawer.id = 'payDrawer';
+document.body.appendChild(payDrawer);
+
+function pdrow(label, value){ return '<div class="pd-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>'; }
+
+// Built from the reservation's own activity log (the only real record of what happened)
+// rather than a separate/fabricated event log — "opened" never appears because this
+// prototype has no link-click tracking to source it from, which is honest, not a gap.
+function paymentTimeline(r){
+  var keywords = ['payment link', 'payment successful', 'payment attempt failed', 'payment link expired', 'refund'];
+  return (r.activity||[]).filter(function(a){
+    var low = a.text.toLowerCase();
+    return keywords.some(function(k){ return low.indexOf(k)>-1; });
+  });
+}
+
+function openPaymentDrawer(resId){
+  s = PG.getState();
+  var r = s.reservations.find(function(x){return x.id===resId;});
+  if (!r) return;
+  var c = custOf(r);
+  var canAct = CAN_MANAGE && r.status!=='Cancelled' && r.status!=='Completed';
+
+  var body = '';
+  body += '<div class="pd-section-title">Reservation &amp; Guest</div>';
+  body += pdrow('Reservation #', '<a href="reservation-detail.html?id='+r.id+'">'+r.id+'</a>') +
+    pdrow('Guest', PG.esc(c?c.name:'—')) + pdrow('Stay Dates', PG.fmtDateShort(r.checkIn)+' &ndash; '+PG.fmtDateShort(r.checkOut));
+
+  body += '<div class="pd-section-title">Payment</div>';
+  body += pdrow('Amount', PG.fmtMoney(total(r))+' '+PG.esc(s.hotel.currency)) +
+    pdrow('Method', PG.esc(r.paymentMethod||'—')) +
+    pdrow('Status', PG.payBadge(r.paymentStatus)) +
+    (r.transactionRef ? pdrow('Transaction Ref', PG.esc(r.transactionRef)) : '');
+
+  if (r.paymentMethod==='Payment Link'){
+    body += '<div class="pd-section-title">Payment Link</div>';
+    body += (r.paymentLinkUrl ? pdrow('Link', '<span style="word-break:break-all;">'+PG.esc(r.paymentLinkUrl)+'</span>') : '') +
+      (r.paymentLinkGeneratedAt ? pdrow('Generated', PG.fmtDateShort(r.paymentLinkGeneratedAt.slice(0,10))+' '+r.paymentLinkGeneratedAt.slice(11)) : '') +
+      (r.paymentLinkExpiresAt && r.paymentStatus==='Link Sent' ? pdrow('Expires', PG.fmtDateShort(r.paymentLinkExpiresAt.slice(0,10))+' '+r.paymentLinkExpiresAt.slice(11)) : '') +
+      (r.paymentPaidAt ? pdrow('Paid At', PG.fmtDateShort(r.paymentPaidAt.slice(0,10))+' '+r.paymentPaidAt.slice(11)) : '');
+  }
+
+  var reasonEntry = null;
+  if (r.paymentStatus==='Failed' || r.paymentStatus==='Expired'){
+    reasonEntry = (r.activity||[]).slice().reverse().find(function(a){
+      var low=a.text.toLowerCase();
+      return low.indexOf('payment attempt failed')>-1 || low.indexOf('payment link expired')>-1;
+    });
+  }
+  if (reasonEntry){
+    body += '<div class="pd-section-title">Failure / Expiry Reason</div>';
+    body += '<div class="help-note help-note-danger">'+PG.esc(reasonEntry.text)+'</div>';
+  }
+
+  if (r.paymentStatus==='Refund Pending' || r.paymentStatus==='Refunded'){
+    body += '<div class="pd-section-title">Refund Status</div>';
+    body += pdrow('Status', PG.payBadge(r.paymentStatus));
+    var refundEntry = (r.activity||[]).slice().reverse().find(function(a){ return a.text.toLowerCase().indexOf('refund')>-1; });
+    if (refundEntry) body += '<div class="text-sm muted" style="margin-top:6px;">'+PG.esc(refundEntry.text)+'</div>';
+  }
+
+  var timeline = paymentTimeline(r);
+  body += '<div class="pd-section-title">Timeline</div>';
+  if (timeline.length){
+    body += '<div class="pd-timeline">' + timeline.map(function(a){
+      var warn = a.text.toLowerCase().indexOf('failed')>-1 || a.text.toLowerCase().indexOf('expired')>-1;
+      return '<div class="pd-t-item'+(warn?' warn':'')+'"><div class="pd-t-time">'+PG.fmtDateShort(a.ts.slice(0,10))+' &middot; '+a.ts.slice(11)+'</div><div class="pd-t-text">'+PG.esc(a.text)+'</div></div>';
+    }).join('') + '</div>';
+  } else {
+    body += '<div class="text-sm muted">No payment activity recorded yet.</div>';
+  }
+
+  var actions = '<a class="btn btn-outline" href="reservation-detail.html?id='+r.id+'">Open Reservation</a>';
+  if (canAct && r.paymentMethod==='Payment Link'){
+    if (r.paymentStatus==='Payment Required'){
+      actions += '<button class="btn btn-primary" id="pd-genlink">Generate Payment Link</button>';
+    } else if (r.paymentStatus==='Link Sent'){
+      actions += '<button class="btn btn-outline" id="pd-resend">Resend Link</button>';
+    } else if (r.paymentStatus==='Expired' || r.paymentStatus==='Failed'){
+      actions += '<button class="btn btn-primary" id="pd-genlink">Generate New Link</button>';
+    }
+  }
+  if (canAct && r.paymentStatus==='Refund Pending'){
+    actions += '<button class="btn btn-danger-outline" id="pd-refund">Record Refund</button>';
+  }
+
+  payDrawer.innerHTML = '<div class="pg-drawer">' +
+    '<div class="pg-drawer-header"><h3>Payment — '+r.id+'</h3><button class="pg-modal-close" id="pd-close">&times;</button></div>' +
+    '<div class="pg-drawer-body">'+body+'</div>' +
+    '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">'+actions+'</div>' +
+  '</div>';
+  document.getElementById('pd-close').addEventListener('click', function(){ PG.closeModal('payDrawer'); });
+  var genBtn = document.getElementById('pd-genlink');
+  if (genBtn) genBtn.addEventListener('click', function(){
+    try {
+      var st = PG.getState();
+      PG.generatePaymentLink(st, r.id, 24, ['Email']);
+      PG.setState(st);
+      PG.addAudit('Payment Link Sent', r.id + ' — payment link generated and sent via Email (from Payments).');
+      PG.toast('Payment link generated and sent.', 'success');
+      PG.closeModal('payDrawer');
+      renderPayRows();
+    } catch (e) {
+      PG.toast('Failed to generate the payment link. Please try again.', 'danger');
+    }
+  });
+  var resendBtn = document.getElementById('pd-resend');
+  if (resendBtn) resendBtn.addEventListener('click', function(){
+    try {
+      var st = PG.getState();
+      var liveR = st.reservations.find(function(x){return x.id===r.id;});
+      PG.generatePaymentLink(st, r.id, 24, ['Email']);
+      // Keep the temporary room hold in step with the new link expiry, same as
+      // reservation-detail.html's Resend/Generate actions.
+      st.roomAssignments.forEach(function(a){ if (a.reservationId===r.id && a.assignmentStatus==='Held') a.holdExpiresAt = liveR.paymentLinkExpiresAt; });
+      PG.setState(st);
+      PG.addAudit('Payment Link Resent', r.id + ' — payment link resent with a new expiry (from Payments).');
+      PG.toast('Payment link resent.', 'success');
+      PG.closeModal('payDrawer');
+      renderPayRows();
+    } catch (e) {
+      PG.toast('Failed to resend the payment link. Please try again.', 'danger');
+    }
+  });
+  var refundBtn = document.getElementById('pd-refund');
+  if (refundBtn) refundBtn.addEventListener('click', function(){
+    PG.renderRecordRefundModal({
+      reservationId: r.id,
+      amountLabel: PG.fmtMoney(total(r)) + ' ' + s.hotel.currency,
+      onRecorded: function(){ PG.closeModal('payDrawer'); renderPayRows(); }
+    });
+  });
+  PG.openModal('payDrawer');
+}
+
+// Deep link, e.g. payments.html?id=RES-10247 (from Dashboard payment exceptions) — opens
+// straight to that reservation's Payment Details drawer. Placed last so payDrawer and
+// every function it depends on are already defined.
+if (qp.get('id') && s.reservations.some(function(r){return r.id===qp.get('id');})) openPaymentDrawer(qp.get('id'));
 </script>
 </body>
 </html>

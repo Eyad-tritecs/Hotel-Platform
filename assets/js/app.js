@@ -858,6 +858,108 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Payment-link lifecycle + refund recording — shared by                    */
+  /* reservation-detail.html's Payment section and payments.html's Payment    */
+  /* Details drawer, so both surfaces mutate a reservation's payment fields   */
+  /* through one implementation. This MVP has exactly two payment methods     */
+  /* (Pay on Arrival, Payment Link) and only full Refund Pending → Refunded   */
+  /* recording — no partial refunds, split tender, or gateway reconciliation. */
+  /* ---------------------------------------------------------------- */
+  function generatePaymentLink(state, reservationId, hours, channels) {
+    var r = state.reservations.find(function (x) { return x.id === reservationId; });
+    if (!r) return null;
+    r.paymentLinkUrl = "https://pay.example.com/" + r.id;
+    r.paymentLinkGeneratedAt = nowIso();
+    var expiryDate = new Date(nowIso() + ":00Z");
+    expiryDate.setUTCHours(expiryDate.getUTCHours() + (hours || 24));
+    r.paymentLinkExpiresAt = expiryDate.toISOString().slice(0, 16);
+    r.paymentStatus = "Link Sent";
+    r.status = "Pending Payment";
+    r.activity.push({ ts: nowIso(), text: "Payment Link generated." });
+    var via = (channels || []).join(" & ");
+    r.activity.push({ ts: nowIso(), text: "Payment Link sent" + (via ? " via " + via : "") + "." });
+    return r;
+  }
+  // outcome: "paid" | "failed" | "expired"
+  function recordPaymentOutcome(state, reservationId, outcome, actor) {
+    var r = state.reservations.find(function (x) { return x.id === reservationId; });
+    if (!r) return null;
+    if (outcome === "paid") {
+      r.paymentPaidAt = nowIso();
+      r.transactionRef = "PAY-" + new Date().getFullYear() + "-" + Math.floor(10000 + Math.random() * 89999);
+      r.paymentStatus = "Paid";
+      r.status = "Confirmed";
+      r.activity.push({ ts: nowIso(), text: "Payment successful — Transaction Ref: " + r.transactionRef + "." });
+      r.activity.push({ ts: nowIso(), text: "Reservation confirmed." });
+    } else if (outcome === "failed") {
+      r.paymentStatus = "Failed";
+      r.activity.push({ ts: nowIso(), text: "Payment attempt failed." });
+    } else if (outcome === "expired") {
+      r.paymentStatus = "Expired";
+      r.activity.push({ ts: nowIso(), text: "Payment link expired without payment." });
+    }
+    return r;
+  }
+  // Only ever moves Refund Pending → Refunded (see file header comment) — never called
+  // directly to mutate state; always go through renderRecordRefundModal so a reason is
+  // always required and the confirmation step is never skipped.
+  function recordRefund(state, reservationId, reason, actor) {
+    var r = state.reservations.find(function (x) { return x.id === reservationId; });
+    if (!r) return null;
+    if (r.paymentStatus !== "Refund Pending") throw new Error("Only a Refund Pending payment can be marked Refunded.");
+    r.paymentStatus = "Refunded";
+    r.activity.push({ ts: nowIso(), text: "Refund recorded by " + actor + ". Reason: " + reason + "." });
+    return r;
+  }
+  var recordRefundModalEl = null;
+  function ensureRecordRefundModal() {
+    if (recordRefundModalEl) return recordRefundModalEl;
+    recordRefundModalEl = document.createElement("div");
+    recordRefundModalEl.className = "pg-modal-overlay";
+    recordRefundModalEl.id = "pgRecordRefundModal";
+    document.body.appendChild(recordRefundModalEl);
+    return recordRefundModalEl;
+  }
+  // opts: { reservationId, onRecorded(reservation) }
+  function renderRecordRefundModal(opts) {
+    var state = getState();
+    var el = ensureRecordRefundModal();
+    var r = state.reservations.find(function (x) { return x.id === opts.reservationId; });
+    if (!r) { toast("Reservation not found.", "danger"); return; }
+    if (r.paymentStatus !== "Refund Pending") { toast("This reservation is not awaiting a refund.", "danger"); return; }
+    var cust = state.customers.find(function (c) { return c.id === r.customerId; });
+    el.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Record Refund</h3><button class="pg-modal-close" id="pgrr-close">&times;</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="form-group"><div class="form-label">Reservation</div><div style="font-size:13px;font-weight:600;">' + r.id + (cust ? " — " + esc(cust.name) : "") + "</div></div>" +
+        '<div class="form-group"><div class="form-label">Original Payment</div><div style="font-size:13px;font-weight:600;">' + esc(r.paymentMethod || "—") + (r.transactionRef ? " · " + esc(r.transactionRef) : "") + "</div></div>" +
+        (opts.amountLabel ? '<div class="form-group"><div class="form-label">Amount</div><div style="font-size:15px;font-weight:800;">' + esc(opts.amountLabel) + "</div></div>" : "") +
+        '<div class="form-group"><label class="form-label">Refund Reason <span class="opt">(required)</span></label><textarea class="form-control" id="pgrr-reason" placeholder="e.g. Guest cancellation, duplicate charge"></textarea><div class="field-error" id="pgrr-err"></div></div>' +
+        '<div class="help-note help-note-warning">This prototype has no real payment gateway — confirming records the refund as completed in the system. It does not move real funds.</div>' +
+      "</div>" +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="pgrr-cancel">Cancel</button><button class="btn btn-danger" id="pgrr-confirm">Confirm Refund</button></div>' +
+    "</div>";
+    el.querySelector("#pgrr-close").addEventListener("click", function () { closeModal("pgRecordRefundModal"); });
+    el.querySelector("#pgrr-cancel").addEventListener("click", function () { closeModal("pgRecordRefundModal"); });
+    el.querySelector("#pgrr-confirm").addEventListener("click", function () {
+      var reason = document.getElementById("pgrr-reason").value.trim();
+      if (!reason) { document.getElementById("pgrr-err").textContent = "A reason is required to record a refund."; toast("A reason is required to record a refund.", "danger"); return; }
+      try {
+        var fresh = getState();
+        var updated = recordRefund(fresh, opts.reservationId, reason, CURRENT_ROLE);
+        setState(fresh);
+        addAudit("Refund Recorded", opts.reservationId + " — refund recorded. Reason: " + reason + ".");
+        toast("Refund recorded.", "success");
+        closeModal("pgRecordRefundModal");
+        if (opts.onRecorded) opts.onRecorded(updated);
+      } catch (e) {
+        toast(e.message || "Failed to record the refund. Please try again.", "danger");
+      }
+    });
+    openModal("pgRecordRefundModal");
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Formatting helpers                                                 */
   /* ---------------------------------------------------------------- */
   var STATUS_BADGE = {
@@ -1856,6 +1958,9 @@
     autoAssignRoomsForItem: autoAssignRoomsForItem,
     computeDateChangeImpact: computeDateChangeImpact,
     applyDateChangeImpact: applyDateChangeImpact,
+    generatePaymentLink: generatePaymentLink,
+    recordPaymentOutcome: recordPaymentOutcome,
+    renderRecordRefundModal: renderRecordRefundModal,
     renderChangeRoomDrawer: renderChangeRoomDrawer,
     renderBlockRoomModal: renderBlockRoomModal,
     renderGuestDrawer: renderGuestDrawer,

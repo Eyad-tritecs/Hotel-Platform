@@ -402,22 +402,28 @@ function renderPaymentActions(){
   });
   if (b=document.getElementById('sendLinkBtn')) b.addEventListener('click', function(){ r.activity.push({ts:PG.nowIso(), text:'Payment link sent to guest.'}); save('Payment Link Sent', r.id + ' — payment link sent to guest.'); });
   if (b=document.getElementById('resendLinkBtn')) b.addEventListener('click', function(){
-    var expiryDate = new Date(PG.nowIso() + ':00Z');
-    expiryDate.setUTCHours(expiryDate.getUTCHours() + 24);
-    r.paymentLinkExpiresAt = expiryDate.toISOString().slice(0,16);
-    r.activity.push({ts:PG.nowIso(), text:'Payment link resent to guest with a new 24-hour expiry.'});
+    PG.generatePaymentLink({reservations:[r]}, r.id, 24, ['Email']);
     save('Payment Link Resent', r.id + ' — payment link resent with a new expiry.', true);
   });
   if (b=document.getElementById('markPaid')) b.addEventListener('click', function(){
-    r.paymentPaidAt = PG.nowIso();
-    r.transactionRef = 'PAY-' + new Date().getFullYear() + '-' + Math.floor(10000 + Math.random()*89999);
-    transition('Paid', 'Confirmed', 'Payment successful — Transaction Ref: ' + r.transactionRef + '.');
-    r.activity.push({ts: PG.nowIso(), text: 'Reservation confirmed.'});
+    PG.recordPaymentOutcome({reservations:[r]}, r.id, 'paid', ACTOR);
     save('Payment Received', 'Payment confirmed for ' + r.id + ' — Transaction Ref: ' + r.transactionRef + '.');
   });
-  if (b=document.getElementById('markFailed')) b.addEventListener('click', function(){ transition('Failed', r.status, 'Payment attempt failed.'); save('Payment Failed', 'Payment attempt failed for ' + r.id + '.'); });
-  if (b=document.getElementById('markExpired')) b.addEventListener('click', function(){ transition('Expired', r.status, 'Payment link expired without payment.'); save('Payment Link Expired', 'Payment link expired for ' + r.id + '.'); });
-  if (b=document.getElementById('markRefunded')) b.addEventListener('click', function(){ transition('Refunded', r.status, 'Refund completed for cancelled reservation.'); save('Refund Completed', 'Refund completed for ' + r.id + '.'); });
+  if (b=document.getElementById('markFailed')) b.addEventListener('click', function(){
+    PG.recordPaymentOutcome({reservations:[r]}, r.id, 'failed', ACTOR);
+    save('Payment Failed', 'Payment attempt failed for ' + r.id + '.');
+  });
+  if (b=document.getElementById('markExpired')) b.addEventListener('click', function(){
+    PG.recordPaymentOutcome({reservations:[r]}, r.id, 'expired', ACTOR);
+    save('Payment Link Expired', 'Payment link expired for ' + r.id + '.');
+  });
+  if (b=document.getElementById('markRefunded')) b.addEventListener('click', function(){
+    PG.renderRecordRefundModal({
+      reservationId: r.id,
+      amountLabel: PG.fmtMoney(total()),
+      onRecorded: function(){ setTimeout(function(){ location.reload(); }, 300); }
+    });
+  });
 }
 
 // Generate Payment Link modal
@@ -447,29 +453,16 @@ if (r && r.paymentMethod==='Payment Link'){
     var hours = parseInt(document.getElementById('link-expiry').value, 10);
     var viaEmail = document.getElementById('send-email').checked;
     var viaSms = document.getElementById('send-sms').checked;
-    r.paymentLinkUrl = 'https://pay.example.com/' + r.id;
-    r.paymentLinkGeneratedAt = PG.nowIso();
-    var expiryDate = new Date(PG.nowIso() + ':00Z');
-    expiryDate.setUTCHours(expiryDate.getUTCHours() + hours);
-    r.paymentLinkExpiresAt = expiryDate.toISOString().slice(0,16);
-    r.paymentStatus = 'Link Sent';
-    r.status = 'Pending Payment';
-    r.activity.push({ts: PG.nowIso(), text: 'Payment Link generated.'});
     var via = [];
     if (viaEmail) via.push('Email');
     if (viaSms) via.push('SMS');
-    r.activity.push({ts: PG.nowIso(), text: 'Payment Link sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.'});
+    PG.generatePaymentLink({reservations:[r]}, r.id, hours, via);
     PG.closeModal('genLinkModal');
     save('Payment Link Sent', r.id + ' — payment link generated and sent' + (via.length ? ' via ' + via.join(' & ') : '') + '.', true);
   });
 }
 function openGenLinkModal(){ PG.openModal('genLinkModal'); }
 
-function transition(paymentStatus, status, note){
-  r.paymentStatus = paymentStatus;
-  r.status = status;
-  r.activity.push({ts: PG.nowIso(), text: note});
-}
 function save(auditAction, auditDetails, syncHoldsToLink){
   var st = PG.getState();
   var idx = st.reservations.findIndex(function(x){return x.id===r.id;});
