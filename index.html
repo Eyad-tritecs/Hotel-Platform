@@ -96,10 +96,10 @@ PG.dateRange(T, PG.addDays(T,7)).forEach(function(d){
     var a = PG.computeAvailability(s, rt.id, d);
     if (a.stopSell){
       alerts.push({sev:'warning', icon:'&#128683;', title:'Room Type Under Stop Sell', desc: rt.name+' — '+PG.fmtDateShort(d)+' — sales are blocked',
-        primary:{label:'View Inventory', href:'availability-inventory.html'}, dismissable:true, dedupeKey:'stop-'+rt.id});
+        primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:true, dedupeKey:'stop-'+rt.id});
     } else if (a.available>0 && a.available<=2){
       alerts.push({sev:'warning', icon:'&#9888;', title:'Low Availability', desc: rt.name+' — '+PG.fmtDateShort(d)+' — '+a.available+' room'+(a.available===1?'':'s')+' remaining',
-        primary:{label:'View Inventory', href:'availability-inventory.html'}, dismissable:true, dedupeKey:'low-'+rt.id});
+        primary:{label:'Open Calendar', href:'operations-calendar.html'}, dismissable:true, dedupeKey:'low-'+rt.id});
     }
   });
 });
@@ -143,7 +143,7 @@ var html = '';
 html += '<div class="pg-page-head"><div><h1>Overview</h1><div class="sub">Palestine Grand Hotel &middot; Business date '+PG.fmtDate(T)+' &middot; Last refreshed <span id="refreshedAt"></span></div></div>' +
   '<div class="pg-actions">' +
     '<button class="btn btn-outline" id="refreshBtn">&#8635; Refresh</button>' +
-    '<a class="btn btn-outline" href="availability-inventory.html">Search Availability</a>' +
+    '<a class="btn btn-outline" href="operations-calendar.html">Open Operations Calendar</a>' +
     '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
   '</div></div>';
 
@@ -157,7 +157,7 @@ html += '<div class="sum-grid">' +
   sumCard('a3','Active Stays', activeStays.length, 'Stay dates include today', null) +
   sumCard('a4','Occupancy Tonight', occPct+'%', bookedTonight+' of '+totalSellableTonight+' rooms committed', null) +
   sumCard('a5','Pending Payments', pendingPayList.length, PG.fmtMoney(pendingPayAmount)+' outstanding', 'payments.html?status=Payment Required') +
-  sumCard('a6','Available Tonight', availableTonight+' rooms', 'Across '+typesWithAvail+' room type'+(typesWithAvail===1?'':'s'), 'availability-inventory.html') +
+  sumCard('a6','Available Tonight', availableTonight+' rooms', 'Across '+typesWithAvail+' room type'+(typesWithAvail===1?'':'s'), 'operations-calendar.html') +
 '</div>';
 
 // Attention Required
@@ -216,10 +216,8 @@ html += '</tbody></table></div></div></div>';
 // Quick Operations
 html += '<div class="card"><div class="card-header"><h3>Quick Operations</h3></div><div class="card-body"><div class="quick-ops">' +
   '<a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a>' +
-  '<a class="btn btn-light" href="availability-inventory.html">Search Availability</a>' +
   '<a class="btn btn-light" href="operations-calendar.html">Open Operations Calendar</a>' +
-  '<a class="btn btn-light" href="availability-inventory.html">Adjust Inventory</a>' +
-  '<a class="btn btn-light" href="availability-inventory.html">Stop Sell</a>' +
+  '<a class="btn btn-light" href="physical-rooms.html">Physical Rooms</a>' +
   '<a class="btn btn-light" href="payments.html?status=Payment Required">View Pending Payments</a>' +
   '<a class="btn btn-light" href="reservations.html?arrival='+T+'">View Today\'s Arrivals</a>' +
   '<a class="btn btn-light" href="demo-journey.html">Guided Journey Demo</a>' +

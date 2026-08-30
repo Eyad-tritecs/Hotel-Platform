@@ -773,6 +773,91 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Reservation date-change impact — shared by operations-calendar.html's   */
+  /* drag-to-move/resize interactions (Physical Rooms and the Operations      */
+  /* Calendar must not duplicate this business rule between them). Stay      */
+  /* dates are reservation-level, shared across every room item (README      */
+  /* §4.3 rule 3), so any date change necessarily applies to the whole        */
+  /* reservation — every item is revalidated, not just the dragged bar's.    */
+  /* ---------------------------------------------------------------- */
+  function computeDateChangeImpact(state, reservationId, newCheckIn, newCheckOut) {
+    var res = state.reservations.find(function (r) { return r.id === reservationId; });
+    if (!res) return null;
+    var validDates = newCheckOut > newCheckIn;
+    // A state clone with this reservation's own current commitment removed, so the
+    // revalidation checks a genuinely free slot rather than being blocked by (or coasting
+    // on) the booking it is itself in the middle of changing — same technique as
+    // reservation-detail.html's Edit drawer.
+    var exclSelf = Object.assign({}, state, {
+      reservations: state.reservations.filter(function (r) { return r.id !== reservationId; }),
+      roomAssignments: state.roomAssignments.filter(function (a) { return a.reservationId !== reservationId; })
+    });
+    var items = res.rooms.map(function (room) {
+      var origRoomIds = state.roomAssignments.filter(function (a) { return a.reservationItemId === room.id && a.assignmentStatus !== "Cancelled"; }).map(function (a) { return a.physicalRoomId; });
+      var avail = validDates ? validateAvailability(exclSelf, room.roomTypeId, newCheckIn, newCheckOut, room.qty) : { ok: false, problems: [] };
+      var others = [];
+      res.rooms.forEach(function (o) {
+        if (o.id === room.id) return;
+        state.roomAssignments.filter(function (a) { return a.reservationItemId === o.id && a.assignmentStatus !== "Cancelled"; }).forEach(function (a) { others.push(a.physicalRoomId); });
+      });
+      var assignResult = validDates ? autoAssignRoomsForItem(exclSelf, {
+        roomTypeId: room.roomTypeId, checkIn: newCheckIn, checkOut: newCheckOut, qty: room.qty,
+        requireAccessibility: room.requireAccessibility ? ["Wheelchair Accessible"] : [],
+        bedConfiguration: room.bedConfigPref || null, requireConnecting: room.qty > 1 && !!room.requireConnecting,
+        keepRoomIds: origRoomIds, excludeRoomIds: others
+      }) : { assignedRoomIds: [], shortfall: room.qty };
+      var subtotal = 0;
+      if (validDates) dateRange(newCheckIn, newCheckOut).forEach(function (d) { subtotal += rateFor(state, room.roomTypeId, d) * room.qty; });
+      return { itemId: room.id, roomTypeId: room.roomTypeId, qty: room.qty, origRoomIds: origRoomIds, avail: avail, assignedRoomIds: assignResult.assignedRoomIds, shortfall: assignResult.shortfall, subtotal: subtotal };
+    });
+    var roomCharges = items.reduce(function (a, it) { return a + it.subtotal; }, 0);
+    var pricing = computePricing(state, roomCharges, newCheckIn);
+    var oldRoomCharges = 0;
+    dateRange(res.checkIn, res.checkOut).forEach(function (d) { res.rooms.forEach(function (room) { oldRoomCharges += rateFor(state, room.roomTypeId, d) * room.qty; }); });
+    var oldPricing = computePricing(state, oldRoomCharges, res.checkIn);
+    var ok = validDates && items.every(function (it) { return it.avail.ok && it.shortfall === 0; });
+    return {
+      reservationId: reservationId, oldCheckIn: res.checkIn, oldCheckOut: res.checkOut, newCheckIn: newCheckIn, newCheckOut: newCheckOut,
+      items: items, validDates: validDates, ok: ok,
+      oldNights: nightsBetween(res.checkIn, res.checkOut), newNights: validDates ? nightsBetween(newCheckIn, newCheckOut) : 0,
+      roomCharges: roomCharges, taxAmount: pricing.taxAmount, feeAmount: pricing.feeAmount, total: roomCharges + pricing.taxAmount + pricing.feeAmount,
+      oldRoomCharges: oldRoomCharges, oldTaxAmount: oldPricing.taxAmount, oldFeeAmount: oldPricing.feeAmount, oldTotal: oldRoomCharges + oldPricing.taxAmount + oldPricing.feeAmount
+    };
+  }
+  // Applies an already-confirmed, already-revalidated impact (see computeDateChangeImpact)
+  // atomically: cancels every old assignment for this reservation's items and creates fresh
+  // ones, updates dates/pricing, and logs one detailed activity/audit entry. Callers must
+  // re-fetch fresh state and re-run computeDateChangeImpact immediately before calling this —
+  // exactly the same revalidate-right-before-write convention every other mutate path here uses.
+  function applyDateChangeImpact(impact, actor) {
+    var st = getState();
+    var idx = st.reservations.findIndex(function (r) { return r.id === impact.reservationId; });
+    var liveR = st.reservations[idx];
+    var assignmentStatus = liveR.status === "Confirmed" ? "Assigned" : "Held";
+    var holdExp = assignmentStatus === "Held" ? ((liveR.paymentLinkExpiresAt && liveR.paymentStatus === "Link Sent") ? liveR.paymentLinkExpiresAt : holdExpiryFromNow()) : null;
+    var asnCounter = 0;
+    impact.items.forEach(function (it) {
+      st.roomAssignments.forEach(function (a) { if (a.reservationItemId === it.itemId && a.assignmentStatus !== "Cancelled") a.assignmentStatus = "Cancelled"; });
+      it.assignedRoomIds.forEach(function (rid) {
+        asnCounter++;
+        st.roomAssignments.push({
+          id: "asn-" + Date.now() + "-" + asnCounter, propertyId: st.hotel.propertyCode, reservationId: impact.reservationId, reservationItemId: it.itemId,
+          physicalRoomId: rid, arrivalDate: impact.newCheckIn, departureDate: impact.newCheckOut, assignmentStatus: assignmentStatus,
+          assignedAt: nowIso(), assignedBy: actor, changeReason: "Moved via Operations Calendar", holdExpiresAt: holdExp
+        });
+      });
+    });
+    liveR.checkIn = impact.newCheckIn;
+    liveR.checkOut = impact.newCheckOut;
+    liveR.taxAmount = impact.taxAmount;
+    liveR.feeAmount = impact.feeAmount;
+    var note = "Stay dates changed from " + fmtDateShort(impact.oldCheckIn) + "–" + fmtDateShort(impact.oldCheckOut) + " to " + fmtDateShort(impact.newCheckIn) + "–" + fmtDateShort(impact.newCheckOut) + " via Operations Calendar by " + actor + ".";
+    liveR.activity.push({ ts: nowIso(), text: note });
+    setState(st);
+    addAudit("Reservation Dates Changed", impact.reservationId + " — " + note);
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Formatting helpers                                                 */
   /* ---------------------------------------------------------------- */
   var STATUS_BADGE = {
@@ -848,7 +933,11 @@
       { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
       { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
       { key: "rates", label: "Rates", href: "rates.html", icon: "tag" },
-      { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar" }
+      // Hidden by product decision: Operations Calendar is now the primary availability/inventory
+      // workspace. The page, its route, and all its logic are fully intact — only nav visibility
+      // is toggled, reusing the same `hidden` mechanism a future prompt can flip back at any time
+      // (same pattern as `superAdminOnly` below, filtered alongside it in renderSidebar).
+      { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar", hidden: true }
     ]},
     { section: "Reservations", items: [
       { key: "reservations", label: "Reservations", href: "reservations.html", icon: "list" },
@@ -904,7 +993,7 @@
     html += '<div class="pg-sidebar-tenant"><div><div class="t-name">Palestine Grand Hotel</div><div class="t-role">Pilot Tenant &middot; Hotel Admin</div></div><span class="chev">&#9662;</span></div>';
     html += '<nav class="pg-nav">';
     NAV.forEach(function (sec) {
-      var visibleItems = sec.items.filter(function (it) { return !it.superAdminOnly || CURRENT_ROLE === "Platform Super Admin"; });
+      var visibleItems = sec.items.filter(function (it) { return !it.hidden && (!it.superAdminOnly || CURRENT_ROLE === "Platform Super Admin"); });
       if (!visibleItems.length) return;
       html += '<div class="pg-nav-section"><div class="pg-nav-section-title">' + sec.section + "</div>";
       visibleItems.forEach(function (it) {
@@ -1282,6 +1371,170 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Room Block create modal — shared by physical-rooms.html's Block Room     */
+  /* action and operations-calendar.html's drag-to-create-block interaction   */
+  /* and per-row Block quick action, so both surfaces use one implementation  */
+  /* of the same conflict-check/confirm/audit rules (§ "Do not duplicate      */
+  /* business rules" between Physical Rooms and the Operations Calendar).     */
+  /* opts: { physicalRoomId, defaultStart, defaultEnd (YYYY-MM-DD, inclusive),*/
+  /*         onSaved(block) }                                                 */
+  /* ---------------------------------------------------------------- */
+  var BLOCK_TYPES = ["Out of Order", "Out of Service", "Management Hold", "Other"];
+  var blockRoomModalEl = null;
+  function ensureBlockRoomModal() {
+    if (blockRoomModalEl) return blockRoomModalEl;
+    blockRoomModalEl = document.createElement("div");
+    blockRoomModalEl.className = "pg-modal-overlay";
+    blockRoomModalEl.id = "pgBlockRoomModal";
+    document.body.appendChild(blockRoomModalEl);
+    return blockRoomModalEl;
+  }
+  function renderBlockRoomModal(opts) {
+    var state = getState();
+    var el = ensureBlockRoomModal();
+    var room = state.physicalRooms.find(function (p) { return p.id === opts.physicalRoomId; });
+    if (!room) { toast("Room not found.", "danger"); return; }
+    var rt = state.roomTypes.find(function (r) { return r.id === room.roomTypeId; });
+    var typeOptions = BLOCK_TYPES.map(function (t) { return '<option value="' + t + '">' + t + "</option>"; }).join("");
+
+    el.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Block Room</h3><button class="pg-modal-close" id="pgbr-close">&times;</button></div>' +
+      '<div class="pg-modal-body">' +
+        '<div class="form-group"><label class="form-label">Room</label><input class="form-control" value="Room ' + esc(room.roomNumber) + " — " + esc(rt ? rt.name : "") + '" disabled></div>' +
+        '<div class="form-group"><label class="form-label">Block Type</label><select class="form-control" id="pgbr-type">' + typeOptions + "</select></div>" +
+        '<div class="grid-2">' +
+          '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="pgbr-start" value="' + (opts.defaultStart || TODAY) + '"></div>' +
+          '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="pgbr-end" value="' + (opts.defaultEnd || opts.defaultStart || TODAY) + '"></div>' +
+        "</div>" +
+        '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><input class="form-control" id="pgbr-reason" placeholder="e.g. Plumbing repair, deep cleaning"></div>' +
+        '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="pgbr-notes"></textarea></div>' +
+        '<div id="pgbr-impact"></div>' +
+        '<div id="pgbr-conflict"></div>' +
+      "</div>" +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="pgbr-cancel">Cancel</button><button class="btn btn-danger" id="pgbr-save">Block Room</button></div>' +
+    "</div>";
+    enhanceSelects(el);
+
+    function refreshImpact() {
+      var type = document.getElementById("pgbr-type").value;
+      var destructive = type === "Out of Order" || type === "Out of Service";
+      var box = document.getElementById("pgbr-impact");
+      box.className = "help-note " + (destructive ? "help-note-danger" : "help-note-warning");
+      box.textContent = destructive
+        ? "This will remove Room " + room.roomNumber + " from sellable availability for the selected dates."
+        : "This will place a temporary hold on Room " + room.roomNumber + ", outside normal sale, for the selected dates.";
+    }
+    function checkConflicts() {
+      var fresh = getState();
+      var start = document.getElementById("pgbr-start").value, endIncl = document.getElementById("pgbr-end").value;
+      var box = document.getElementById("pgbr-conflict"), saveBtn = document.getElementById("pgbr-save");
+      if (!start || !endIncl || endIncl < start) { box.innerHTML = ""; saveBtn.disabled = false; return; }
+      var endExclusive = addDays(endIncl, 1);
+      var overlapping = assignmentsOverlapping(fresh, room.id, start, endExclusive);
+      if (!overlapping.length) { box.innerHTML = ""; saveBtn.disabled = false; return; }
+      var rows = overlapping.map(function (a) {
+        var res = fresh.reservations.find(function (r) { return r.id === a.reservationId; });
+        var cust = res ? fresh.customers.find(function (c) { return c.id === res.customerId; }) : null;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;gap:8px;">' +
+          "<span><a href=\"reservation-detail.html?id=" + a.reservationId + "\" target=\"_blank\">" + a.reservationId + "</a>" + (cust ? " · " + esc(cust.name) : "") +
+            '<div class="muted text-sm">' + fmtDateShort(a.arrivalDate) + "–" + fmtDateShort(a.departureDate) + (a.assignmentStatus === "Held" ? " · Held" : "") + "</div></span>" +
+          '<button type="button" class="btn btn-outline btn-sm pgbr-conflict-change" data-assignment="' + a.id + '">Change Room</button>' +
+        "</div>";
+      }).join("");
+      box.innerHTML = '<div class="help-note help-note-danger" style="margin-top:12px;flex-direction:column;align-items:stretch;">' +
+        '<div style="font-weight:700;margin-bottom:6px;">Room ' + esc(room.roomNumber) + " cannot be blocked from " + fmtDateShort(start) + " to " + fmtDateShort(endIncl) + " — it conflicts with " + overlapping.length + " existing assignment" + (overlapping.length === 1 ? "" : "s") + ".</div>" +
+        rows +
+        '<div style="margin-top:8px;">Resolve or reassign the affected reservation' + (overlapping.length === 1 ? "" : "s") + " before applying this block." + "</div>" +
+      "</div>";
+      saveBtn.disabled = true;
+      box.querySelectorAll(".pgbr-conflict-change").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          openChangeRoomForBlockConflict(btn.dataset.assignment, checkConflicts);
+        });
+      });
+    }
+    // Shares the exact revalidate-then-swap logic every other Change Room call site uses.
+    function openChangeRoomForBlockConflict(assignmentId, onDone) {
+      var fresh = getState();
+      var a = fresh.roomAssignments.find(function (x) { return x.id === assignmentId; });
+      var res = fresh.reservations.find(function (r) { return r.id === a.reservationId; });
+      var item = res.rooms.find(function (x) { return x.id === a.reservationItemId; });
+      var cust = fresh.customers.find(function (c) { return c.id === res.customerId; });
+      var otherRoomIds = [];
+      res.rooms.forEach(function (it) {
+        if (it.id === item.id) return;
+        fresh.roomAssignments.filter(function (x) { return x.reservationItemId === it.id && x.assignmentStatus !== "Cancelled"; }).forEach(function (x) { otherRoomIds.push(x.physicalRoomId); });
+      });
+      renderChangeRoomDrawer({
+        roomTypeId: item.roomTypeId, checkIn: a.arrivalDate, checkOut: a.departureDate,
+        preferences: {}, currentRoomId: a.physicalRoomId, excludeRoomIds: otherRoomIds, excludeAssignmentId: a.id,
+        title: "Change Room", summaryLabel: res.id + " · " + (cust ? cust.name : "Guest"),
+        summarySub: fmtDateShort(a.arrivalDate) + " – " + fmtDateShort(a.departureDate),
+        onConfirm: function (newRoomId) {
+          try {
+            var st2 = getState();
+            var newRoom = st2.physicalRooms.find(function (p) { return p.id === newRoomId; });
+            if (!newRoom || !roomEligibleForStay(st2, newRoom, a.arrivalDate, a.departureDate, a.id)) {
+              toast("That room is no longer available — the previous assignment has been kept.", "danger");
+              return;
+            }
+            var oldRoom = st2.physicalRooms.find(function (p) { return p.id === a.physicalRoomId; });
+            var rec = st2.roomAssignments.find(function (x) { return x.id === assignmentId; });
+            rec.physicalRoomId = newRoomId; rec.assignedAt = nowIso(); rec.assignedBy = CURRENT_ROLE;
+            var idx = st2.reservations.findIndex(function (r) { return r.id === res.id; });
+            st2.reservations[idx].activity.push({ ts: nowIso(), text: "Room changed from " + (oldRoom ? oldRoom.roomNumber : "—") + " to " + newRoom.roomNumber + " while resolving a block conflict." });
+            setState(st2);
+            addAudit("Room Assignment Changed", res.id + " — room changed from " + (oldRoom ? oldRoom.roomNumber : "—") + " to " + newRoom.roomNumber + " (resolving a block conflict).");
+            toast("Room " + newRoom.roomNumber + " assigned.", "success");
+            if (onDone) onDone();
+          } catch (e) {
+            toast("Failed to save changes — the previous room assignment has been kept.", "danger");
+          }
+        }
+      });
+    }
+
+    document.getElementById("pgbr-close").addEventListener("click", function () { closeModal("pgBlockRoomModal"); });
+    document.getElementById("pgbr-cancel").addEventListener("click", function () { closeModal("pgBlockRoomModal"); });
+    document.getElementById("pgbr-type").addEventListener("change", refreshImpact);
+    document.getElementById("pgbr-start").addEventListener("change", checkConflicts);
+    document.getElementById("pgbr-end").addEventListener("change", checkConflicts);
+    refreshImpact();
+    checkConflicts();
+
+    document.getElementById("pgbr-save").addEventListener("click", function () {
+      var type = document.getElementById("pgbr-type").value;
+      var start = document.getElementById("pgbr-start").value;
+      var endIncl = document.getElementById("pgbr-end").value;
+      var reason = document.getElementById("pgbr-reason").value.trim();
+      var notes = document.getElementById("pgbr-notes").value.trim();
+      if (!start || !endIncl || endIncl < start) { toast("Please choose a valid date range.", "danger"); return; }
+      if (!reason) { toast("A reason is required to block a room.", "danger"); return; }
+      var endExclusive = addDays(endIncl, 1);
+      try {
+        var fresh = getState();
+        // Revalidate immediately before saving — state may have changed since the modal opened.
+        var overlapping = assignmentsOverlapping(fresh, room.id, start, endExclusive);
+        if (overlapping.length) { toast("Resolve or reassign the affected reservation(s) before applying this block.", "danger"); return; }
+        var block = {
+          id: "blk-" + Date.now(), propertyId: fresh.hotel.propertyCode, physicalRoomId: room.id,
+          startDate: start, endDate: endExclusive, type: type, reason: reason, notes: notes,
+          createdAt: nowIso(), createdBy: CURRENT_ROLE
+        };
+        fresh.roomBlocks.push(block);
+        setState(fresh);
+        addAudit("Physical Room Blocked", "Room " + room.roomNumber + " blocked (" + type + "), " + fmtDateShort(start) + " to " + fmtDateShort(endIncl) + ". Reason: " + reason + ".");
+        toast("Room " + room.roomNumber + " blocked for the selected dates.", "warn");
+        closeModal("pgBlockRoomModal");
+        if (opts.onSaved) opts.onSaved(block);
+      } catch (e) {
+        toast("Failed to save changes. Please try again.", "danger");
+      }
+    });
+    openModal("pgBlockRoomModal");
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Guest (customer) Add/Edit drawer — shared by guests.html and             */
   /* guest-detail.html. Guests are hotel customers, kept technically and      */
   /* conceptually separate from state.users (staff accounts).                */
@@ -1601,7 +1854,10 @@
     eligiblePhysicalRoomsForStay: eligiblePhysicalRoomsForStay,
     rankRoomsForAssignment: rankRoomsForAssignment,
     autoAssignRoomsForItem: autoAssignRoomsForItem,
+    computeDateChangeImpact: computeDateChangeImpact,
+    applyDateChangeImpact: applyDateChangeImpact,
     renderChangeRoomDrawer: renderChangeRoomDrawer,
+    renderBlockRoomModal: renderBlockRoomModal,
     renderGuestDrawer: renderGuestDrawer,
     renderDeleteGuestModal: renderDeleteGuestModal,
     statusBadge: statusBadge,

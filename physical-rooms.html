@@ -58,10 +58,13 @@ function rt(id) { return s.roomTypes.find(function (r) { return r.id === id; });
 function rtName(id) { var r = rt(id); return r ? r.name : id; }
 function roomById(id) { return s.physicalRooms.find(function (r) { return r.id === id; }); }
 
-var BLOCK_TYPES = ['Out of Order', 'Out of Service', 'Management Hold', 'Other'];
 var ACCESSIBILITY_OPTIONS = ['Wheelchair Accessible', 'Grab Bars', 'Roll-in Shower', 'Visual Alarm'];
 var VIEW_OPTIONS = ['No View', 'Old City View', 'Courtyard View', 'Garden View'];
 var STATUS_OPTIONS = ['Available', 'Reserved', 'Held', 'Out of Order', 'Out of Service', 'Inactive'];
+// "Reserved" is never a stored baseline — it's always derived live from a covering
+// roomAssignment (PG.roomStatusOn, README §4.6) — so it's excluded from what staff can
+// directly set as the room's own operationalStatus.
+var OPERATIONAL_STATUS_OPTIONS = ['Available', 'Held', 'Out of Order', 'Out of Service', 'Inactive'];
 
 function init() {
   var filters = { q: '', roomType: 'all', building: 'all', floor: 'all', status: 'all', active: 'all' };
@@ -206,6 +209,7 @@ function init() {
           '<button class="btn btn-outline btn-sm view-btn" data-id="' + r.id + '">View</button>' +
           '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + r.id + '">&#8942;</button>' +
             '<div class="more-menu" data-menu-for="' + r.id + '">' +
+              '<a href="new-reservation.html?rt=' + r.roomTypeId + '&room=' + r.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
               '<button class="edit-action" data-id="' + r.id + '">Edit</button>' +
               '<button class="block-action" data-id="' + r.id + '">Block Room</button>' +
               '<a href="operations-calendar.html?room=' + r.id + '">View in Operations Calendar</a>' +
@@ -305,6 +309,9 @@ function init() {
           '<div class="form-group"><label class="form-label">Floor</label><input type="number" class="form-control" id="rm-floor" value="' + (room ? room.floor : 1) + '"></div>' +
           '<div class="form-group"><label class="form-label">Bed Configuration</label><div id="rm-bed-container"></div></div>' +
           '<div class="form-group"><label class="form-label">View</label><select class="form-control" id="rm-view">' + viewOptions + '</select></div>' +
+          '<div class="form-group"><label class="form-label">Operational Status <span class="opt">(baseline, when not overridden by a live reservation or block)</span></label><select class="form-control" id="rm-opstatus">' +
+            OPERATIONAL_STATUS_OPTIONS.map(function (st2) { return '<option value="' + st2 + '"' + (room && room.operationalStatus === st2 ? ' selected' : '') + '>' + st2 + '</option>'; }).join('') +
+          '</select></div>' +
         '</div>' +
         '<div class="form-group"><label class="form-label">Accessibility Features</label><div class="checklist-box">' + accHtml + '</div></div>' +
         '<div class="form-group"><label class="form-label">Connecting Rooms</label><div class="checklist-box">' + connHtml + '</div></div>' +
@@ -363,6 +370,7 @@ function init() {
       floor: parseInt(document.getElementById('rm-floor').value, 10) || 0,
       bedConfiguration: bedConfigValue,
       view: document.getElementById('rm-view').value,
+      operationalStatus: document.getElementById('rm-opstatus').value,
       accessibilityFeatures: accessibility,
       connectingRoomIds: connecting,
       notes: document.getElementById('rm-notes').value.trim(),
@@ -486,10 +494,11 @@ function init() {
       '<div class="pg-drawer-body">' + body + '</div>' +
       '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;gap:8px;">' +
         '<div style="display:flex;gap:8px;">' +
+          '<a class="btn btn-primary" style="flex:1;text-align:center;" href="new-reservation.html?rt=' + room.roomTypeId + '&room=' + room.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
           '<button class="btn btn-light" style="flex:1;" id="detailsEditBtn">Edit</button>' +
           '<button class="btn btn-danger-outline" style="flex:1;" id="detailsBlockBtn">Block Room</button>' +
-          '<a class="btn btn-outline" style="flex:1;text-align:center;" href="operations-calendar.html?room=' + room.id + '">View Calendar</a>' +
         '</div>' +
+        '<a class="btn btn-outline" style="text-align:center;" href="operations-calendar.html?room=' + room.id + '">View on Operations Calendar</a>' +
         '<div class="text-sm muted">Physical rooms can\'t be deleted once they have reservation, assignment, block, or audit history — deactivate a room instead to retire it from service.</div>' +
       '</div>' +
     '</div>';
@@ -499,68 +508,12 @@ function init() {
   }
 
   /* ================================================================ */
-  /* Block Room modal                                                   */
+  /* Block Room — opens the shared PG.renderBlockRoomModal (the same modal    */
+  /* Operations Calendar uses), so both surfaces run one implementation of    */
+  /* the conflict-check/confirm/audit rules instead of two.                  */
   /* ================================================================ */
-  var blockModal = document.createElement('div');
-  blockModal.className = 'pg-modal-overlay';
-  blockModal.id = 'blockModal';
-  var blockTypeOptions = BLOCK_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
-  blockModal.innerHTML = '<div class="pg-modal">' +
-    '<div class="pg-modal-header"><h3>Block Room</h3><button class="pg-modal-close" onclick="PG.closeModal(\'blockModal\')">&times;</button></div>' +
-    '<div class="pg-modal-body">' +
-      '<div class="form-group"><label class="form-label" id="block-room-label">Room</label></div>' +
-      '<div class="form-group"><label class="form-label">Block Type</label><select class="form-control" id="block-type">' + blockTypeOptions + '</select></div>' +
-      '<div class="grid-2">' +
-        '<div class="form-group"><label class="form-label">Start Date</label><input type="date" class="form-control" id="block-start"></div>' +
-        '<div class="form-group"><label class="form-label">End Date</label><input type="date" class="form-control" id="block-end"></div>' +
-      '</div>' +
-      '<div class="form-group"><label class="form-label">Reason <span class="opt">(required)</span></label><input class="form-control" id="block-reason" placeholder="e.g. Plumbing repair, deep cleaning"></div>' +
-      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="block-notes"></textarea></div>' +
-      '<div id="block-impact-msg"></div>' +
-      '<div id="block-conflict-box"></div>' +
-    '</div>' +
-    '<div class="pg-modal-footer"><button class="btn btn-light" onclick="PG.closeModal(\'blockModal\')">Cancel</button><button class="btn btn-danger" id="blockSave">Block Room</button></div>' +
-  '</div>';
-  document.body.appendChild(blockModal);
-  PG.enhanceSelects(blockModal);
-
-  function refreshBlockTypeMsg() {
-    var type = document.getElementById('block-type').value;
-    var destructive = (type === 'Out of Order' || type === 'Out of Service');
-    var box = document.getElementById('block-impact-msg');
-    box.className = 'help-note ' + (destructive ? 'help-note-danger' : 'help-note-warning');
-    box.textContent = destructive
-      ? 'This will remove the room from sellable availability for the selected dates.'
-      : 'This will place a temporary hold on the room, outside normal sale, for the selected dates.';
-  }
-  function checkBlockConflicts() {
-    var start = document.getElementById('block-start').value;
-    var endInclusive = document.getElementById('block-end').value;
-    var box = document.getElementById('block-conflict-box');
-    var saveBtn = document.getElementById('blockSave');
-    if (!start || !endInclusive || endInclusive < start || !currentRoom) { box.innerHTML = ''; saveBtn.disabled = false; return; }
-    var endExclusive = PG.addDays(endInclusive, 1);
-    var overlapping = PG.assignmentsOverlapping(s, currentRoom.id, start, endExclusive);
-    if (!overlapping.length) { box.innerHTML = ''; saveBtn.disabled = false; return; }
-    var rows = overlapping.map(function (a) {
-      var res = s.reservations.find(function (r) { return r.id === a.reservationId; });
-      var cust = res ? s.customers.find(function (c) { return c.id === res.customerId; }) : null;
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;gap:8px;">' +
-        '<span><a href="reservation-detail.html?id=' + a.reservationId + '" target="_blank">' + a.reservationId + '</a>' + (cust ? ' &middot; ' + PG.esc(cust.name) : '') +
-          '<div class="muted text-sm">' + PG.fmtDateShort(a.arrivalDate) + '&ndash;' + PG.fmtDateShort(a.departureDate) + (a.assignmentStatus === 'Held' ? ' &middot; Held' : '') + '</div></span>' +
-        '<button type="button" class="btn btn-outline btn-sm block-conflict-change" data-assignment="' + a.id + '">Change Room</button>' +
-      '</div>';
-    }).join('');
-    box.innerHTML = '<div class="help-note help-note-danger" style="margin-top:14px;flex-direction:column;align-items:stretch;">' +
-      '<div style="font-weight:700;margin-bottom:6px;">This block conflicts with ' + overlapping.length + ' existing assignment' + (overlapping.length === 1 ? '' : 's') + '.</div>' +
-      rows +
-      '<div style="margin-top:8px;">Resolve or reassign the affected reservation' + (overlapping.length === 1 ? '' : 's') + ' before applying this block.</div>' +
-    '</div>';
-    saveBtn.disabled = true;
-    box.querySelectorAll('.block-conflict-change').forEach(function (btn) {
-      btn.addEventListener('click', function () { openChangeRoomForConflict(btn.dataset.assignment); });
-    });
-  }
+  // Still used by the Deactivate-blocked flow below, which has its own
+  // "Change Room" resolution buttons independent of the Block Room modal.
   function openChangeRoomForConflict(assignmentId, onDone) {
     var st = PG.getState();
     var a = st.roomAssignments.find(function (x) { return x.id === assignmentId; });
@@ -589,62 +542,29 @@ function init() {
           var rec = st2.roomAssignments.find(function (x) { return x.id === assignmentId; });
           rec.physicalRoomId = newRoomId; rec.assignedAt = PG.nowIso(); rec.assignedBy = 'Hotel Admin';
           var idx = st2.reservations.findIndex(function (r) { return r.id === res.id; });
-          st2.reservations[idx].activity.push({ ts: PG.nowIso(), text: 'Room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' while resolving a block conflict.' });
+          st2.reservations[idx].activity.push({ ts: PG.nowIso(), text: 'Room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' while resolving a deactivation conflict.' });
           PG.setState(st2);
-          PG.addAudit('Room Assignment Changed', res.id + ' — room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' (resolving a block conflict).');
+          PG.addAudit('Room Assignment Changed', res.id + ' — room changed from ' + (oldRoom ? oldRoom.roomNumber : '—') + ' to ' + newRoom.roomNumber + ' (resolving a deactivation conflict).');
           PG.toast('Room ' + newRoom.roomNumber + ' assigned.', 'success');
           s = PG.getState();
-          if (onDone) onDone(); else checkBlockConflicts();
+          if (onDone) onDone();
         } catch (e) {
           PG.toast('Failed to save changes — the previous room assignment has been kept.', 'danger');
         }
       }
     });
   }
-  ['block-type'].forEach(function (id) { document.getElementById(id).addEventListener('change', refreshBlockTypeMsg); });
-  ['block-start', 'block-end'].forEach(function (id) { document.getElementById(id).addEventListener('change', checkBlockConflicts); });
-
   function openBlockModal(id) {
     s = PG.getState();
     currentRoom = roomById(id);
     if (!currentRoom) return;
-    document.getElementById('block-room-label').textContent = 'Room ' + currentRoom.roomNumber + ' — ' + rtName(currentRoom.roomTypeId);
-    document.getElementById('block-type').value = 'Out of Order';
-    document.getElementById('block-start').value = PG.TODAY;
-    document.getElementById('block-end').value = PG.TODAY;
-    document.getElementById('block-reason').value = '';
-    document.getElementById('block-notes').value = '';
-    document.getElementById('block-conflict-box').innerHTML = '';
-    document.getElementById('blockSave').disabled = false;
-    refreshBlockTypeMsg();
-    checkBlockConflicts();
-    PG.openModal('blockModal');
-  }
-
-  document.getElementById('blockSave').addEventListener('click', function () {
-    var type = document.getElementById('block-type').value;
-    var start = document.getElementById('block-start').value;
-    var endInclusive = document.getElementById('block-end').value;
-    var reason = document.getElementById('block-reason').value.trim();
-    var notes = document.getElementById('block-notes').value.trim();
-    if (!start || !endInclusive || endInclusive < start) { PG.toast('Please choose a valid date range.', 'danger'); return; }
-    if (!reason) { PG.toast('A reason is required to block a room.', 'danger'); return; }
-    var endExclusive = PG.addDays(endInclusive, 1);
-    var overlapping = PG.assignmentsOverlapping(s, currentRoom.id, start, endExclusive);
-    if (overlapping.length) { PG.toast('Resolve or reassign the affected reservation(s) before applying this block.', 'danger'); return; }
-
-    var st = PG.getState();
-    st.roomBlocks.push({
-      id: 'blk-' + Date.now(), propertyId: st.hotel.propertyCode, physicalRoomId: currentRoom.id,
-      startDate: start, endDate: endExclusive, type: type, reason: reason, notes: notes,
-      createdAt: PG.nowIso(), createdBy: 'Hotel Admin'
+    PG.renderBlockRoomModal({
+      physicalRoomId: currentRoom.id,
+      defaultStart: PG.TODAY,
+      defaultEnd: PG.TODAY,
+      onSaved: function () { renderAll(); }
     });
-    PG.setState(st);
-    PG.addAudit('Physical Room Blocked', 'Room ' + currentRoom.roomNumber + ' blocked (' + type + '), ' + PG.fmtDateShort(start) + ' to ' + PG.fmtDateShort(endInclusive) + '. Reason: ' + reason + '.');
-    PG.toast('Room ' + currentRoom.roomNumber + ' blocked for the selected dates.', 'warn');
-    PG.closeModal('blockModal');
-    renderAll();
-  });
+  }
 
   /* ================================================================ */
   /* Activate / Deactivate                                              */

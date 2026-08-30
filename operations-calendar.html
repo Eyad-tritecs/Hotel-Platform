@@ -83,6 +83,26 @@
   .opc-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 
   @media (max-width:900px){ .opc-wrap{height:calc(100vh - 460px);} }
+
+  .opc-group-header{flex-wrap:wrap;row-gap:6px;}
+  .opc-group-summary{display:flex;gap:14px;flex-wrap:wrap;margin-left:auto;font-size:11px;color:var(--pg-gray-600);}
+  .opc-group-summary b{color:var(--pg-gray-900);font-weight:700;}
+  .opc-manage-avail-btn{margin-left:8px;}
+  .opc-row.highlight-flash{animation:opc-row-flash 1.8s ease-out 1;}
+  @keyframes opc-row-flash{0%{background:var(--pg-primary-light);}100%{background:transparent;}}
+
+  .opc-block-btn{position:absolute;right:34px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:1px solid var(--pg-border);background:#fff;color:var(--pg-danger);font-weight:700;cursor:pointer;line-height:1;display:none;font-size:12px;}
+  .opc-row:hover .opc-block-btn, .opc-row:focus-within .opc-block-btn{display:block;}
+
+  .opc-bar.res, .opc-bar.block{touch-action:none;}
+  .opc-bar.drag-source{opacity:.35;}
+  .opc-drag-ghost{position:absolute;top:8px;height:36px;border-radius:6px;border:2px dashed var(--pg-primary);background:rgba(27,132,255,.14);z-index:15;pointer-events:none;display:flex;align-items:center;padding:0 8px;font-size:11.5px;font-weight:700;color:var(--pg-primary-dark);overflow:hidden;white-space:nowrap;}
+  .opc-drag-ghost.invalid{border-color:var(--pg-danger);background:rgba(248,40,90,.12);color:var(--pg-danger);}
+  .opc-range-select{position:absolute;top:2px;bottom:2px;background:rgba(27,132,255,.14);border:2px dashed var(--pg-primary);border-radius:4px;z-index:14;pointer-events:none;}
+
+  .impact-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--pg-gray-200);font-size:12.5px;gap:10px;}
+  .impact-row:last-child{border-bottom:none;}
+  .impact-row .chg{color:var(--pg-primary);font-weight:700;}
 </style>
 </head>
 <body>
@@ -140,8 +160,25 @@ function init(){
   PG.enhanceSelects(page);
 
   renderLegend();
+  attachDragHandlers();
   document.getElementById('opcGrid').innerHTML = skeletonHtml();
-  setTimeout(renderGrid, 220);
+  // Deep-link support, e.g. operations-calendar.html?room=std-101 — used by Physical
+  // Rooms' "View on Operations Calendar" action. Expands that room's group if collapsed
+  // and scrolls/flashes its row once the grid has rendered.
+  var deepLinkRoomId = new URLSearchParams(location.search).get('room');
+  setTimeout(function(){
+    renderGrid();
+    if (deepLinkRoomId){
+      var targetRoom = s.physicalRooms.find(function(r){return r.id===deepLinkRoomId;});
+      if (targetRoom && collapsed[targetRoom.roomTypeId]){ collapsed[targetRoom.roomTypeId]=false; renderGrid(); }
+      var rowEl = document.querySelector('[data-room-row="'+deepLinkRoomId+'"]');
+      if (rowEl){
+        rowEl.scrollIntoView({block:'center', behavior:'smooth'});
+        rowEl.classList.add('highlight-flash');
+        setTimeout(function(){ rowEl.classList.remove('highlight-flash'); }, 2000);
+      }
+    }
+  }, 220);
 
   /* ---- Toolbar wiring ---- */
   document.getElementById('prevBtn').addEventListener('click', function(){ startDate = PG.addDays(startDate, -viewDays); syncDatePicker(); renderGrid(); });
@@ -378,9 +415,20 @@ function init(){
         });
         if (!typeRooms.length) return;
         var isCollapsed = !!collapsed[typeDef.id];
+        var gs = groupSummary(st, typeDef);
         bodyHtml += '<div class="opc-group-header" data-group="'+typeDef.id+'">' +
           '<button type="button" class="opc-collapse-btn" data-toggle-group="'+typeDef.id+'" aria-expanded="'+(!isCollapsed)+'">'+(isCollapsed?'&#9656;':'&#9662;')+'</button>' +
-          '<strong>'+PG.esc(typeDef.name)+'</strong><span class="muted text-sm">'+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span></div>';
+          '<strong>'+PG.esc(typeDef.name)+'</strong><span class="muted text-sm">'+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span>' +
+          '<div class="opc-group-summary">' +
+            '<span>Active &amp; Sellable <b>'+gs.activeSellable+'</b></span>' +
+            '<span>Reserved <b>'+gs.reserved+'</b></span>' +
+            '<span>Held <b>'+gs.held+'</b></span>' +
+            '<span>Blocked <b>'+gs.blocked+'</b></span>' +
+            '<span>Available <b>'+gs.available+'</b></span>' +
+            '<span'+(gs.manualAdjustment!==0?' style="color:var(--pg-primary);"':'')+'>Remaining Sellable <b>'+gs.remainingSellable+'</b>'+(gs.manualAdjustment!==0?' ('+(gs.manualAdjustment>0?'+':'')+gs.manualAdjustment+' adj.)':'')+(gs.stopSell?' <span class="badge badge-red" style="margin-left:4px;"><span class="badge-dot"></span>Stop Sell</span>':'')+'</span>' +
+          '</div>' +
+          (CAN_MANAGE ? '<button type="button" class="btn btn-outline btn-sm opc-manage-avail-btn" data-manage-avail="'+typeDef.id+'">Manage Availability</button>' : '') +
+        '</div>';
         if (!isCollapsed) bodyHtml += typeRooms.map(function(room){ return renderRoomRow(st, room, dates); }).join('');
       });
     }
@@ -411,6 +459,7 @@ function init(){
       '<div class="opc-room-info"><div class="opc-room-num">Room '+PG.esc(room.roomNumber)+'</div>' +
       '<div class="opc-room-meta">'+PG.esc(rtName(room.roomTypeId))+' &middot; Fl '+room.floor+'</div>' +
       PG.roomStatusBadge(PG.roomStatusOn(st, room.id, PG.TODAY)) +
+      (CAN_MANAGE?'<button type="button" class="opc-block-btn" data-block-room="'+room.id+'" title="Block Room '+PG.esc(room.roomNumber)+'" aria-label="Block Room '+PG.esc(room.roomNumber)+'">&#9940;</button>':'') +
       (CAN_MANAGE?'<button type="button" class="opc-quickadd" data-quickadd-room="'+room.id+'" data-quickadd-rt="'+room.roomTypeId+'" title="New reservation for Room '+PG.esc(room.roomNumber)+'" aria-label="New reservation for Room '+PG.esc(room.roomNumber)+'">+</button>':'') +
       '</div>' +
       '<div class="opc-track" style="width:'+(dates.length*CELL_W)+'px;">'+cellsHtml+barsHtml+'</div>' +
@@ -419,15 +468,16 @@ function init(){
 
   function wireGridInteractions(root){
     root.querySelectorAll('.opc-bar[data-kind="reservation"]').forEach(function(el){
-      el.addEventListener('click', function(){ openReservationDrawer(el.dataset.res, el.dataset.item, el.dataset.assignment); });
+      el.addEventListener('click', function(){ if (suppressNextClick){ suppressNextClick=false; return; } openReservationDrawer(el.dataset.res, el.dataset.item, el.dataset.assignment); });
       el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
     });
     root.querySelectorAll('.opc-bar[data-kind="block"]').forEach(function(el){
-      el.addEventListener('click', function(){ openBlockDrawer(el.dataset.block); });
+      el.addEventListener('click', function(){ if (suppressNextClick){ suppressNextClick=false; return; } openBlockDrawer(el.dataset.block); });
       el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
     });
     root.querySelectorAll('[data-empty-room]').forEach(function(el){
       el.addEventListener('click', function(){
+        if (suppressNextClick){ suppressNextClick=false; return; }
         if (!CAN_MANAGE) return;
         location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.emptyRt) + '&room=' + encodeURIComponent(el.dataset.emptyRoom) + '&date=' + encodeURIComponent(el.dataset.emptyDate);
       });
@@ -438,6 +488,418 @@ function init(){
         location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.quickaddRt) + '&room=' + encodeURIComponent(el.dataset.quickaddRoom) + '&date=' + encodeURIComponent(dateWindow()[0]);
       });
     });
+    root.querySelectorAll('[data-block-room]').forEach(function(el){
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (!CAN_MANAGE) return;
+        PG.renderBlockRoomModal({ physicalRoomId: el.dataset.blockRoom, defaultStart: dateWindow()[0], defaultEnd: dateWindow()[0], onSaved: function(){ renderGrid(); } });
+      });
+    });
+    root.querySelectorAll('[data-manage-avail]').forEach(function(el){
+      el.addEventListener('click', function(){ openManageAvailability(el.dataset.manageAvail); });
+    });
+  }
+
+  /* ================================================================ */
+  /* Reservation bar / room-block drag interactions.                          */
+  /* Never save immediately: drag → snapped preview → release → confirm       */
+  /* modal → revalidate → atomic save → refresh, or Cancel/fail → the         */
+  /* preview is discarded and nothing was ever written. Attached once via     */
+  /* delegation on the persistent #opcGrid node so it survives every          */
+  /* renderGrid() re-render (only .innerHTML is replaced, not the node).      */
+  /* ================================================================ */
+  var suppressNextClick = false;
+  var EDGE_PX = 10;
+
+  function attachDragHandlers(){
+    document.getElementById('opcGrid').addEventListener('mousedown', function(e){
+      if (!CAN_MANAGE || e.button !== 0) return;
+      var bar = e.target.closest('.opc-bar');
+      if (bar){ beginBarDrag(bar, e); return; }
+      var cell = e.target.closest('[data-empty-room]');
+      if (cell){ beginRangeDrag(cell, e); }
+    });
+  }
+
+  function ghostEl(){
+    var g = document.getElementById('opcDragGhost');
+    if (!g){ g = document.createElement('div'); g.id = 'opcDragGhost'; g.className = 'opc-drag-ghost'; }
+    return g;
+  }
+  function removeGhost(){ var g = document.getElementById('opcDragGhost'); if (g && g.parentNode) g.parentNode.removeChild(g); }
+  function removeRangeGhost(){ var g = document.getElementById('opcRangeGhost'); if (g && g.parentNode) g.parentNode.removeChild(g); }
+
+  function beginBarDrag(barEl, e){
+    var kind = barEl.dataset.kind;
+    var rowEl = barEl.closest('.opc-row');
+    if (!rowEl) return;
+    var rect = barEl.getBoundingClientRect();
+    var mode = 'move';
+    if (e.clientX - rect.left <= EDGE_PX) mode = 'resize-start';
+    else if (rect.right - e.clientX <= EDGE_PX) mode = 'resize-end';
+
+    var ctx = {
+      kind: kind, mode: mode, barEl: barEl, origRowEl: rowEl,
+      origLeft: parseFloat(barEl.style.left) || 0, origWidth: parseFloat(barEl.style.width) || CELL_W,
+      startX: e.clientX, startY: e.clientY, dayDelta: 0, moved: false, targetRowEl: rowEl,
+      resId: barEl.dataset.res, itemId: barEl.dataset.item, assignmentId: barEl.dataset.assignment,
+      blockId: barEl.dataset.block
+    };
+
+    function onMove(ev){
+      var dx = ev.clientX - ctx.startX, dy = ev.clientY - ctx.startY;
+      if (!ctx.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 6)) ctx.moved = true;
+      if (!ctx.moved) return;
+      barEl.classList.add('drag-source');
+      ctx.dayDelta = Math.round(dx / CELL_W);
+      // Vertical row-change detection only applies to moving a whole reservation bar —
+      // resizing an edge, and blocks in this pass, always stay on their own row.
+      if (kind === 'reservation' && mode === 'move'){
+        var under = document.elementFromPoint(ev.clientX, ev.clientY);
+        var rowUnder = under && under.closest('.opc-row');
+        if (rowUnder) ctx.targetRowEl = rowUnder;
+      }
+      renderBarGhost(ctx);
+    }
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      barEl.classList.remove('drag-source');
+      removeGhost();
+      if (ctx.moved){ suppressNextClick = true; finishBarDrag(ctx); }
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  }
+
+  function renderBarGhost(ctx){
+    var track = ctx.targetRowEl.querySelector('.opc-track');
+    var g = ghostEl();
+    if (g.parentNode !== track) track.appendChild(g);
+    var left = ctx.origLeft, width = ctx.origWidth;
+    if (ctx.mode === 'move'){ left = ctx.origLeft + ctx.dayDelta * CELL_W; }
+    else if (ctx.mode === 'resize-start'){ left = ctx.origLeft + ctx.dayDelta * CELL_W; width = ctx.origWidth - ctx.dayDelta * CELL_W; }
+    else if (ctx.mode === 'resize-end'){ width = ctx.origWidth + ctx.dayDelta * CELL_W; }
+    var invalid = width < CELL_W - 10;
+    g.className = 'opc-drag-ghost' + (invalid ? ' invalid' : '');
+    g.style.left = left + 'px';
+    g.style.width = Math.max(20, width) + 'px';
+    g.textContent = ctx.kind === 'block' ? 'Move/Resize Block' : (ctx.targetRowEl !== ctx.origRowEl ? 'Move to Room ' + (roomById(ctx.targetRowEl.dataset.roomRow)||{}).roomNumber : 'Move / Resize Stay');
+  }
+  function roomById(id){ return s.physicalRooms.find(function(p){return p.id===id;}); }
+
+  function finishBarDrag(ctx){
+    if (ctx.kind === 'block'){ finishBlockDrag(ctx); return; }
+    var origRoomId = ctx.origRowEl.dataset.roomRow, targetRoomId = ctx.targetRowEl.dataset.roomRow;
+    if (targetRoomId !== origRoomId){
+      // Vertical drag onto another room row — treated as a controlled Change Room action:
+      // reuse the existing, already-validated Change Room drawer rather than a bespoke
+      // drop-target validator, so this never duplicates that ranking/eligibility logic.
+      PG.toast('Dropped on Room ' + (roomById(targetRoomId)||{}).roomNumber + ' — choose a room to confirm the change.', 'warn');
+      openChangeRoomFor(ctx.resId, ctx.itemId, ctx.assignmentId);
+      return;
+    }
+    var st = PG.getState();
+    var res = st.reservations.find(function(r){return r.id===ctx.resId;});
+    if (!res){ renderGrid(); return; }
+    var newCheckIn = res.checkIn, newCheckOut = res.checkOut;
+    if (ctx.mode === 'move'){ newCheckIn = PG.addDays(res.checkIn, ctx.dayDelta); newCheckOut = PG.addDays(res.checkOut, ctx.dayDelta); }
+    else if (ctx.mode === 'resize-start'){ newCheckIn = PG.addDays(res.checkIn, ctx.dayDelta); }
+    else if (ctx.mode === 'resize-end'){ newCheckOut = PG.addDays(res.checkOut, ctx.dayDelta); }
+    if (ctx.dayDelta === 0 || newCheckOut <= newCheckIn){
+      if (newCheckOut <= newCheckIn) PG.toast('Invalid date range — the stay must be at least 1 night.', 'danger');
+      renderGrid();
+      return;
+    }
+    openDateChangeConfirm(ctx.resId, newCheckIn, newCheckOut);
+  }
+
+  /* ---- Reservation date-change confirm modal ---- */
+  var dateChangeModal = document.createElement('div');
+  dateChangeModal.className = 'pg-modal-overlay';
+  dateChangeModal.id = 'dateChangeModal';
+  document.body.appendChild(dateChangeModal);
+  function openDateChangeConfirm(resId, newCheckIn, newCheckOut){
+    var st = PG.getState();
+    var impact = PG.computeDateChangeImpact(st, resId, newCheckIn, newCheckOut);
+    var res = st.reservations.find(function(r){return r.id===resId;});
+    var cust = custOf(res);
+    var roomsBefore = res.rooms.map(function(room){
+      var a = st.roomAssignments.find(function(x){return x.reservationItemId===room.id && x.assignmentStatus!=='Cancelled';});
+      var pr = a ? st.physicalRooms.find(function(p){return p.id===a.physicalRoomId;}) : null;
+      return pr ? pr.roomNumber : '—';
+    }).join(', ');
+    var roomsAfter = impact.items.map(function(it){
+      return it.assignedRoomIds.map(function(rid){ var pr=st.physicalRooms.find(function(p){return p.id===rid;}); return pr?pr.roomNumber:'—'; }).join('/') || 'none';
+    }).join(', ');
+    var totalChanged = Math.round(impact.oldTotal*100)!==Math.round(impact.total*100);
+    var body = '';
+    body += drow('Guest', PG.esc(cust?cust.name:'Guest')) + drow('Reservation #', res.id);
+    body += drow('Room(s)', roomsBefore + (roomsBefore!==roomsAfter ? ' <span class="chg">&rarr; ' + PG.esc(roomsAfter) + '</span>' : ''));
+    body += drow('Arrival', PG.fmtDate(impact.oldCheckIn) + (impact.oldCheckIn!==impact.newCheckIn ? ' <span class="chg">&rarr; ' + PG.fmtDate(impact.newCheckIn) + '</span>' : ''));
+    body += drow('Departure', PG.fmtDate(impact.oldCheckOut) + (impact.oldCheckOut!==impact.newCheckOut ? ' <span class="chg">&rarr; ' + PG.fmtDate(impact.newCheckOut) + '</span>' : ''));
+    body += drow('Nights', impact.oldNights + (impact.oldNights!==impact.newNights ? ' <span class="chg">&rarr; ' + impact.newNights + '</span>' : ''));
+    if (res.rooms.length>1) body += '<div class="help-note" style="margin:10px 0;">This reservation has multiple rooms. Stay dates are shared across the whole reservation — this change applies to <strong>all ' + res.rooms.length + ' room item(s)</strong>, not just the one you dragged.</div>';
+    body += drow('Room Charges', PG.fmtMoney(impact.oldRoomCharges) + (totalChanged ? ' <span class="chg">&rarr; ' + PG.fmtMoney(impact.roomCharges) + '</span>' : ''));
+    body += drow('Taxes', PG.fmtMoney(impact.oldTaxAmount) + (totalChanged ? ' <span class="chg">&rarr; ' + PG.fmtMoney(impact.taxAmount) + '</span>' : ''));
+    body += drow('Fees', PG.fmtMoney(impact.oldFeeAmount) + (totalChanged ? ' <span class="chg">&rarr; ' + PG.fmtMoney(impact.feeAmount) + '</span>' : ''));
+    body += drow('Total', PG.fmtMoney(impact.oldTotal) + (totalChanged ? ' <span class="chg">&rarr; ' + PG.fmtMoney(impact.total) + '</span>' : ''));
+    if (res.paymentStatus==='Paid' || res.paymentStatus==='Link Sent'){
+      body += '<div class="help-note help-note-warning" style="margin-top:10px;">This reservation\'s payment status is ' + res.paymentStatus + '. Review the new total against the amount already paid/linked in Reservation Detail after confirming — this action does not change payment status automatically.</div>';
+    }
+    var problems = [];
+    impact.items.forEach(function(it, i){
+      if (!it.avail.ok) problems.push('Room Item ' + (i+1) + ': insufficient ' + PG.esc(rtName(it.roomTypeId)) + ' inventory for the new dates.');
+      else if (it.shortfall>0) problems.push('Room Item ' + (i+1) + ': no eligible physical room for the new dates.');
+    });
+    if (!impact.validDates) problems.push('Departure must be after arrival.');
+    var warningHtml = problems.length ? '<div class="help-note help-note-danger" style="margin-top:10px;">' + problems.map(PG.esc).join('<br>') + '</div>' : '';
+
+    dateChangeModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Confirm Date Change</h3><button class="pg-modal-close" id="dc-close">&times;</button></div>' +
+      '<div class="pg-modal-body">' + body + warningHtml + '</div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="dc-cancel">Cancel and Revert</button><button class="btn btn-primary" id="dc-confirm"' + (impact.ok?'':' disabled') + '>Confirm Change</button></div>' +
+    '</div>';
+    document.getElementById('dc-close').addEventListener('click', function(){ PG.closeModal('dateChangeModal'); renderGrid(); });
+    document.getElementById('dc-cancel').addEventListener('click', function(){ PG.closeModal('dateChangeModal'); renderGrid(); });
+    if (impact.ok){
+      document.getElementById('dc-confirm').addEventListener('click', function(){
+        try {
+          // Revalidate immediately before saving — state may have changed since the drawer opened.
+          var freshImpact = PG.computeDateChangeImpact(PG.getState(), resId, newCheckIn, newCheckOut);
+          if (!freshImpact || !freshImpact.ok){
+            PG.toast('This change is no longer valid — availability changed. The reservation has been kept as it was.', 'danger');
+            PG.closeModal('dateChangeModal'); renderGrid();
+            return;
+          }
+          PG.applyDateChangeImpact(freshImpact, 'Hotel Admin');
+          PG.toast('Reservation dates updated.', 'success');
+          PG.closeModal('dateChangeModal');
+          renderGrid();
+        } catch (e) {
+          PG.toast('Failed to save changes — the reservation has been kept as it was.', 'danger');
+          PG.closeModal('dateChangeModal');
+          renderGrid();
+        }
+      });
+    }
+    PG.openModal('dateChangeModal');
+  }
+
+  /* ---- Room block drag (move / resize, same room) ---- */
+  function finishBlockDrag(ctx){
+    var st = PG.getState();
+    var blk = st.roomBlocks.find(function(b){return b.id===ctx.blockId;});
+    if (!blk){ renderGrid(); return; }
+    var newStart = blk.startDate, newEnd = blk.endDate;
+    if (ctx.mode === 'move'){ newStart = PG.addDays(blk.startDate, ctx.dayDelta); newEnd = PG.addDays(blk.endDate, ctx.dayDelta); }
+    else if (ctx.mode === 'resize-start'){ newStart = PG.addDays(blk.startDate, ctx.dayDelta); }
+    else if (ctx.mode === 'resize-end'){ newEnd = PG.addDays(blk.endDate, ctx.dayDelta); }
+    if (ctx.dayDelta === 0 || newEnd <= newStart){
+      if (newEnd <= newStart) PG.toast('Invalid date range for this block.', 'danger');
+      renderGrid();
+      return;
+    }
+    openBlockDateChangeConfirm(ctx.blockId, newStart, newEnd);
+  }
+  var blockDateChangeModal = document.createElement('div');
+  blockDateChangeModal.className = 'pg-modal-overlay';
+  blockDateChangeModal.id = 'blockDateChangeModal';
+  document.body.appendChild(blockDateChangeModal);
+  function openBlockDateChangeConfirm(blockId, newStart, newEnd){
+    var st = PG.getState();
+    var blk = st.roomBlocks.find(function(b){return b.id===blockId;});
+    var room = st.physicalRooms.find(function(p){return p.id===blk.physicalRoomId;});
+    var overlapping = PG.assignmentsOverlapping(st, blk.physicalRoomId, newStart, newEnd);
+    var body = drow('Room', room ? 'Room '+PG.esc(room.roomNumber) : '—') + drow('Block Type', blk.type) +
+      drow('Dates', PG.fmtDate(blk.startDate)+' – '+PG.fmtDate(PG.addDays(blk.endDate,-1)) + ' <span class="chg">&rarr; ' + PG.fmtDate(newStart)+' – '+PG.fmtDate(PG.addDays(newEnd,-1)) + '</span>');
+    var conflictHtml = '';
+    if (overlapping.length){
+      var rows = overlapping.map(function(a){
+        var res = st.reservations.find(function(r){return r.id===a.reservationId;});
+        var cust = res ? st.customers.find(function(c){return c.id===res.customerId;}) : null;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.08);font-size:12.5px;gap:8px;">' +
+          '<span><a href="reservation-detail.html?id='+a.reservationId+'" target="_blank">'+a.reservationId+'</a>'+(cust?' &middot; '+PG.esc(cust.name):'')+
+            '<div class="muted text-sm">'+PG.fmtDateShort(a.arrivalDate)+'&ndash;'+PG.fmtDateShort(a.departureDate)+'</div></span>' +
+          '<button type="button" class="btn btn-outline btn-sm bdc-conflict-change" data-assignment="'+a.id+'">Change Room</button>' +
+        '</div>';
+      }).join('');
+      conflictHtml = '<div class="help-note help-note-danger" style="margin-top:12px;flex-direction:column;align-items:stretch;">' +
+        '<div style="font-weight:700;margin-bottom:6px;">Room '+PG.esc(room.roomNumber)+' cannot be blocked for these dates — it conflicts with '+overlapping.length+' existing assignment'+(overlapping.length===1?'':'s')+'.</div>' +
+        rows + '<div style="margin-top:8px;">Resolve or reassign before saving.</div></div>';
+    }
+    blockDateChangeModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Confirm Block Change</h3><button class="pg-modal-close" id="bdc-close">&times;</button></div>' +
+      '<div class="pg-modal-body">' + body + conflictHtml + '</div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="bdc-cancel">Cancel and Revert</button><button class="btn btn-primary" id="bdc-confirm"' + (overlapping.length?' disabled':'') + '>Confirm Change</button></div>' +
+    '</div>';
+    document.getElementById('bdc-close').addEventListener('click', function(){ PG.closeModal('blockDateChangeModal'); renderGrid(); });
+    document.getElementById('bdc-cancel').addEventListener('click', function(){ PG.closeModal('blockDateChangeModal'); renderGrid(); });
+    blockDateChangeModal.querySelectorAll('.bdc-conflict-change').forEach(function(btn){
+      btn.addEventListener('click', function(){ openChangeRoomForBlockConflict(btn.dataset.assignment, function(){ openBlockDateChangeConfirm(blockId, newStart, newEnd); }); });
+    });
+    if (!overlapping.length){
+      document.getElementById('bdc-confirm').addEventListener('click', function(){
+        try {
+          var fresh = PG.getState();
+          var freshOverlap = PG.assignmentsOverlapping(fresh, blk.physicalRoomId, newStart, newEnd);
+          if (freshOverlap.length){ PG.toast('This range now conflicts with a reservation — the block has been kept as it was.', 'danger'); PG.closeModal('blockDateChangeModal'); renderGrid(); return; }
+          var rec = fresh.roomBlocks.find(function(b){return b.id===blockId;});
+          var oldStart = rec.startDate, oldEnd = rec.endDate;
+          rec.startDate = newStart; rec.endDate = newEnd;
+          PG.setState(fresh);
+          PG.addAudit('Room Block Updated', blockId + ' on Room ' + room.roomNumber + ' moved from ' + PG.fmtDateShort(oldStart) + '–' + PG.fmtDateShort(PG.addDays(oldEnd,-1)) + ' to ' + PG.fmtDateShort(newStart) + '–' + PG.fmtDateShort(PG.addDays(newEnd,-1)) + ' via Operations Calendar.');
+          PG.toast('Block updated.', 'success');
+          PG.closeModal('blockDateChangeModal');
+          renderGrid();
+        } catch (e) {
+          PG.toast('Failed to save changes — the block has been kept as it was.', 'danger');
+          PG.closeModal('blockDateChangeModal');
+          renderGrid();
+        }
+      });
+    }
+    PG.openModal('blockDateChangeModal');
+  }
+
+  /* ---- Drag across empty cells → Create Room Block modal ---- */
+  function beginRangeDrag(cellEl, e){
+    var trackEl = cellEl.closest('.opc-track');
+    var dates = dateWindow();
+    var startIdx = dates.indexOf(cellEl.dataset.emptyDate);
+    var ctx = { roomId: cellEl.dataset.emptyRoom, startIdx: startIdx, endIdx: startIdx, startX: e.clientX, moved: false, trackEl: trackEl };
+
+    function onMove(ev){
+      var dx = ev.clientX - ctx.startX;
+      if (!ctx.moved && Math.abs(dx) > 4) ctx.moved = true;
+      if (!ctx.moved) return;
+      var deltaIdx = Math.round(dx / CELL_W);
+      ctx.endIdx = Math.max(0, Math.min(dates.length - 1, startIdx + deltaIdx));
+      renderRangeGhost(ctx, dates);
+    }
+    function onUp(){
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      removeRangeGhost();
+      if (ctx.moved){
+        suppressNextClick = true;
+        var lo = Math.min(ctx.startIdx, ctx.endIdx), hi = Math.max(ctx.startIdx, ctx.endIdx);
+        PG.renderBlockRoomModal({ physicalRoomId: ctx.roomId, defaultStart: dates[lo], defaultEnd: dates[hi], onSaved: function(){ renderGrid(); } });
+      }
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  }
+  function renderRangeGhost(ctx, dates){
+    var g = document.getElementById('opcRangeGhost');
+    if (!g){ g = document.createElement('div'); g.id = 'opcRangeGhost'; g.className = 'opc-range-select'; ctx.trackEl.appendChild(g); }
+    else if (g.parentNode !== ctx.trackEl){ ctx.trackEl.appendChild(g); }
+    var lo = Math.min(ctx.startIdx, ctx.endIdx), hi = Math.max(ctx.startIdx, ctx.endIdx);
+    g.style.left = (lo * CELL_W + 2) + 'px';
+    g.style.width = ((hi - lo + 1) * CELL_W - 4) + 'px';
+  }
+
+  /* ================================================================ */
+  /* Room Type group availability summary + Manage Availability             */
+  /* (exposes the existing Stop Sell / manual-adjustment / physical-capacity */
+  /* rules inline in the calendar — same engine, no separate page, and the   */
+  /* hidden availability-inventory.html's own logic is untouched).           */
+  /* ================================================================ */
+  function groupSummary(st, typeDef){
+    var typeRooms = st.physicalRooms.filter(function(r){return r.roomTypeId===typeDef.id;});
+    var activeSellable = typeRooms.filter(function(r){return r.isActive && r.isSellable;}).length;
+    var reserved=0, held=0, blocked=0;
+    typeRooms.forEach(function(r){
+      var stt = PG.roomStatusOn(st, r.id, PG.TODAY);
+      if (stt==='Reserved') reserved++;
+      else if (stt==='Held') held++;
+      else if (stt==='Out of Order' || stt==='Out of Service') blocked++;
+    });
+    var a = PG.computeAvailability(st, typeDef.id, PG.TODAY);
+    return {
+      activeSellable: activeSellable, reserved: reserved, held: held, blocked: blocked,
+      available: Math.max(0, activeSellable - reserved - held - blocked),
+      remainingSellable: a.available, manualAdjustment: PG.dateAdjustmentFor(st, typeDef.id, PG.TODAY), stopSell: a.stopSell
+    };
+  }
+
+  var manageAvailModal = document.createElement('div');
+  manageAvailModal.className = 'pg-modal-overlay';
+  manageAvailModal.id = 'manageAvailModal';
+  document.body.appendChild(manageAvailModal);
+  function openManageAvailability(roomTypeId){
+    var st = PG.getState();
+    var typeDef = rt(roomTypeId);
+    var physicalCap = PG.activeSellablePhysicalCount(st, roomTypeId);
+    render();
+    function render(){
+      var freshSt = PG.getState();
+      var d0 = dateWindow()[0];
+      var key = roomTypeId+'|'+d0;
+      var stopEntry = freshSt.inventoryOverrides[key] || null;
+      var adj = PG.dateAdjustmentFor(freshSt, roomTypeId, d0);
+      var a = PG.computeAvailability(freshSt, roomTypeId, d0);
+      manageAvailModal.innerHTML = '<div class="pg-modal">' +
+        '<div class="pg-modal-header"><h3>Manage Availability — '+PG.esc(typeDef.name)+'</h3><button class="pg-modal-close" id="ma-close">&times;</button></div>' +
+        '<div class="pg-modal-body">' +
+          '<div class="help-note">Showing '+PG.fmtDate(d0)+' (first date of the current calendar view). Manual adjustments can never exceed this room type\'s '+physicalCap+' active, sellable physical room(s).</div>' +
+          '<div class="impact-row"><span>Configured Sellable</span><span><b>'+typeDef.sellable+'</b></span></div>' +
+          '<div class="impact-row"><span>Manual Adjustment (this date)</span><span><b>'+(adj>0?'+':'')+adj+'</b></span></div>' +
+          '<div class="impact-row"><span>Stop Sell</span><span>'+(stopEntry?'<span class="badge badge-red"><span class="badge-dot"></span>Active — '+PG.esc(stopEntry.reason)+'</span>':'<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>')+'</span></div>' +
+          '<div class="impact-row"><strong>Sellable Availability</strong><strong>'+a.available+'</strong></div>' +
+          '<div class="form-group" style="margin-top:14px;"><label class="form-label">Adjust Manual Inventory for '+PG.fmtDateShort(d0)+'</label>' +
+            '<div style="display:flex;gap:8px;"><input type="number" class="form-control" id="ma-qty" placeholder="e.g. 1 or -1" style="max-width:140px;"><button class="btn btn-outline btn-sm" id="ma-apply-adj">Apply</button></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pg-modal-footer">' +
+          (stopEntry ? '<button class="btn btn-outline" id="ma-reopen">Reopen for This Date</button>' : '<button class="btn btn-danger-outline" id="ma-stopsell">Stop Sell for This Date</button>') +
+          '<button class="btn btn-primary" id="ma-done">Done</button>' +
+        '</div></div>';
+      document.getElementById('ma-close').addEventListener('click', function(){ PG.closeModal('manageAvailModal'); });
+      document.getElementById('ma-done').addEventListener('click', function(){ PG.closeModal('manageAvailModal'); renderGrid(); });
+      var reopenBtn = document.getElementById('ma-reopen');
+      if (reopenBtn) reopenBtn.addEventListener('click', function(){
+        var reason = prompt('Reason for reopening?', 'Availability restored');
+        if (reason==null) return;
+        var st2 = PG.getState();
+        delete st2.inventoryOverrides[key];
+        PG.setState(st2);
+        PG.addAudit('Inventory Reopened', typeDef.name+', '+PG.fmtDateShort(d0)+'. Reason: '+reason+'.');
+        PG.toast(typeDef.name+' reopened for '+PG.fmtDateShort(d0)+'.', 'success');
+        render();
+      });
+      var stopBtn = document.getElementById('ma-stopsell');
+      if (stopBtn) stopBtn.addEventListener('click', function(){
+        var reason = prompt('Reason for Stop Sell?', 'Operational hold');
+        if (!reason) { PG.toast('A reason is required to Stop Sell.', 'danger'); return; }
+        var st2 = PG.getState();
+        st2.inventoryOverrides[key] = {stopSell:true, reason:reason};
+        PG.setState(st2);
+        PG.addAudit('Stop Sell Applied', typeDef.name+', '+PG.fmtDateShort(d0)+'. Reason: '+reason+'.');
+        PG.toast(typeDef.name+' set to Stop Sell for '+PG.fmtDateShort(d0)+'.', 'warn');
+        render();
+      });
+      document.getElementById('ma-apply-adj').addEventListener('click', function(){
+        var qty = parseInt(document.getElementById('ma-qty').value, 10);
+        if (!qty){ PG.toast('Enter a non-zero adjustment quantity.', 'danger'); return; }
+        var st2 = PG.getState();
+        var current = PG.dateAdjustmentFor(st2, roomTypeId, d0);
+        var wouldBe = typeDef.sellable + current + qty;
+        if (qty>0 && wouldBe > physicalCap){
+          PG.toast('Cannot increase sellable inventory past the '+physicalCap+' active, sellable physical room(s) for '+PG.fmtDateShort(d0)+'.', 'danger');
+          return;
+        }
+        st2.dateAdjustments[key] = current + qty;
+        st2.adjustments.push({ts:PG.nowIso(), roomTypeId:roomTypeId, type: qty>0?'Increase Sellable Inventory':'Decrease Sellable Inventory', qty:Math.abs(qty), from:d0, to:d0, reason:'Adjusted from Operations Calendar', notes:''});
+        PG.setState(st2);
+        PG.addAudit('Inventory Adjusted', (qty>0?'Increase':'Decrease')+' Sellable Inventory — '+typeDef.name+', '+PG.fmtDateShort(d0)+'. Before: '+(typeDef.sellable+current)+', After: '+wouldBe+'.');
+        PG.toast('Inventory adjusted for '+PG.fmtDateShort(d0)+'.', 'success');
+        render();
+      });
+    }
+    PG.openModal('manageAvailModal');
   }
 
   /* ================================================================ */
