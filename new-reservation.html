@@ -22,16 +22,25 @@
   .pay-opt.active{border-color:var(--pg-primary);background:var(--pg-primary-light);}
   .pay-opt h4{font-size:13.5px;margin-bottom:4px;}
   .pay-opt p{font-size:12px;color:var(--pg-gray-600);margin:0;}
-  .cust-opt{border:1px solid var(--pg-border);border-radius:8px;padding:12px 14px;cursor:pointer;margin-bottom:8px;}
-  .cust-opt.active{border-color:var(--pg-primary);background:var(--pg-primary-light);}
   .step-panel{display:none;}
   .step-panel.active{display:block;}
-  .cust-toolbar{display:flex;gap:10px;margin-bottom:12px;}
-  .cust-toolbar input{flex:1;}
-  .cust-toolbar .pg-select{width:160px;flex-shrink:0;}
-  .cust-pagination{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--pg-gray-600);}
   .room-assign-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:8px;background:#fff;}
   .room-assign-row.shortfall{border-color:var(--pg-danger);background:var(--pg-danger-light);}
+  .room-assign-row.attention{border-color:var(--pg-warning, #f0ad4e);background:#fff8ec;}
+  .pg-combobox{position:relative;}
+  .combo-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);max-height:340px;overflow-y:auto;z-index:20;}
+  .combo-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--pg-gray-200);}
+  .combo-item:last-child{border-bottom:none;}
+  .combo-item:hover, .combo-item.hi{background:var(--pg-gray-100);}
+  .combo-item .cn{font-weight:700;font-size:13px;}
+  .combo-item .cc{font-size:11.5px;color:var(--pg-gray-600);margin-top:2px;}
+  .combo-item .cx{font-size:11px;color:var(--pg-gray-500);margin-top:2px;}
+  .combo-empty{padding:14px;text-align:center;font-size:12.5px;color:var(--pg-gray-600);}
+  .combo-hint{padding:8px 14px;font-size:11px;color:var(--pg-gray-500);border-bottom:1px solid var(--pg-gray-200);}
+  .guest-summary-card{border:1px solid var(--pg-border);border-radius:8px;padding:14px 16px;background:var(--pg-gray-100);}
+  .guest-summary-card .gs-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12.5px;border-bottom:1px solid var(--pg-gray-200);}
+  .guest-summary-card .gs-row:last-of-type{border-bottom:none;}
+  .guest-summary-card .gs-actions{display:flex;gap:8px;margin-top:12px;}
 </style>
 </head>
 <body>
@@ -92,6 +101,16 @@ function recomputeAssignments(){
 function allItemsAssigned(){
   return wizard.items.every(function(it){ return it.assignmentShortfall===0; });
 }
+// True if any assigned room is flagged Needs Attention (slotNeedsAttention, defined below) —
+// must be resolved via an explicit, confirmed Change Room before the wizard can proceed,
+// since later steps re-run recomputeAssignments() and would otherwise drop the stale room
+// on their own the moment the guest reaches Review, which is exactly the silent reassignment
+// CONNECT AUTO-ASSIGNMENT forbids.
+function anyNeedsAttention(){
+  return wizard.items.some(function(it){
+    return (it.assignedRoomIds||[]).some(function(rid){ return !!slotNeedsAttention(it, rid); });
+  });
+}
 function roomSummaryChips(pr){
   var bits = [pr.view, pr.bedConfiguration].concat(pr.accessibilityFeatures||[]);
   return bits.map(function(b){ return '<span class="chip">'+PG.esc(b)+'</span>'; }).join('');
@@ -99,24 +118,21 @@ function roomSummaryChips(pr){
 
 var wizard = {
   source: null,
-  customerMode: 'existing',
   customerId: null,
-  newCustomer: {name:'', phone:'', email:'', country:'', notes:''},
   checkIn: PG.TODAY,
   checkOut: PG.addDays(PG.TODAY, 3),
   items: [defaultItem()],
   paymentMethod: null,
-  notes: ''
+  notes: '',
+  accessibilityBannerDismissed: false
 };
-var custState = {search:'', sort:'newest', page:1, pageSize:4};
-var PAGE_SIZE = custState.pageSize;
+var guestCombo = {query: '', open: false, highlight: -1};
 
 // Guided demo pre-fill — launched from the Guided Journey page for the Ahmad Khalil / WhatsApp scenario.
 var demoTaxOverride = null;
 var entryParams = new URLSearchParams(location.search);
 if (entryParams.get('demo') === 'ahmad-whatsapp'){
   wizard.source = 'WhatsApp';
-  wizard.customerMode = 'existing';
   wizard.customerId = 'cus-1';
   wizard.checkIn = '2026-08-20';
   wizard.checkOut = '2026-08-23';
@@ -130,7 +146,7 @@ if (entryParams.get('demo') === 'ahmad-whatsapp'){
 if (entryParams.get('customer')){
   // Entry from the Guests module ("Create Reservation") — prefill the existing guest.
   var prefCust = s.customers.find(function(c){return c.id===entryParams.get('customer');});
-  if (prefCust){ wizard.customerMode = 'existing'; wizard.customerId = prefCust.id; }
+  if (prefCust){ wizard.customerId = prefCust.id; }
 }
 if (entryParams.get('demo') !== 'ahmad-whatsapp' && entryParams.get('rt')){
   // Entry from Operations Calendar: clicking an empty room/date cell — prefill room type,
@@ -164,25 +180,15 @@ html += '<div class="step-panel" id="step1">' +
   '<div class="card"><div class="card-header"><h3>Reservation Source</h3><div class="desc">Manual source selection — required for every reservation</div></div><div class="card-body">' +
     '<div class="grid-3" id="sourceGrid">' + SOURCES.map(function(src){ return '<div class="source-opt" data-src="'+src+'">'+src+'</div>'; }).join('') + '</div>' +
   '</div></div>' +
-  '<div class="card"><div class="card-header"><h3>Guest Information</h3></div><div class="card-body">' +
-    '<div class="pill-toggle" id="custModePill" style="margin-bottom:16px;"><button type="button" class="active" data-m="existing">Existing Customer</button><button type="button" data-m="new">New Customer</button></div>' +
-    '<div id="existingCustWrap">' +
-      '<div class="cust-toolbar">' +
-        '<input class="form-control" id="custSearch" placeholder="Search by name or phone">' +
-        '<select class="form-control" id="custSort"><option value="newest">Newest</option><option value="alpha">Alphabetical</option></select>' +
+  '<div class="card"><div class="card-header"><h3>Primary Guest</h3><div class="desc">Search the Guests directory — nothing is re-entered for a returning guest</div></div><div class="card-body">' +
+    '<div id="guestPickWrap">' +
+      '<div class="pg-combobox" id="guestCombo">' +
+        '<input class="form-control" id="guestSearchInput" placeholder="Search guests by name, phone, or email" autocomplete="off">' +
+        '<div class="combo-menu" id="guestComboMenu" style="display:none;"></div>' +
       '</div>' +
-      '<div id="custList"></div>' +
-      '<div class="cust-pagination" id="custPagination"></div>' +
+      '<button class="btn btn-outline btn-sm" id="addNewGuestBtn" style="margin-top:12px;">+ Add New Guest</button>' +
     '</div>' +
-    '<div id="newCustWrap" style="display:none;">' +
-      '<div class="grid-2">' +
-        '<div class="form-group"><label class="form-label">Full Name</label><input class="form-control" id="nc-name" placeholder="e.g. Ahmad Khalil"></div>' +
-        '<div class="form-group"><label class="form-label">Mobile</label><input class="form-control" id="nc-phone" placeholder="+970 599 123 456"></div>' +
-        '<div class="form-group"><label class="form-label">Email</label><input class="form-control" id="nc-email" placeholder="ahmad@example.com"></div>' +
-        '<div class="form-group"><label class="form-label">Country</label><input class="form-control" id="nc-country" placeholder="Palestine"></div>' +
-      '</div>' +
-      '<div class="form-group"><label class="form-label">Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="nc-notes" placeholder="Any relevant guest notes"></textarea></div>' +
-    '</div>' +
+    '<div id="guestSelectedWrap" style="display:none;"></div>' +
   '</div></div>' +
 '</div>';
 
@@ -196,6 +202,7 @@ html += '<div class="step-panel" id="step2">' +
     '</div>' +
   '</div></div>' +
   '<div class="card"><div class="card-header"><h3>Reservation Items</h3><div class="desc">Add one or more room types for a multi-room reservation</div></div><div class="card-body">' +
+    '<div id="accessibilityBanner"></div>' +
     '<div id="itemCards"></div>' +
     '<button class="btn btn-outline btn-sm" id="addItem">+ Add Another Room</button>' +
     '<div class="help-note" style="margin-top:14px;">All reservation items must be available before the reservation can be confirmed.</div>' +
@@ -253,17 +260,31 @@ function allItemsAvailable(){
   return wizard.items.every(function(it){ return wizard.checkOut>wizard.checkIn && itemAvailability(it).ok; });
 }
 
+// Checks the ALREADY-assigned room against this item's current requirements — used to
+// flag a room for review rather than silently re-running auto-assignment on it (see
+// CONNECT AUTO-ASSIGNMENT: guest-driven requirement changes must never move a guest to
+// a different room without an explicit, confirmed Change Room action).
+function slotNeedsAttention(item, roomId){
+  if (!roomId) return null;
+  var pr = s.physicalRooms.find(function(p){return p.id===roomId;});
+  if (!pr) return null;
+  var prefs = { requireAccessibility: item.requireAccessibility ? ['Wheelchair Accessible'] : [] };
+  if (!PG.roomMeetsRequirements(pr, prefs)) return 'Does not meet this item\'s Wheelchair Accessible requirement.';
+  return null;
+}
 function renderAssignmentBlock(item, idx){
   var rows = [];
   for (var slot=0; slot<item.qty; slot++){
     var roomId = item.assignedRoomIds[slot];
     if (roomId){
       var pr = s.physicalRooms.find(function(p){return p.id===roomId;});
-      rows.push('<div class="room-assign-row">' +
-        '<div><div style="font-weight:700;font-size:13px;">&#10003; Room '+PG.esc(pr.roomNumber)+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span></div>' +
+      var attention = slotNeedsAttention(item, roomId);
+      rows.push('<div class="room-assign-row'+(attention?' attention':'')+'">' +
+        '<div><div style="font-weight:700;font-size:13px;">'+(attention?'&#9888; Room '+PG.esc(pr.roomNumber)+' <span class="badge badge-yellow" style="margin-left:4px;"><span class="badge-dot"></span>Needs Attention</span>':'&#10003; Room '+PG.esc(pr.roomNumber))+' <span class="muted text-sm">&middot; Floor '+pr.floor+'</span></div>' +
+        (attention ? '<div class="text-sm" style="color:#8a6100;margin-top:4px;">'+PG.esc(attention)+'</div>' : '') +
         '<div style="margin-top:5px;">'+roomSummaryChips(pr)+'</div>' +
         '<div class="muted text-sm" style="margin-top:5px;">'+PG.fmtDateShort(wizard.checkIn)+' &ndash; '+PG.fmtDateShort(wizard.checkOut)+'</div></div>' +
-        '<button class="btn btn-outline btn-sm change-room-btn" data-idx="'+idx+'" data-slot="'+slot+'">Change Room</button>' +
+        '<button class="btn '+(attention?'btn-primary':'btn-outline')+' btn-sm change-room-btn" data-idx="'+idx+'" data-slot="'+slot+'">'+(attention?'Review &amp; Replace Room':'Change Room')+'</button>' +
       '</div>');
     } else {
       rows.push('<div class="room-assign-row shortfall"><div class="text-sm" style="color:var(--pg-danger);">&#9888; Unit '+(slot+1)+': no eligible physical room could be assigned for these dates.</div></div>');
@@ -272,8 +293,37 @@ function renderAssignmentBlock(item, idx){
   return rows.join('');
 }
 
+// Connects the selected guest's accessibility needs to physical-room assignment.
+// Never auto-recomputes assignments on its own — staff must explicitly opt in, and any
+// already-assigned room that stops qualifying is flagged (see slotNeedsAttention/
+// renderAssignmentBlock) with an explicit Review & Replace Room action, not a silent swap.
+function renderAccessibilityBanner(){
+  var box = document.getElementById('accessibilityBanner');
+  var guest = selectedGuest();
+  var needs = guest && guest.accessibilityNeeds ? guest.accessibilityNeeds.trim() : '';
+  var allRequired = needs && wizard.items.length && wizard.items.every(function(it){ return it.requireAccessibility; });
+  if (!needs || allRequired || wizard.accessibilityBannerDismissed){ box.innerHTML=''; return; }
+  box.innerHTML = '<div class="help-note help-note-warning" style="margin-bottom:14px;flex-direction:column;align-items:stretch;">' +
+    '<div><strong>Accessibility needs on file for '+PG.esc(guest.name)+':</strong> &ldquo;'+PG.esc(needs)+'&rdquo;. The room(s) below were assigned without checking this requirement.</div>' +
+    '<div style="display:flex;gap:8px;margin-top:10px;">' +
+      '<button type="button" class="btn btn-primary btn-sm" id="applyAccessBtn">Require Accessible Rooms &amp; Review</button>' +
+      '<button type="button" class="btn btn-light btn-sm" id="dismissAccessBtn">Not Needed for This Stay</button>' +
+    '</div>' +
+  '</div>';
+  document.getElementById('applyAccessBtn').addEventListener('click', function(){
+    wizard.items.forEach(function(it){ it.requireAccessibility = true; });
+    // Deliberately no recomputeAssignments() here — already-assigned rooms that no longer
+    // qualify surface as "Needs Attention" below and require an explicit Change Room confirm.
+    renderItemCards(); renderSummary();
+  });
+  document.getElementById('dismissAccessBtn').addEventListener('click', function(){
+    wizard.accessibilityBannerDismissed = true;
+    renderItemCards();
+  });
+}
 function renderItemCards(){
   document.getElementById('nightsDisplay').value = nights().length + ' night' + (nights().length===1?'':'s');
+  renderAccessibilityBanner();
   var wrap = document.getElementById('itemCards');
   wrap.innerHTML = wizard.items.map(function(item, idx){
     var rt = s.roomTypes.find(function(r){return r.id===item.roomTypeId;});
@@ -295,7 +345,7 @@ function renderItemCards(){
         '<div class="form-group"><label class="form-label">Quantity</label><input type="number" min="1" class="form-control it-qty" data-idx="'+idx+'" value="'+item.qty+'"></div>' +
         '<div class="form-group"><label class="form-label">Rate Plan</label><select class="form-control it-plan" data-idx="'+idx+'">'+planOptions+'</select></div>' +
         '<div class="form-group"><label class="form-label">Price per Night</label><input class="form-control" disabled value="'+PG.fmtMoney(ratePlanPrice(item.roomTypeId, item.ratePlanId))+'"></div>' +
-        '<div class="form-group" style="grid-column:span 2;"><label class="form-label">Max Occupancy <span class="opt">(set by room type × quantity)</span></label><input class="form-control" disabled value="'+item.adults+' Adults, '+item.children+' Children"></div>' +
+        '<div class="form-group" style="grid-column:span 2;"><label class="form-label">Occupants <span class="opt">(headcount only, set by room type × quantity — not individual guest profiles)</span></label><input class="form-control" disabled value="'+item.adults+' Adults, '+item.children+' Children"></div>' +
         '<div class="form-group"><label class="form-label">Bed Configuration Preference <span class="opt">(optional)</span></label><select class="form-control it-bed" data-idx="'+idx+'">'+bedOptions+'</select></div>' +
         '<div class="form-check" style="align-self:end;padding-bottom:10px;"><input type="checkbox" class="it-access" data-idx="'+idx+'" id="it-access-'+idx+'"'+(item.requireAccessibility?' checked':'')+'><label class="form-label" style="margin:0;" for="it-access-'+idx+'">Requires Wheelchair Accessible Room</label></div>' +
         (item.qty>1 ? '<div class="form-check" style="align-self:end;padding-bottom:10px;"><input type="checkbox" class="it-connect" data-idx="'+idx+'" id="it-connect-'+idx+'"'+(item.requireConnecting?' checked':'')+'><label class="form-label" style="margin:0;" for="it-connect-'+idx+'">Request Connecting Rooms</label></div>' : '<div></div>') +
@@ -406,23 +456,110 @@ function renderPricing(){
 }
 function prow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;"><span class="muted">'+l+'</span><span style="font-weight:600;">'+v+'</span></div>'; }
 
-function guestSelected(){
-  return wizard.customerMode==='existing' ? !!wizard.customerId : !!wizard.newCustomer.name.trim();
+function selectedGuest(){
+  return wizard.customerId ? s.customers.find(function(c){return c.id===wizard.customerId;}) : null;
 }
-function guestName(){
-  if (wizard.customerMode==='existing'){ var c = s.customers.find(function(c){return c.id===wizard.customerId;}); return c ? c.name : '—'; }
-  return wizard.newCustomer.name || 'New Guest';
+function guestSelected(){ return !!selectedGuest(); }
+function guestName(){ var c = selectedGuest(); return c ? c.name : '—'; }
+function guestPhone(){ var c = selectedGuest(); return c ? c.phone : '—'; }
+
+/* ---- Guest search-first combobox (Guests module, not a re-entered form) ---- */
+function guestContextLine(c){
+  var res = s.reservations.filter(function(r){return r.customerId===c.id;});
+  var upcoming = res.filter(function(r){return r.status!=='Cancelled' && r.checkIn>=PG.TODAY;}).sort(function(a,b){return a.checkIn<b.checkIn?-1:1;})[0];
+  if (upcoming) return 'Upcoming: ' + PG.fmtDateShort(upcoming.checkIn) + ' (' + upcoming.id + ')';
+  var past = res.filter(function(r){return r.status!=='Cancelled' && r.checkOut<=PG.TODAY;}).sort(function(a,b){return a.checkOut>b.checkOut?-1:1;})[0];
+  if (past) return 'Last stay: ' + PG.fmtDateShort(past.checkOut);
+  return 'No previous reservations';
 }
-function guestPhone(){
-  if (wizard.customerMode==='existing'){ var c = s.customers.find(function(c){return c.id===wizard.customerId;}); return c ? c.phone : '—'; }
-  return wizard.newCustomer.phone || '—';
+function guestSearchResults(q){
+  q = (q||'').trim().toLowerCase();
+  if (!q) return s.customers.slice().reverse().slice(0,5); // "Newest" first when the box is empty
+  var qDigits = q.replace(/\D/g,'');
+  return s.customers.filter(function(c){
+    if (c.name.toLowerCase().indexOf(q)>-1) return true;
+    if (c.email && c.email.toLowerCase().indexOf(q)>-1) return true;
+    if (qDigits && (c.phone||'').replace(/\D/g,'').indexOf(qDigits)>-1) return true;
+    return false;
+  }).slice(0,8);
+}
+function comboItemHtml(c, hi){
+  return '<div class="combo-item'+(hi?' hi':'')+'" data-id="'+c.id+'">' +
+    '<div class="cn">'+PG.esc(c.name)+(c.important?' <span class="badge badge-purple"><span class="badge-dot"></span>Important</span>':'')+'</div>' +
+    '<div class="cc">'+PG.esc(c.phone||'—')+' &middot; '+PG.esc(c.email||'—')+'</div>' +
+    '<div class="cx">'+PG.esc(guestContextLine(c))+'</div>' +
+  '</div>';
+}
+function renderGuestCombo(){
+  var menu = document.getElementById('guestComboMenu');
+  if (!guestCombo.open){ menu.style.display='none'; return; }
+  var results = guestSearchResults(guestCombo.query);
+  var hint = guestCombo.query.trim() ? '' : '<div class="combo-hint">Recently added guests &mdash; keep typing to search all guests</div>';
+  var body = results.length
+    ? results.map(function(c,i){ return comboItemHtml(c, i===guestCombo.highlight); }).join('')
+    : '<div class="combo-empty">No guests match "'+PG.esc(guestCombo.query)+'".<br>Use "+ Add New Guest" below to create one.</div>';
+  menu.innerHTML = hint + body;
+  menu.style.display = 'block';
+  menu.querySelectorAll('.combo-item').forEach(function(el){
+    el.addEventListener('mousedown', function(e){ e.preventDefault(); selectGuest(el.dataset.id); });
+  });
+}
+function selectGuest(id){
+  wizard.customerId = id;
+  wizard.accessibilityBannerDismissed = false;
+  guestCombo.open = false; guestCombo.query=''; guestCombo.highlight=-1;
+  renderGuestStep(); renderSummary();
+}
+function renderGuestStep(){
+  var pickWrap = document.getElementById('guestPickWrap');
+  var selWrap = document.getElementById('guestSelectedWrap');
+  var c = selectedGuest();
+  if (!c){
+    pickWrap.style.display='block'; selWrap.style.display='none';
+    return;
+  }
+  pickWrap.style.display='none'; selWrap.style.display='block';
+  var flags = [];
+  if (c.important) flags.push('<span class="badge badge-purple"><span class="badge-dot"></span>Important / VIP</span>');
+  if (c.accessibilityNeeds && c.accessibilityNeeds.trim()) flags.push('<span class="badge badge-yellow"><span class="badge-dot"></span>Accessibility Needs</span>');
+  selWrap.innerHTML = '<div class="guest-summary-card">' +
+    '<div style="font-weight:700;font-size:14px;">'+PG.esc(c.name)+'</div>' +
+    (flags.length ? '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">'+flags.join('')+'</div>' : '') +
+    '<div style="margin-top:10px;">' +
+      '<div class="gs-row"><span class="muted">Phone</span><span style="font-weight:600;">'+PG.esc(c.phone||'—')+'</span></div>' +
+      '<div class="gs-row"><span class="muted">Email</span><span style="font-weight:600;">'+PG.esc(c.email||'—')+'</span></div>' +
+      '<div class="gs-row"><span class="muted">Preferred Language</span><span style="font-weight:600;">'+PG.esc(c.preferredLanguage||'—')+'</span></div>' +
+      (c.roomPreferences && c.roomPreferences.trim() ? '<div class="gs-row"><span class="muted">Preferences</span><span style="font-weight:600;text-align:right;max-width:65%;">'+PG.esc(c.roomPreferences)+'</span></div>' : '') +
+      (c.accessibilityNeeds && c.accessibilityNeeds.trim() ? '<div class="gs-row"><span class="muted">Accessibility Needs</span><span style="font-weight:600;text-align:right;max-width:65%;">'+PG.esc(c.accessibilityNeeds)+'</span></div>' : '') +
+    '</div>' +
+    '<div class="gs-actions">' +
+      '<a class="btn btn-outline btn-sm" href="guest-detail.html?id='+c.id+'" target="_blank" rel="noopener">View Profile</a>' +
+      '<button class="btn btn-light btn-sm" id="changeGuestBtn">Change Guest</button>' +
+    '</div>' +
+  '</div>';
+  document.getElementById('changeGuestBtn').addEventListener('click', function(){
+    wizard.customerId = null;
+    renderGuestStep(); renderSummary();
+    document.getElementById('guestSearchInput').focus();
+  });
+}
+function openGuestDrawer(){
+  PG.renderGuestDrawer({
+    editingId: null,
+    onSaved: function(guestId, info){
+      s = PG.getState();
+      wizard.customerId = guestId;
+      wizard.accessibilityBannerDismissed = false;
+      renderGuestStep(); renderSummary();
+    }
+  });
 }
 
 function renderSummary(){
   var p = pricingBreakdown();
   var box = document.getElementById('summaryBox');
   var rows = '';
-  if (guestSelected()) rows += srow('Guest', guestName());
+  if (guestSelected()) rows += srow('Primary Guest', guestName());
   if (wizard.source) rows += srow('Source', wizard.source);
   if (wizard.source || guestSelected()) rows += '<div class="divider"></div>';
   rows += srow('Arrival', PG.fmtDateShort(wizard.checkIn)) + srow('Departure', PG.fmtDateShort(wizard.checkOut)) + srow('Nights', nights().length);
@@ -446,7 +583,7 @@ function renderReview(){
   }
   var p = pricingBreakdown();
   var html2 = '<div class="grid-2">' +
-    revBlock('Guest', guestName() + '<br><span class="muted text-sm">'+guestPhone()+'</span>') +
+    revBlock('Primary Guest', guestName() + '<br><span class="muted text-sm">'+guestPhone()+'</span>') +
     revBlock('Source', wizard.source) +
     revBlock('Stay', PG.fmtDate(wizard.checkIn) + ' &rarr; ' + PG.fmtDate(wizard.checkOut) + ' ('+nights().length+' nights)') +
     revBlock('Payment Method', wizard.paymentMethod) +
@@ -485,7 +622,7 @@ function showStep(n){
     fwd.innerHTML = '<button class="btn btn-primary" id="nextBtn">Next &rarr;</button>';
     document.getElementById('nextBtn').addEventListener('click', onNext);
   }
-  if (n===1) renderCustList();
+  if (n===1) renderGuestStep();
   if (n===2) renderItemCards();
   if (n===3) renderPricing();
   if (n===4) renderReview();
@@ -496,9 +633,7 @@ function showStep(n){
 function onNext(){
   if (currentStep===1){
     if (!wizard.source){ PG.toast('Select a reservation source to continue.', 'danger'); return; }
-    if (wizard.customerMode==='new' && !wizard.newCustomer.name.trim()){ PG.toast('Enter the guest\'s full name to continue.', 'danger'); return; }
-    if (wizard.customerMode==='new' && !wizard.newCustomer.phone.trim()){ PG.toast('Enter the guest\'s mobile number to continue.', 'danger'); return; }
-    if (wizard.customerMode==='existing' && !wizard.customerId){ PG.toast('Select an existing guest to continue.', 'danger'); return; }
+    if (!wizard.customerId){ PG.toast('Search and select a guest (or add a new one) to continue.', 'danger'); return; }
     showStep(2); return;
   }
   if (currentStep===2){
@@ -506,6 +641,7 @@ function onNext(){
     if (!wizard.items.length){ PG.toast('Add at least one room item.', 'danger'); return; }
     if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
     if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before continuing.', 'danger'); return; }
+    if (anyNeedsAttention()){ PG.toast('Resolve the room assignment(s) flagged Needs Attention before continuing.', 'danger'); return; }
     showStep(3); return;
   }
   if (currentStep===3){
@@ -522,64 +658,22 @@ document.querySelectorAll('.source-opt').forEach(function(el){
     el.classList.add('active'); wizard.source = el.dataset.src; renderSummary();
   });
 });
-document.getElementById('custModePill').addEventListener('click', function(e){
-  var btn = e.target.closest('button'); if(!btn) return;
-  document.querySelectorAll('#custModePill button').forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active'); wizard.customerMode = btn.dataset.m;
-  document.getElementById('existingCustWrap').style.display = wizard.customerMode==='existing' ? 'block' : 'none';
-  document.getElementById('newCustWrap').style.display = wizard.customerMode==='new' ? 'block' : 'none';
-  renderSummary();
+var guestSearchInputEl = document.getElementById('guestSearchInput');
+guestSearchInputEl.addEventListener('focus', function(){ guestCombo.open = true; guestCombo.highlight=-1; renderGuestCombo(); });
+guestSearchInputEl.addEventListener('input', function(){ guestCombo.query = this.value; guestCombo.open = true; guestCombo.highlight=-1; renderGuestCombo(); });
+guestSearchInputEl.addEventListener('keydown', function(e){
+  if (!guestCombo.open) return;
+  var results = guestSearchResults(guestCombo.query);
+  if (e.key==='ArrowDown'){ e.preventDefault(); guestCombo.highlight = Math.min(results.length-1, guestCombo.highlight+1); renderGuestCombo(); }
+  else if (e.key==='ArrowUp'){ e.preventDefault(); guestCombo.highlight = Math.max(0, guestCombo.highlight-1); renderGuestCombo(); }
+  else if (e.key==='Enter'){ e.preventDefault(); var pick = results[guestCombo.highlight] || results[0]; if (pick) selectGuest(pick.id); }
+  else if (e.key==='Escape'){ guestCombo.open=false; renderGuestCombo(); }
 });
-
-function renderCustList(){
-  var q = custState.search.trim().toLowerCase();
-  var list = s.customers.filter(function(c){
-    if (!q) return true;
-    return c.name.toLowerCase().indexOf(q)>-1 || (c.phone||'').replace(/\s/g,'').indexOf(q.replace(/\s/g,''))>-1;
-  });
-  if (custState.sort==='alpha') list = list.slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
-  else list = list.slice().reverse(); // "Newest" — later entries in the array were added more recently
-
-  var totalPages = Math.max(1, Math.ceil(list.length/custState.pageSize));
-  custState.page = Math.min(custState.page, totalPages);
-  var pageItems = list.slice((custState.page-1)*custState.pageSize, custState.page*custState.pageSize);
-
-  var listEl = document.getElementById('custList');
-  if (!pageItems.length){
-    listEl.innerHTML = '<div class="empty-state" style="padding:24px;">No customers match your search.</div>';
-  } else {
-    listEl.innerHTML = pageItems.map(function(c){
-      return '<div class="cust-opt'+(c.id===wizard.customerId?' active':'')+'" data-cid="'+c.id+'"><div style="font-weight:600;font-size:13px;">'+PG.esc(c.name)+'</div><div class="muted text-sm">'+PG.esc(c.phone)+' &middot; '+PG.esc(c.email)+'</div></div>';
-    }).join('');
-    listEl.querySelectorAll('.cust-opt').forEach(function(el){
-      el.addEventListener('click', function(){
-        wizard.customerId = el.dataset.cid;
-        listEl.querySelectorAll('.cust-opt').forEach(function(o){o.classList.remove('active');});
-        el.classList.add('active');
-        renderSummary();
-      });
-    });
-  }
-  document.getElementById('custPagination').innerHTML =
-    '<span>'+list.length+' customer'+(list.length===1?'':'s')+' &middot; Page '+custState.page+' of '+totalPages+'</span>' +
-    '<span style="display:flex;gap:6px;"><button class="btn btn-outline btn-sm" id="custPrev" '+(custState.page<=1?'disabled':'')+'>&larr; Prev</button><button class="btn btn-outline btn-sm" id="custNext" '+(custState.page>=totalPages?'disabled':'')+'>Next &rarr;</button></span>';
-  var prevBtn = document.getElementById('custPrev'), nextBtn2 = document.getElementById('custNext');
-  if (prevBtn) prevBtn.addEventListener('click', function(){ custState.page--; renderCustList(); });
-  if (nextBtn2) nextBtn2.addEventListener('click', function(){ custState.page++; renderCustList(); });
-}
-document.getElementById('custSearch').addEventListener('input', function(){ custState.search=this.value; custState.page=1; renderCustList(); });
-document.getElementById('custSort').addEventListener('change', function(){ custState.sort=this.value; custState.page=1; renderCustList(); });
-
-['nc-name','nc-phone','nc-email','nc-country','nc-notes'].forEach(function(id){
-  document.getElementById(id).addEventListener('input', function(){
-    wizard.newCustomer.name = document.getElementById('nc-name').value;
-    wizard.newCustomer.phone = document.getElementById('nc-phone').value;
-    wizard.newCustomer.email = document.getElementById('nc-email').value;
-    wizard.newCustomer.country = document.getElementById('nc-country').value;
-    wizard.newCustomer.notes = document.getElementById('nc-notes').value;
-    renderSummary();
-  });
+document.addEventListener('click', function(e){
+  if (guestCombo.open && !e.target.closest('#guestCombo')){ guestCombo.open=false; renderGuestCombo(); }
 });
+document.getElementById('addNewGuestBtn').addEventListener('click', openGuestDrawer);
+
 document.querySelectorAll('.pay-opt').forEach(function(el){
   el.addEventListener('click', function(){
     document.querySelectorAll('.pay-opt').forEach(function(o){o.classList.remove('active');});
@@ -595,15 +689,12 @@ if (wizard.paymentMethod){ var po = document.querySelector('.pay-opt[data-pm="'+
 function createReservation(mode){
   if (!allItemsAvailable()){ PG.toast('All reservation items must be available before the reservation can be confirmed.', 'danger'); return; }
   if (!allItemsAssigned()){ PG.toast('Every room in this reservation must have a physical room assigned before the reservation can be confirmed.', 'danger'); return; }
+  if (anyNeedsAttention()){ PG.toast('Resolve the room assignment(s) flagged Needs Attention before the reservation can be confirmed.', 'danger'); return; }
   var st = PG.getState();
   var id = 'RES-' + st.nextResId;
   st.nextResId += 1;
 
-  var customerId = wizard.customerId;
-  if (wizard.customerMode==='new'){
-    customerId = 'cus-' + Date.now();
-    st.customers.push({id:customerId, name:wizard.newCustomer.name, phone:wizard.newCustomer.phone, email:wizard.newCustomer.email||'—', nationality:wizard.newCustomer.country||'—', notes:wizard.newCustomer.notes||''});
-  }
+  var customerId = wizard.customerId; // the guest record already exists — created via the Guests module or PG.renderGuestDrawer
 
   var status, paymentStatus;
   if (mode==='Draft'){
