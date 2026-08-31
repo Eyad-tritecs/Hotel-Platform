@@ -8,24 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
-  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
-  .filters-grid .form-group{margin-bottom:0;}
-  .filters-grid .form-label{font-size:11px;}
-  @media (max-width:1200px){.filters-grid{grid-template-columns:repeat(3,1fr);}}
-  @media (max-width:800px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
   @media (max-width:1300px){.col-nat{display:none;}}
   .field-error{color:var(--pg-danger);font-size:11.5px;margin-top:5px;}
   .form-control.error{border-color:var(--pg-danger);}
   .skeleton-bar{height:14px;border-radius:4px;background:linear-gradient(90deg,var(--pg-gray-200) 25%,var(--pg-gray-100) 37%,var(--pg-gray-200) 63%);background-size:400% 100%;animation:pg-skel-g 1.4s ease infinite;}
   @keyframes pg-skel-g{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
-  .more-wrap{position:relative;display:inline-block;}
-  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:190px;z-index:30;display:none;overflow:hidden;}
-  .more-menu.show{display:block;}
-  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
-  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+  /* .more-wrap / .more-btn / .more-menu now live in style.css (PG.wireMoreMenus) so
+     every table row menu in the app is literally the same component. */
   .dup-match{border:1px solid var(--pg-border);border-radius:8px;padding:10px 12px;margin-top:10px;background:#fff;}
-  .more-menu button.danger{color:var(--pg-danger);}
-  .more-menu button.danger:hover{background:var(--pg-danger-light);}
   .note-link{cursor:pointer;background:none;border:none;padding:0;font-size:14px;}
   .notes-modal-text{white-space:pre-wrap;font-size:13px;line-height:1.6;}
 </style>
@@ -34,7 +24,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("guests", ["Reservations", "Guests"]);
+var page = PG.mount("guests", ["Guests", "Guests"]);
 var s = PG.getState();
 // Same dead-code-today role gate used by physical-rooms.html / operations-calendar.html.
 var CAN_VIEW = PG.hasPermission('view_guests');
@@ -59,21 +49,26 @@ function init() {
   html += '<div class="pg-page-head"><div><h1>Guests</h1><div class="sub" id="guestCountSub"></div></div>' +
     '<div class="pg-actions">' + (CAN_MANAGE ? '<button class="btn btn-primary" id="addGuestBtn">+ Add Guest</button>' : '') + '</div></div>';
 
-  html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
-    '<input class="form-control" id="searchBox" placeholder="Search by name, phone, email, or ID reference">' +
-    '<div class="filters-grid">' +
-      '<div class="form-group"><label class="form-label">HAS UPCOMING RESERVATION</label><select class="form-control" id="f-upcoming"><option value="all">All</option><option value="yes">Yes</option><option value="no">No</option></select></div>' +
-      '<div class="form-group"><label class="form-label">HAS PAST RESERVATIONS</label><select class="form-control" id="f-past"><option value="all">All</option><option value="yes">Yes</option><option value="no">No</option></select></div>' +
-      '<div class="form-group"><label class="form-label">IMPORTANT / VIP</label><select class="form-control" id="f-important"><option value="all">All</option><option value="yes">Important only</option><option value="no">Not flagged</option></select></div>' +
-      '<div class="form-group"><label class="form-label">COMMUNICATION LANGUAGE</label><select class="form-control" id="f-language"><option value="all">All Languages</option>' + LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') + '</select></div>' +
-      '<div class="form-group"><label class="form-label">LAST STAY FROM</label><input type="date" class="form-control" id="f-stayfrom"></div>' +
+  // Search-first toolbar: search, then the two filters staff reach for constantly as
+  // chips (Upcoming Reservation, Important/VIP). Language and the stay-date range are
+  // lower-frequency, so they live in an Advanced Filters drawer and report back as
+  // removable applied chips — the same pattern established on Physical Rooms.
+  html += '<div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:14px;">' +
+    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
+      '<div class="pg-searchwrap" style="flex:1 1 260px;min-width:220px;"><span class="ic">' + PG.icon('search',15) + '</span>' +
+        '<input class="form-control" id="searchBox" type="search" placeholder="Search by name, phone, email, or ID reference" aria-label="Search guests"></div>' +
+      '<button class="btn btn-outline btn-sm" id="advFiltersBtn">' + PG.icon('filter',15) + ' More Filters<span id="advCount"></span></button>' +
     '</div>' +
-    '<div class="filters-grid" style="grid-template-columns:220px 1fr;">' +
-      '<div class="form-group"><label class="form-label">LAST STAY TO</label><input type="date" class="form-control" id="f-stayto"></div>' +
-      '<div></div>' +
+    '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">' +
+      '<span class="text-sm muted" style="font-weight:600;">Upcoming reservation</span>' +
+      PG.filterChips('gUpcoming', [{value:'all',label:'All'},{value:'yes',label:'Yes'},{value:'no',label:'No'}], 'all', {ariaLabel:'Filter by upcoming reservation'}) +
     '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+    '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">' +
+      '<span class="text-sm muted" style="font-weight:600;">Important / VIP</span>' +
+      PG.filterChips('gImportant', [{value:'all',label:'All'},{value:'yes',label:'Important only'},{value:'no',label:'Not flagged'}], 'all', {ariaLabel:'Filter by important/VIP flag'}) +
+    '</div>' +
+    '<div id="gApplied" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"></div>' +
+    '<div style="display:flex;justify-content:flex-end;">' +
       '<span class="muted text-sm" id="resultCount"></span>' +
     '</div>' +
   '</div></div>';
@@ -111,15 +106,16 @@ function init() {
     s = PG.getState();
     var rows = filteredGuests();
     document.getElementById('resultCount').textContent = rows.length + ' guest' + (rows.length === 1 ? '' : 's');
+    renderApplied();
     var body = document.getElementById('guestsBody');
     if (!s.customers.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128100;</div>No guests yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Guest</button>' : '') + '</div></td></tr>';
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('user',30) + '</div><strong>No guests yet</strong>' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Guest</button>' : '') + '</div></td></tr>';
       var emptyAddBtn = document.getElementById('emptyAddBtn');
       if (emptyAddBtn) emptyAddBtn.addEventListener('click', function () { openGuestDrawer(null); });
       return;
     }
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">&#128269;</div>No guests match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
+      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('search',30) + '</div><strong>No guests match your filters</strong><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
       document.getElementById('emptyClearBtn').addEventListener('click', clearFilters);
       return;
     }
@@ -139,51 +135,119 @@ function init() {
         '<td>' + (hasNote ? '<button type="button" class="note-link" data-id="' + c.id + '" title="View note">&#128172;</button>' : '<span class="muted">—</span>') + '</td>' +
         '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
           '<button class="btn btn-outline btn-sm view-link" data-id="' + c.id + '">View</button>' +
-          '<div class="more-wrap"><button class="btn btn-light btn-sm more-btn" data-id="' + c.id + '">&#8942;</button>' +
-            '<div class="more-menu" data-menu-for="' + c.id + '">' +
-              (CAN_MANAGE ? '<button class="edit-action" data-id="' + c.id + '">Edit</button>' : '') +
-              '<a href="new-reservation.html?customer=' + c.id + '">Create Reservation</a>' +
-              (CAN_MANAGE ? '<button class="danger delete-action" data-id="' + c.id + '">Delete Guest</button>' : '') +
+          '<div class="more-wrap"><button class="more-btn" data-id="' + c.id + '" aria-label="Actions for ' + PG.esc(c.name) + '" aria-haspopup="menu" title="More actions">' + PG.icon('dots',16) + '</button>' +
+            '<div class="more-menu" data-menu-for="' + c.id + '" role="menu">' +
+              (CAN_MANAGE ? '<button class="edit-action" data-id="' + c.id + '">' + PG.icon('edit',15) + ' Edit Guest</button>' : '') +
+              '<a href="new-reservation.html?customer=' + c.id + '">' + PG.icon('plus',15) + ' Create Reservation</a>' +
+              (CAN_MANAGE ? '<div class="menu-sep"></div><button class="danger delete-action" data-id="' + c.id + '">' + PG.icon('trash',15) + ' Delete Guest</button>' : '') +
             '</div>' +
           '</div>' +
         '</div></td>' +
       '</tr>';
     }).join('');
+    PG.wireMoreMenus(document.getElementById('guestsBody'));
   }
 
-  function closeAllMenus() { document.querySelectorAll('.more-menu').forEach(function (m) { m.classList.remove('show'); }); }
-  document.addEventListener('click', closeAllMenus);
-  document.getElementById('guestsBody').addEventListener('click', function (e) {
+  // Menu items are portaled to <body> while open, so this delegate listens on
+  // `document` rather than the table body — see PG.wireMoreMenus in app.js.
+  document.addEventListener('click', function (e) {
     var t;
-    if (t = e.target.closest('.more-btn')) {
-      e.stopPropagation();
-      var menu = document.querySelector('.more-menu[data-menu-for="' + t.dataset.id + '"]');
-      var wasOpen = menu.classList.contains('show');
-      closeAllMenus();
-      if (!wasOpen) menu.classList.add('show');
-      return;
-    }
     if (t = e.target.closest('.view-link')) { location.href = 'guest-detail.html?id=' + t.dataset.id; return; }
-    if (t = e.target.closest('.edit-action')) { closeAllMenus(); openGuestDrawer(t.dataset.id); return; }
-    if (t = e.target.closest('.delete-action')) { closeAllMenus(); openDeleteGuestModal(t.dataset.id); return; }
+    if (t = e.target.closest('.edit-action')) { PG.closeMoreMenu(false); openGuestDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.delete-action')) { PG.closeMoreMenu(false); openDeleteGuestModal(t.dataset.id); return; }
     if (t = e.target.closest('.note-link')) { openNoteModal(t.dataset.id); return; }
   });
+
+  function syncChipUi(){
+    page.querySelectorAll('[data-chips="gUpcoming"] .pg-chip').forEach(function(chip){
+      var on = chip.dataset.chipValue === filters.upcoming;
+      chip.classList.toggle('active', on); chip.setAttribute('aria-pressed', on);
+    });
+    page.querySelectorAll('[data-chips="gImportant"] .pg-chip').forEach(function(chip){
+      var on = chip.dataset.chipValue === filters.important;
+      chip.classList.toggle('active', on); chip.setAttribute('aria-pressed', on);
+    });
+  }
+  function appliedFilterList(){
+    var out = [];
+    if (filters.past !== 'all') out.push({key:'past', label:'Past Reservations', value: filters.past === 'yes' ? 'Yes' : 'No'});
+    if (filters.language !== 'all') out.push({key:'language', label:'Language', value: filters.language});
+    if (filters.stayFrom) out.push({key:'stayFrom', label:'Last Stay From', value: PG.fmtDateShort(filters.stayFrom)});
+    if (filters.stayTo) out.push({key:'stayTo', label:'Last Stay To', value: PG.fmtDateShort(filters.stayTo)});
+    return out;
+  }
+  function renderApplied(){
+    var applied = appliedFilterList();
+    var extra = (filters.upcoming !== 'all' ? 1 : 0) + (filters.important !== 'all' ? 1 : 0);
+    var total = applied.length + extra;
+    var box = document.getElementById('gApplied');
+    box.innerHTML = total
+      ? '<span class="text-sm muted">' + total + ' active filter' + (total===1?'':'s') + '</span>' +
+        PG.appliedChips(applied) +
+        '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button>'
+      : '';
+    var badge = document.getElementById('advCount');
+    if (badge) badge.innerHTML = applied.length ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">' + applied.length + '</span>' : '';
+    box.querySelectorAll('[data-remove-filter]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var k = btn.dataset.removeFilter;
+        filters[k] = (k === 'stayFrom' || k === 'stayTo') ? '' : 'all';
+        renderTable();
+      });
+    });
+    var clear = document.getElementById('clearFilters');
+    if (clear) clear.addEventListener('click', clearFilters);
+  }
 
   function clearFilters() {
     filters = { q: '', upcoming: 'all', past: 'all', important: 'all', language: 'all', stayFrom: '', stayTo: '' };
     document.getElementById('searchBox').value = '';
-    ['f-upcoming', 'f-past', 'f-important', 'f-language'].forEach(function (id) { document.getElementById(id).value = 'all'; document.getElementById(id).dispatchEvent(new Event('change')); });
-    document.getElementById('f-stayfrom').value = ''; document.getElementById('f-stayto').value = '';
+    syncChipUi();
     renderTable();
   }
   document.getElementById('searchBox').addEventListener('input', function () { filters.q = this.value; renderTable(); });
-  document.getElementById('f-upcoming').addEventListener('change', function () { filters.upcoming = this.value; renderTable(); });
-  document.getElementById('f-past').addEventListener('change', function () { filters.past = this.value; renderTable(); });
-  document.getElementById('f-important').addEventListener('change', function () { filters.important = this.value; renderTable(); });
-  document.getElementById('f-language').addEventListener('change', function () { filters.language = this.value; renderTable(); });
-  document.getElementById('f-stayfrom').addEventListener('change', function () { filters.stayFrom = this.value; renderTable(); });
-  document.getElementById('f-stayto').addEventListener('change', function () { filters.stayTo = this.value; renderTable(); });
-  document.getElementById('clearFilters').addEventListener('click', clearFilters);
+  PG.wireChips(page, 'gUpcoming', function(v){ filters.upcoming = v; syncChipUi(); renderTable(); });
+  PG.wireChips(page, 'gImportant', function(v){ filters.important = v; syncChipUi(); renderTable(); });
+
+  /* Advanced filters drawer — Past Reservations, Language, and the stay-date range. */
+  var advDrawer = document.createElement('div');
+  advDrawer.className = 'pg-drawer-overlay';
+  advDrawer.id = 'gAdvDrawer';
+  document.body.appendChild(advDrawer);
+  document.getElementById('advFiltersBtn').addEventListener('click', function(){
+    advDrawer.innerHTML = '<div class="pg-drawer" style="max-width:400px;">' +
+      '<div class="pg-drawer-header"><h3>More Filters</h3>' +
+        '<button class="pg-modal-close" onclick="PG.closeModal(\'gAdvDrawer\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
+      '<div class="pg-drawer-body">' +
+        '<div class="form-group"><label class="form-label">Has Past Reservations</label>' +
+          PG.segmented('advPast', [{value:'all',label:'All'},{value:'yes',label:'Yes'},{value:'no',label:'No'}], filters.past, {ariaLabel:'Past reservations'}) + '</div>' +
+        '<div class="form-group"><label class="form-label" for="adv-lang">Communication Language</label>' +
+          '<select class="form-control" id="adv-lang"><option value="all">All Languages</option>' +
+          LANGUAGES.map(function(l){ return '<option value="'+PG.esc(l)+'"'+(filters.language===l?' selected':'')+'>'+PG.esc(l)+'</option>'; }).join('') + '</select></div>' +
+        '<div class="grid-2" style="margin-bottom:0;"><div class="form-group"><label class="form-label" for="adv-from">Last Stay From</label>' +
+          '<input type="date" class="form-control" id="adv-from" value="'+PG.esc(filters.stayFrom)+'"></div>' +
+          '<div class="form-group"><label class="form-label" for="adv-to">Last Stay To</label>' +
+          '<input type="date" class="form-control" id="adv-to" value="'+PG.esc(filters.stayTo)+'"></div></div>' +
+      '</div>' +
+      '<div class="pg-drawer-footer"><button class="btn btn-light" id="adv-clear">Clear</button>' +
+        '<button class="btn btn-primary" id="adv-apply">Apply Filters</button></div>' +
+    '</div>';
+    PG.enhanceSelects(advDrawer);
+    var pending = { past: filters.past, language: filters.language, stayFrom: filters.stayFrom, stayTo: filters.stayTo };
+    PG.wireSegmented(advDrawer, 'advPast', function(v){ pending.past = v; });
+    document.getElementById('adv-lang').addEventListener('change', function(){ pending.language = this.value; });
+    document.getElementById('adv-from').addEventListener('change', function(){ pending.stayFrom = this.value; });
+    document.getElementById('adv-to').addEventListener('change', function(){ pending.stayTo = this.value; });
+    document.getElementById('adv-clear').addEventListener('click', function(){
+      filters.past = 'all'; filters.language = 'all'; filters.stayFrom = ''; filters.stayTo = '';
+      PG.closeModal('gAdvDrawer'); renderTable();
+    });
+    document.getElementById('adv-apply').addEventListener('click', function(){
+      filters.past = pending.past; filters.language = pending.language; filters.stayFrom = pending.stayFrom; filters.stayTo = pending.stayTo;
+      PG.closeModal('gAdvDrawer'); renderTable();
+    });
+    PG.openModal('gAdvDrawer');
+  });
 
   // ---- Loading state ----
   document.getElementById('guestsBody').innerHTML = [0, 1, 2].map(function () {

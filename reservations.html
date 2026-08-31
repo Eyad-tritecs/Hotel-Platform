@@ -8,17 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <style>
-  .filters-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
-  .filters-grid .form-group{margin-bottom:0;}
-  .filters-grid .form-label{font-size:11px;}
-  @media (max-width:1100px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
+  .res-chiprow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
 </style>
 </head>
 <body>
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("reservations", ["Reservations", "Reservations"]);
+var page = PG.mount("reservations", ["Hotel Operations", "Reservations"]);
 var s = PG.getState();
 
 function roomCount(r){ return r.rooms.reduce(function(a,x){return a+x.qty;},0); }
@@ -32,17 +29,21 @@ var html = '';
 html += '<div class="pg-page-head"><div><h1>Reservations</h1><div class="sub">All bookings for Palestine Grand Hotel</div></div>' +
   '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a></div></div>';
 
-html += '<div class="card"><div class="card-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">' +
-  '<input class="form-control" id="searchBox" placeholder="Search by Reservation ID, Guest Name or Mobile">' +
-  '<div class="filters-grid">' +
-    '<div class="form-group"><label class="form-label">RESERVATION STATUS</label><select class="form-control" id="statusFilter">' + STATUSES.map(function(st){return '<option value="'+st+'">'+(st==='All'?'All Statuses':st)+'</option>';}).join('') + '</select></div>' +
-    '<div class="form-group"><label class="form-label">PAYMENT STATUS</label><select class="form-control" id="payFilter">' + PAY_STATUSES.map(function(p){return '<option value="'+p+'">'+(p==='All'?'All Payment Statuses':p)+'</option>';}).join('') + '</select></div>' +
-    '<div class="form-group"><label class="form-label">RESERVATION SOURCE</label><select class="form-control" id="sourceFilter">' + SOURCES.map(function(src){return '<option value="'+src+'">'+(src==='All'?'All Sources':src)+'</option>';}).join('') + '</select></div>' +
-    '<div class="form-group"><label class="form-label">ARRIVAL DATE</label><input type="date" class="form-control" id="arrivalFilter"></div>' +
-    '<div class="form-group"><label class="form-label">DEPARTURE DATE</label><input type="date" class="form-control" id="departureFilter"></div>' +
+// Search-first toolbar: search, then Reservation Status as chips (the single most
+// common filter here). Payment Status, Source, and the arrival/departure date range
+// are lower-frequency, so they live in an Advanced Filters drawer and report back as
+// removable applied chips — same pattern as Physical Rooms / Guests.
+html += '<div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:14px;">' +
+  '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
+    '<div class="pg-searchwrap" style="flex:1 1 260px;min-width:220px;"><span class="ic">' + PG.icon('search',15) + '</span>' +
+      '<input class="form-control" id="searchBox" type="search" placeholder="Search by Reservation ID, Guest Name or Mobile" aria-label="Search reservations"></div>' +
+    '<button class="btn btn-outline btn-sm" id="advFiltersBtn">' + PG.icon('filter',15) + ' Advanced Filters<span id="advCount"></span></button>' +
   '</div>' +
-  '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-    '<button class="btn btn-outline btn-sm" id="clearFilters">Clear Filters</button>' +
+  '<div class="res-chiprow"><span class="text-sm muted" style="font-weight:600;">Status</span>' +
+    PG.filterChips('resStatus', STATUSES.map(function(st){return {value:st, label: st==='All'?'All':st};}), 'All', {ariaLabel:'Filter by reservation status'}) +
+  '</div>' +
+  '<div id="resApplied" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"></div>' +
+  '<div style="display:flex;justify-content:flex-end;">' +
     '<span class="muted text-sm" id="resultCount"></span>' +
   '</div>' +
 '</div></div>';
@@ -54,31 +55,67 @@ html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"
 page.innerHTML = html;
 PG.enhanceSelects(page);
 
+var filters = { status: 'All', pay: 'All', source: 'All', arrival: '', departure: '' };
+
 // Pre-filter from a deep link, e.g. reservations.html?arrival=2026-08-23&payStatus=Payment%20Required
 (function applyUrlFilters(){
   var qp = new URLSearchParams(location.search);
-  if (qp.get('arrival')) document.getElementById('arrivalFilter').value = qp.get('arrival');
-  if (qp.get('departure')) document.getElementById('departureFilter').value = qp.get('departure');
-  if (qp.get('status')) { document.getElementById('statusFilter').value = qp.get('status'); document.getElementById('statusFilter').dispatchEvent(new Event('change')); }
-  if (qp.get('payStatus')) { document.getElementById('payFilter').value = qp.get('payStatus'); document.getElementById('payFilter').dispatchEvent(new Event('change')); }
-  if (qp.get('source')) { document.getElementById('sourceFilter').value = qp.get('source'); document.getElementById('sourceFilter').dispatchEvent(new Event('change')); }
+  if (qp.get('arrival')) filters.arrival = qp.get('arrival');
+  if (qp.get('departure')) filters.departure = qp.get('departure');
+  if (qp.get('status')) filters.status = qp.get('status');
+  if (qp.get('payStatus')) filters.pay = qp.get('payStatus');
+  if (qp.get('source')) filters.source = qp.get('source');
 })();
+
+function syncChipUi(){
+  page.querySelectorAll('[data-chips="resStatus"] .pg-chip').forEach(function(chip){
+    var on = chip.dataset.chipValue === filters.status;
+    chip.classList.toggle('active', on); chip.setAttribute('aria-pressed', on);
+  });
+}
+function appliedFilterList(){
+  var out = [];
+  if (filters.pay !== 'All') out.push({key:'pay', label:'Payment Status', value: filters.pay});
+  if (filters.source !== 'All') out.push({key:'source', label:'Source', value: filters.source});
+  if (filters.arrival) out.push({key:'arrival', label:'Arrival', value: PG.fmtDateShort(filters.arrival)});
+  if (filters.departure) out.push({key:'departure', label:'Departure', value: PG.fmtDateShort(filters.departure)});
+  return out;
+}
+function renderApplied(){
+  var applied = appliedFilterList();
+  var extra = filters.status !== 'All' ? 1 : 0;
+  var total = applied.length + extra;
+  var box = document.getElementById('resApplied');
+  box.innerHTML = total
+    ? '<span class="text-sm muted">' + total + ' active filter' + (total===1?'':'s') + '</span>' +
+      PG.appliedChips(applied) +
+      '<button class="btn btn-light btn-sm" id="clearFilters">Clear Filters</button>'
+    : '';
+  var badge = document.getElementById('advCount');
+  if (badge) badge.innerHTML = applied.length ? ' <span class="pg-chip-count" style="background:var(--pg-primary);color:#fff;">' + applied.length + '</span>' : '';
+  box.querySelectorAll('[data-remove-filter]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var k = btn.dataset.removeFilter;
+      filters[k] = (k === 'arrival' || k === 'departure') ? '' : 'All';
+      render();
+    });
+  });
+  var clear = document.getElementById('clearFilters');
+  if (clear) clear.addEventListener('click', clearFilters);
+}
 
 function render(){
   var q = document.getElementById('searchBox').value.trim().toLowerCase();
-  var statusF = document.getElementById('statusFilter').value;
-  var payF = document.getElementById('payFilter').value;
-  var sourceF = document.getElementById('sourceFilter').value;
-  var arrivalF = document.getElementById('arrivalFilter').value;
-  var departureF = document.getElementById('departureFilter').value;
+  syncChipUi();
+  renderApplied();
 
   var rows = s.reservations.slice().sort(function(a,b){return b.createdAt<a.createdAt?-1:1;}).filter(function(r){
     var cust = s.customers.find(function(c){return c.id===r.customerId;});
-    if (statusF!=='All' && r.status!==statusF) return false;
-    if (payF!=='All' && r.paymentStatus!==payF) return false;
-    if (sourceF!=='All' && r.source!==sourceF) return false;
-    if (arrivalF && r.checkIn!==arrivalF) return false;
-    if (departureF && r.checkOut!==departureF) return false;
+    if (filters.status!=='All' && r.status!==filters.status) return false;
+    if (filters.pay!=='All' && r.paymentStatus!==filters.pay) return false;
+    if (filters.source!=='All' && r.source!==filters.source) return false;
+    if (filters.arrival && r.checkIn!==filters.arrival) return false;
+    if (filters.departure && r.checkOut!==filters.departure) return false;
     if (q && !(r.id.toLowerCase().indexOf(q)>-1 || cust.name.toLowerCase().indexOf(q)>-1 || (cust.phone||'').toLowerCase().replace(/\s/g,'').indexOf(q.replace(/\s/g,''))>-1)) return false;
     return true;
   });
@@ -86,7 +123,7 @@ function render(){
   document.getElementById('resultCount').textContent = rows.length + ' reservation' + (rows.length===1?'':'s');
   var body = document.getElementById('resBody');
   if (!rows.length){
-    body.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="ic">&#128203;</div>No reservations match your filters.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="ic">' + PG.icon('list',30) + '</div><strong>No reservations match your filters</strong></div></td></tr>';
     return;
   }
   body.innerHTML = rows.map(function(r){
@@ -108,21 +145,57 @@ function render(){
   }).join('');
 }
 
-['input','change'].forEach(function(ev){
-  ['searchBox','statusFilter','payFilter','sourceFilter','arrivalFilter','departureFilter'].forEach(function(id){
-    document.getElementById(id).addEventListener(ev, render);
-  });
-});
-document.getElementById('clearFilters').addEventListener('click', function(){
+document.getElementById('searchBox').addEventListener('input', render);
+PG.wireChips(page, 'resStatus', function(v){ filters.status = v; render(); });
+
+function clearFilters(){
+  filters = { status: 'All', pay: 'All', source: 'All', arrival: '', departure: '' };
   document.getElementById('searchBox').value = '';
-  document.getElementById('statusFilter').value = 'All';
-  document.getElementById('payFilter').value = 'All';
-  document.getElementById('sourceFilter').value = 'All';
-  document.getElementById('arrivalFilter').value = '';
-  document.getElementById('departureFilter').value = '';
   render();
+}
+
+/* Advanced filters drawer — Payment Status, Source, and the arrival/departure range. */
+var advDrawer = document.createElement('div');
+advDrawer.className = 'pg-drawer-overlay';
+advDrawer.id = 'resAdvDrawer';
+document.body.appendChild(advDrawer);
+document.getElementById('advFiltersBtn').addEventListener('click', function(){
+  advDrawer.innerHTML = '<div class="pg-drawer" style="max-width:400px;">' +
+    '<div class="pg-drawer-header"><h3>Advanced Filters</h3>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'resAdvDrawer\')" aria-label="Close">' + PG.icon('x',18) + '</button></div>' +
+    '<div class="pg-drawer-body">' +
+      '<div class="form-group"><label class="form-label" for="adv-pay">Payment Status</label>' +
+        '<select class="form-control" id="adv-pay">' + PAY_STATUSES.map(function(p){return '<option value="'+p+'"'+(filters.pay===p?' selected':'')+'>'+(p==='All'?'All Payment Statuses':p)+'</option>';}).join('') + '</select></div>' +
+      '<div class="form-group"><label class="form-label" for="adv-source">Reservation Source</label>' +
+        '<select class="form-control" id="adv-source">' + SOURCES.map(function(src){return '<option value="'+src+'"'+(filters.source===src?' selected':'')+'>'+(src==='All'?'All Sources':src)+'</option>';}).join('') + '</select></div>' +
+      '<div class="grid-2" style="margin-bottom:0;"><div class="form-group"><label class="form-label" for="adv-arrival">Arrival Date</label>' +
+        '<input type="date" class="form-control" id="adv-arrival" value="'+PG.esc(filters.arrival)+'"></div>' +
+        '<div class="form-group"><label class="form-label" for="adv-departure">Departure Date</label>' +
+        '<input type="date" class="form-control" id="adv-departure" value="'+PG.esc(filters.departure)+'"></div></div>' +
+    '</div>' +
+    '<div class="pg-drawer-footer"><button class="btn btn-light" id="adv-clear">Clear</button>' +
+      '<button class="btn btn-primary" id="adv-apply">Apply Filters</button></div>' +
+  '</div>';
+  PG.enhanceSelects(advDrawer);
+  var pending = { pay: filters.pay, source: filters.source, arrival: filters.arrival, departure: filters.departure };
+  document.getElementById('adv-pay').addEventListener('change', function(){ pending.pay = this.value; });
+  document.getElementById('adv-source').addEventListener('change', function(){ pending.source = this.value; });
+  document.getElementById('adv-arrival').addEventListener('change', function(){ pending.arrival = this.value; });
+  document.getElementById('adv-departure').addEventListener('change', function(){ pending.departure = this.value; });
+  document.getElementById('adv-clear').addEventListener('click', function(){
+    filters.pay = 'All'; filters.source = 'All'; filters.arrival = ''; filters.departure = '';
+    PG.closeModal('resAdvDrawer'); render();
+  });
+  document.getElementById('adv-apply').addEventListener('click', function(){
+    filters.pay = pending.pay; filters.source = pending.source; filters.arrival = pending.arrival; filters.departure = pending.departure;
+    PG.closeModal('resAdvDrawer'); render();
+  });
+  PG.openModal('resAdvDrawer');
 });
+
 render();
+window.pgAssistantRefresh = render; // lets the Hotel Assistant update this screen after applying a change
+PG.mountHotelAssistant('Reservations');
 </script>
 </body>
 </html>

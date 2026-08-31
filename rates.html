@@ -113,7 +113,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("rates", ["Hotel Configuration", "Rate Plans & Pricing"]);
+var page = PG.mount("rates", ["Hotel Operations", "Rate Plans & Pricing"]);
 var CAN_VIEW = PG.hasPermission('view_rates');
 var CAN_MANAGE = PG.hasPermission('manage_rates');
 var DOW_LABELS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -356,11 +356,12 @@ function planRowMenu(p){
       '<button type="button" data-act="addperiod" data-id="'+p.id+'">' + PG.icon('calendar',15) + ' Add Pricing Period</button>' +
       '<button type="button" data-act="calendar" data-id="'+p.id+'">' + PG.icon('grid',15) + ' View Price Calendar</button>' +
       '<button type="button" data-act="duplicate" data-id="'+p.id+'">' + PG.icon('copy',15) + ' Duplicate</button>' +
+      '<div class="menu-sep"></div>' +
       '<button type="button" data-act="toggle" data-id="'+p.id+'">' + PG.icon(p.active?'pause':'check',15) + ' ' + (p.active?'Deactivate':'Activate') + '</button>';
     var deps = reservationsUsingPlan(p.id);
-    items += deps.length
+    items += '<div class="menu-sep"></div>' + (deps.length
       ? '<button type="button" disabled title="' + deps.length + ' reservation(s) were booked on this plan">' + PG.icon('trash',15) + ' Delete (in use)</button>'
-      : '<button type="button" class="danger" data-act="delete" data-id="'+p.id+'">' + PG.icon('trash',15) + ' Delete Rate Plan</button>';
+      : '<button type="button" class="danger" data-act="delete" data-id="'+p.id+'">' + PG.icon('trash',15) + ' Delete Rate Plan</button>');
   }
   return '<div class="more-wrap"><button class="more-btn" aria-label="Actions for ' + PG.esc(p.name) + '" aria-haspopup="menu">' +
     PG.icon('dots',16) + '</button><div class="more-menu" role="menu">' + items + '</div></div>';
@@ -464,8 +465,10 @@ function periodRowMenu(p, pp){
     items = '<button type="button" data-act="editperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('edit',15) + ' Edit Period</button>' +
       '<button type="button" data-act="dupperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('copy',15) + ' Duplicate Period</button>' +
       items +
+      '<div class="menu-sep"></div>' +
       '<button type="button" data-act="toggleperiod" data-id="'+p.id+'|'+pp.id+'">' +
         PG.icon(pp.active===false?'check':'pause',15) + ' ' + (pp.active===false?'Reactivate':'Deactivate') + '</button>' +
+      '<div class="menu-sep"></div>' +
       '<button type="button" class="danger" data-act="delperiod" data-id="'+p.id+'|'+pp.id+'">' + PG.icon('trash',15) + ' Delete Period</button>';
   }
   return '<div class="more-wrap"><button class="more-btn" aria-label="Actions for ' + PG.esc(pp.name) + '" aria-haspopup="menu">' +
@@ -511,15 +514,7 @@ function wireRows(){
     el.addEventListener('click', go);
     el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();go();} });
   });
-  page.querySelectorAll('.more-btn').forEach(function(btn){
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      var menu = btn.nextElementSibling;
-      var wasOpen = menu.classList.contains('show');
-      document.querySelectorAll('.more-menu.show').forEach(function(m){ m.classList.remove('show'); });
-      if (!wasOpen) menu.classList.add('show');
-    });
-  });
+  PG.wireMoreMenus(page);
   page.querySelectorAll('[data-act]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var act = btn.dataset.act, id = btn.dataset.id, parts = id.split('|');
@@ -538,10 +533,6 @@ function wireRows(){
     });
   });
 }
-document.addEventListener('click', function(){
-  document.querySelectorAll('.more-menu.show').forEach(function(m){ m.classList.remove('show'); });
-});
-
 /* Advanced filters — the lower-frequency dimensions, in a drawer, reported back as
    removable chips so nothing set here becomes invisible state. */
 function openAdvancedFilters(){
@@ -611,6 +602,99 @@ function openPlanEditor(planId){
   // An inactive or non-sellable room can never be a plan target — offering it would
   // create a plan that prices a room the property cannot actually sell.
   function roomSelectable(r){ return r.isActive && r.isSellable; }
+  function distinctVals(list, key){
+    var seen = {}, out = [];
+    list.forEach(function(r){ var v = r[key]; if (v!=null && !seen[v]){ seen[v]=true; out.push(v); } });
+    return out.sort();
+  }
+
+  // Scalable room-targeting state — search + scope filters + a paging cap so a
+  // 300-room property never renders hundreds of checkbox rows at once (§6).
+  var scopeUi = { search:'', building:'all', floor:'all', opStatus:'all', sellable:'all', rangeText:'', expanded:false, visible:60 };
+  function resetScopeUi(){ scopeUi = { search:'', building:'all', floor:'all', opStatus:'all', sellable:'all', rangeText:'', expanded:false, visible:60 }; }
+
+  function scopeFilteredRooms(){
+    var rooms = roomsOfType();
+    var q = scopeUi.search.trim().toLowerCase();
+    return rooms.filter(function(r){
+      if (scopeUi.building!=='all' && r.building!==scopeUi.building) return false;
+      if (scopeUi.floor!=='all' && String(r.floor)!==scopeUi.floor) return false;
+      if (scopeUi.opStatus!=='all' && r.operationalStatus!==scopeUi.opStatus) return false;
+      if (scopeUi.sellable==='yes' && !r.isSellable) return false;
+      if (scopeUi.sellable==='no' && r.isSellable) return false;
+      if (q){
+        var hay = (r.roomNumber+' '+r.building+' Floor '+r.floor+' '+r.bedConfiguration).toLowerCase();
+        if (hay.indexOf(q)===-1) return false;
+      }
+      return true;
+    });
+  }
+
+  // "101-110, 201-210, 305" → matching, selectable rooms of the current type, plus a
+  // report of what could not be added (invalid syntax, no such room, inactive/not
+  // sellable, or a duplicate of what's already selected) so validation can name numbers.
+  function parseRoomRanges(text){
+    var rooms = roomsOfType();
+    var byNumber = {};
+    rooms.forEach(function(r){ byNumber[r.roomNumber] = r; });
+    var matched = [], skippedInactive = [], skippedMissing = [], skippedDuplicate = [], invalidTokens = [];
+    (text||'').split(',').map(function(t){return t.trim();}).filter(Boolean).forEach(function(tok){
+      var m = tok.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+      var nums = [];
+      if (m) {
+        var lo = parseInt(m[1],10), hi = parseInt(m[2],10);
+        if (isNaN(lo) || isNaN(hi) || hi < lo) { invalidTokens.push(tok); return; }
+        for (var n=lo; n<=hi; n++) nums.push(String(n));
+      } else if (/^\d+$/.test(tok)) {
+        nums.push(tok);
+      } else {
+        invalidTokens.push(tok); return;
+      }
+      nums.forEach(function(numStr){
+        // Room numbers in the seed are stored as-is (e.g. "101"); tolerate a bare
+        // numeric match even if the stored value has extra formatting.
+        var r = byNumber[numStr] || rooms.find(function(x){ return String(parseInt(x.roomNumber,10))===String(parseInt(numStr,10)); });
+        if (!r) { skippedMissing.push(numStr); return; }
+        if (draft.physicalRoomIds.indexOf(r.id) > -1 || matched.indexOf(r) > -1) { skippedDuplicate.push(r.roomNumber); return; }
+        if (!roomSelectable(r)) { skippedInactive.push(r.roomNumber); return; }
+        matched.push(r);
+      });
+    });
+    return { matched: matched, skippedInactive: skippedInactive, skippedMissing: skippedMissing, skippedDuplicate: skippedDuplicate, invalidTokens: invalidTokens };
+  }
+
+  function addRooms(rooms){
+    rooms.forEach(function(r){
+      if (roomSelectable(r) && draft.physicalRoomIds.indexOf(r.id)===-1) draft.physicalRoomIds.push(r.id);
+    });
+  }
+
+  // Selected rooms grouped by building for the summary — "Main Building · Floor 1"
+  // when a whole floor's selectable rooms are all picked, else a collapsed room-number
+  // range via PG.summarizeRoomNumbers (e.g. "Rooms 101–105, 108").
+  function selectionSummaryGroups(){
+    var rooms = roomsOfType();
+    var picked = rooms.filter(function(r){ return draft.physicalRoomIds.indexOf(r.id)>-1; });
+    if (!picked.length) return [];
+    var byBuilding = {};
+    picked.forEach(function(r){ (byBuilding[r.building] = byBuilding[r.building] || []).push(r); });
+    var groups = [];
+    Object.keys(byBuilding).forEach(function(bld){
+      var inBld = byBuilding[bld];
+      var byFloor = {};
+      inBld.forEach(function(r){ (byFloor[r.floor] = byFloor[r.floor] || []).push(r); });
+      Object.keys(byFloor).forEach(function(fl){
+        var floorRooms = rooms.filter(function(r){ return r.building===bld && String(r.floor)===String(fl) && roomSelectable(r); });
+        var pickedOnFloor = byFloor[fl];
+        if (floorRooms.length && pickedOnFloor.length === floorRooms.length){
+          groups.push(PG.esc(bld) + ' &middot; Floor ' + fl + ' <span class="muted">(all ' + floorRooms.length + ')</span>');
+        } else {
+          groups.push(PG.esc(bld) + ' &middot; Rooms ' + PG.esc(PG.summarizeRoomNumbers(pickedOnFloor.map(function(r){return r.roomNumber;}))));
+        }
+      });
+    });
+    return groups;
+  }
 
   function scopeSection(){
     if (draft.scope !== 'rooms'){
@@ -621,26 +705,131 @@ function openPlanEditor(planId){
           : '<div class="form-hint">This plan will be sellable on every room of this type.</div>') + '</div>' +
         '<div class="scope-summary"><span>Rooms covered</span><strong>' + n + ' ' + PG.esc(rtName(draft.roomTypeId)) + ' room' + (n===1?'':'s') + '</strong></div>';
     }
-    var rooms = roomsOfType();
-    var picked = rooms.filter(function(r){ return draft.physicalRoomIds.indexOf(r.id)>-1; });
     return '<div class="form-group"><label class="form-label">Room Type <span class="req">*</span></label><div id="peRt"></div>' +
       '<div class="form-hint">Specific rooms are always chosen from within one room type, so a plan can never price a room it was not built for.</div></div>' +
+      '<div id="peScopeRooms"></div>';
+  }
+
+  // Renders/rewires ONLY the "Specific Rooms" picker sub-tree, so typing in the
+  // search box or range field never re-paints (and loses focus in) the whole drawer.
+  function renderScopeRoomsBody(){
+    var host = document.getElementById('peScopeRooms');
+    if (!host) return;
+    var allRooms = roomsOfType();
+    var buildings = distinctVals(allRooms, 'building');
+    var floors = distinctVals(allRooms, 'floor');
+    var opStatuses = distinctVals(allRooms, 'operationalStatus');
+    var filtered = scopeFilteredRooms();
+    var picked = allRooms.filter(function(r){ return draft.physicalRoomIds.indexOf(r.id)>-1; });
+    var visibleRooms = filtered.slice(0, scopeUi.visible);
+    var groups = selectionSummaryGroups();
+
+    host.innerHTML =
       '<div class="form-group"><label class="form-label">Physical Rooms <span class="req">*</span></label>' +
-      '<div class="scope-room-list" id="peRooms">' + rooms.map(function(r){
+
+      '<div class="scope-summary" style="margin:0 0 10px;flex-direction:column;align-items:stretch;gap:6px;">' +
+        '<div style="display:flex;justify-content:space-between;"><span><strong>' + picked.length + '</strong> room' + (picked.length===1?'':'s') + ' selected</span>' +
+          (picked.length ? '<button type="button" class="row-link text-sm" id="peExpandSel">' + (scopeUi.expanded?'Hide list':'Review individual rooms') + '</button>' : '') + '</div>' +
+        (groups.length ? '<div class="text-sm" style="color:var(--pg-gray-600);">' + groups.join('<br>') + '</div>' : '') +
+        (scopeUi.expanded && picked.length ? '<div class="scope-chips">' + picked.map(function(r){
+          return '<span class="scope-chip">Room ' + PG.esc(r.roomNumber) +
+            '<button type="button" class="x" data-unpick="'+r.id+'" aria-label="Remove room ' + PG.esc(r.roomNumber) + '">&times;</button></span>';
+        }).join('') + '</div>' : '') +
+      '</div>' +
+
+      '<div class="pg-searchwrap" style="margin-bottom:10px;"><span class="ic">' + PG.icon('search',14) + '</span>' +
+        '<input class="form-control" id="peScopeSearch" type="search" placeholder="Search by room number, building, or floor" value="'+PG.esc(scopeUi.search)+'" aria-label="Search rooms"></div>' +
+
+      '<div class="grid-2" style="gap:8px;margin-bottom:10px;">' +
+        '<select class="form-control" id="peScopeBuilding"><option value="all">All Buildings</option>' + buildings.map(function(b){return '<option value="'+PG.esc(b)+'"'+(scopeUi.building===b?' selected':'')+'>'+PG.esc(b)+'</option>';}).join('') + '</select>' +
+        '<select class="form-control" id="peScopeFloor"><option value="all">All Floors</option>' + floors.map(function(f){return '<option value="'+f+'"'+(String(scopeUi.floor)===String(f)?' selected':'')+'>Floor '+f+'</option>';}).join('') + '</select>' +
+        '<select class="form-control" id="peScopeStatus"><option value="all">All Statuses</option>' + opStatuses.map(function(st2){return '<option value="'+PG.esc(st2)+'"'+(scopeUi.opStatus===st2?' selected':'')+'>'+PG.esc(st2)+'</option>';}).join('') + '</select>' +
+        '<select class="form-control" id="peScopeSellable"><option value="all">Sellable: Any</option><option value="yes"'+(scopeUi.sellable==='yes'?' selected':'')+'>Sellable only</option><option value="no"'+(scopeUi.sellable==='no'?' selected':'')+'>Not sellable</option></select>' +
+      '</div>' +
+
+      '<div class="copy-row">' +
+        '<button type="button" class="btn btn-light btn-sm" id="peSelFiltered">Select all filtered (' + filtered.filter(roomSelectable).length + ')</button>' +
+        (scopeUi.building!=='all' ? '<button type="button" class="btn btn-light btn-sm" id="peSelBuilding">Select all in ' + PG.esc(scopeUi.building) + '</button>' : '') +
+        (scopeUi.floor!=='all' ? '<button type="button" class="btn btn-light btn-sm" id="peSelFloor">Select all Floor ' + scopeUi.floor + '</button>' : '') +
+        '<button type="button" class="btn btn-light btn-sm" id="peSelAllType">Select all ' + PG.esc(rtName(draft.roomTypeId)) + '</button>' +
+        (picked.length ? '<button type="button" class="btn btn-light btn-sm" id="peClearSel">Clear selection</button>' : '') +
+      '</div>' +
+
+      '<div class="grid-2" style="gap:8px;align-items:end;margin-bottom:10px;">' +
+        '<div class="form-group" style="margin-bottom:0;"><label class="form-label" for="peRangeInput">Room number ranges</label>' +
+        '<input class="form-control" id="peRangeInput" placeholder="e.g. 101-110, 201-210, 305" value="'+PG.esc(scopeUi.rangeText)+'"></div>' +
+        '<button type="button" class="btn btn-outline" id="peRangeAdd">' + PG.icon('plus',15) + ' Add Range</button>' +
+      '</div>' +
+      '<div id="peRangeFeedback"></div>' +
+
+      '<div class="scope-room-list" id="peRooms">' + (visibleRooms.length ? visibleRooms.map(function(r){
         var ok = roomSelectable(r);
         var on = draft.physicalRoomIds.indexOf(r.id)>-1;
         return '<label class="scope-room' + (ok?'':' disabled') + '">' +
           '<input type="checkbox" value="'+r.id+'"' + (on?' checked':'') + (ok?'':' disabled') + '>' +
           '<span><span class="rn">Room ' + PG.esc(r.roomNumber) + '</span> ' +
-          '<span class="rm">· Floor ' + r.floor + ' · ' + PG.esc(r.bedConfiguration) +
-          (ok ? '' : ' · ' + (r.isActive ? 'not sellable' : 'inactive')) + '</span></span></label>';
-      }).join('') + '</div>' +
-      '<div class="scope-chips" id="peChips">' + (picked.length
-        ? picked.map(function(r){ return '<span class="scope-chip">Room ' + PG.esc(r.roomNumber) +
-            '<button type="button" class="x" data-unpick="'+r.id+'" aria-label="Remove room ' + PG.esc(r.roomNumber) + '">&times;</button></span>'; }).join('')
-        : '<span class="text-sm muted">No rooms selected yet.</span>') + '</div></div>' +
-      '<div class="scope-summary"><span>Rooms covered</span><strong>' + picked.length + ' of ' + rooms.length + '</strong></div>';
+          '<span class="rm">· ' + PG.esc(r.building) + ' &middot; Floor ' + r.floor + ' &middot; ' + PG.esc(r.bedConfiguration) +
+          (ok ? '' : ' &middot; ' + (r.isActive ? 'not sellable' : 'inactive')) + '</span></span></label>';
+      }).join('') : '<div class="text-sm muted" style="padding:14px;">No rooms match these filters.</div>') + '</div>' +
+      (filtered.length > scopeUi.visible
+        ? '<button type="button" class="btn btn-light btn-sm" id="peShowMore" style="margin-top:8px;">Show ' + Math.min(60, filtered.length-scopeUi.visible) + ' more (' + (filtered.length-scopeUi.visible) + ' remaining)</button>'
+        : (filtered.length ? '<div class="text-sm muted" style="margin-top:6px;">Showing all ' + filtered.length + ' filtered room' + (filtered.length===1?'':'s') + '.</div>' : '')) +
+    '</div>';
+
+    document.getElementById('peScopeSearch').addEventListener('input', function(){ scopeUi.search=this.value; scopeUi.visible=60; renderScopeRoomsBody(); reviewSave(); });
+    document.getElementById('peScopeBuilding').addEventListener('change', function(){ scopeUi.building=this.value; scopeUi.visible=60; renderScopeRoomsBody(); });
+    document.getElementById('peScopeFloor').addEventListener('change', function(){ scopeUi.floor=this.value; scopeUi.visible=60; renderScopeRoomsBody(); });
+    document.getElementById('peScopeStatus').addEventListener('change', function(){ scopeUi.opStatus=this.value; scopeUi.visible=60; renderScopeRoomsBody(); });
+    document.getElementById('peScopeSellable').addEventListener('change', function(){ scopeUi.sellable=this.value; scopeUi.visible=60; renderScopeRoomsBody(); });
+
+    document.getElementById('peSelFiltered').addEventListener('click', function(){ addRooms(scopeFilteredRooms()); renderScopeRoomsBody(); reviewSave(); });
+    var selBld = document.getElementById('peSelBuilding'); if (selBld) selBld.addEventListener('click', function(){ addRooms(allRooms.filter(function(r){return r.building===scopeUi.building;})); renderScopeRoomsBody(); reviewSave(); });
+    var selFlr = document.getElementById('peSelFloor'); if (selFlr) selFlr.addEventListener('click', function(){ addRooms(allRooms.filter(function(r){return String(r.floor)===String(scopeUi.floor);})); renderScopeRoomsBody(); reviewSave(); });
+    document.getElementById('peSelAllType').addEventListener('click', function(){ addRooms(allRooms); renderScopeRoomsBody(); reviewSave(); });
+    var clearBtn = document.getElementById('peClearSel'); if (clearBtn) clearBtn.addEventListener('click', function(){ draft.physicalRoomIds = []; renderScopeRoomsBody(); reviewSave(); });
+
+    var expandBtn = document.getElementById('peExpandSel'); if (expandBtn) expandBtn.addEventListener('click', function(){ scopeUi.expanded = !scopeUi.expanded; renderScopeRoomsBody(); });
+
+    document.getElementById('peRangeInput').addEventListener('input', function(){ scopeUi.rangeText=this.value; });
+    document.getElementById('peRangeAdd').addEventListener('click', function(){
+      var result = parseRoomRanges(scopeUi.rangeText);
+      addRooms(result.matched);
+      var msgs = [];
+      if (result.matched.length) msgs.push('<div class="help-note help-note-success" style="margin-bottom:8px;">' + PG.icon('check',15) + '<div>Added ' + result.matched.length + ' room' + (result.matched.length===1?'':'s') + ': ' + PG.esc(PG.summarizeRoomNumbers(result.matched.map(function(r){return r.roomNumber;}))) + '</div></div>');
+      if (result.invalidTokens.length) msgs.push('<div class="help-note help-note-danger" style="margin-bottom:8px;">' + PG.icon('alert',15) + '<div>Invalid range: ' + PG.esc(result.invalidTokens.join(', ')) + '</div></div>');
+      if (result.skippedMissing.length) msgs.push('<div class="help-note help-note-warning" style="margin-bottom:8px;">' + PG.icon('info',15) + '<div>No room numbered ' + PG.esc(result.skippedMissing.join(', ')) + ' in ' + PG.esc(rtName(draft.roomTypeId)) + '</div></div>');
+      if (result.skippedInactive.length) msgs.push('<div class="help-note help-note-warning" style="margin-bottom:8px;">' + PG.icon('alert',15) + '<div>Skipped inactive/not-sellable rooms: ' + PG.esc(result.skippedInactive.join(', ')) + '</div></div>');
+      if (result.skippedDuplicate.length) msgs.push('<div class="help-note" style="margin-bottom:8px;">' + PG.icon('info',15) + '<div>Already selected: ' + PG.esc(result.skippedDuplicate.join(', ')) + '</div></div>');
+      scopeUi.rangeText = '';
+      // Rebuild the picker FIRST (it recreates #peRangeFeedback empty), then write the
+      // feedback into the fresh node — setting it before the rebuild just gets wiped.
+      renderScopeRoomsBody();
+      var fb = document.getElementById('peRangeFeedback');
+      if (fb) fb.innerHTML = msgs.join('');
+      reviewSave();
+    });
+
+    var showMoreBtn = document.getElementById('peShowMore'); if (showMoreBtn) showMoreBtn.addEventListener('click', function(){ scopeUi.visible += 60; renderScopeRoomsBody(); });
+
+    var roomBox = document.getElementById('peRooms');
+    roomBox.addEventListener('change', function(e){
+      var cb = e.target.closest('input[type=checkbox]'); if (!cb) return;
+      var i = draft.physicalRoomIds.indexOf(cb.value);
+      if (cb.checked && i===-1) draft.physicalRoomIds.push(cb.value);
+      if (!cb.checked && i>-1) draft.physicalRoomIds.splice(i,1);
+      renderScopeRoomsBody(); reviewSave();
+    });
+    host.querySelectorAll('[data-unpick]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var i = draft.physicalRoomIds.indexOf(b.dataset.unpick);
+        if (i>-1) draft.physicalRoomIds.splice(i,1);
+        renderScopeRoomsBody(); reviewSave();
+      });
+    });
   }
+  // No-op placeholder overwritten once the save button exists (defined below, after
+  // paint() creates #peSave) — lets the room-picker helpers above call it unconditionally.
+  var reviewSave = function(){};
 
   function paint(){
     d.innerHTML = '<div class="pg-drawer pg-drawer-wide">' +
@@ -706,7 +895,7 @@ function openPlanEditor(planId){
           sub: s.physicalRooms.filter(function(r){return r.roomTypeId===rt.id;}).length + ' physical rooms · base ' + money(rt.baseRate),
           disabled: deps.length>0, reason: deps.length ? 'Locked while reservations are booked on this plan' : null };
       }),
-      onSelect: function(id){ draft.roomTypeId = id; draft.physicalRoomIds = []; paint(); }
+      onSelect: function(id){ draft.roomTypeId = id; draft.physicalRoomIds = []; resetScopeUi(); paint(); }
     });
     PG.renderManagedSelect(document.getElementById('pe-meal'), {
       value: draft.mealPlan,
@@ -721,26 +910,23 @@ function openPlanEditor(planId){
     document.getElementById('pe-base').addEventListener('input', function(){ draft.basePrice=this.value; });
     document.getElementById('pe-active').addEventListener('change', function(){ draft.active=this.checked; });
     document.getElementById('pe-default').addEventListener('change', function(){ draft.isDefault=this.checked; });
-    PG.wireSegmented(d, 'peScope', function(v){ draft.scope=v; paint(); });
+    PG.wireSegmented(d, 'peScope', function(v){ draft.scope=v; if (v==='rooms') resetScopeUi(); paint(); });
     PG.wireSegmented(d, 'peStrict', function(v){ draft.strict = v==='1'; });
 
-    var roomBox = document.getElementById('peRooms');
-    if (roomBox) roomBox.addEventListener('change', function(e){
-      var cb = e.target.closest('input[type=checkbox]'); if (!cb) return;
-      var i = draft.physicalRoomIds.indexOf(cb.value);
-      if (cb.checked && i===-1) draft.physicalRoomIds.push(cb.value);
-      if (!cb.checked && i>-1) draft.physicalRoomIds.splice(i,1);
-      paint();
-    });
-    d.querySelectorAll('[data-unpick]').forEach(function(b){
-      b.addEventListener('click', function(){
-        var i = draft.physicalRoomIds.indexOf(b.dataset.unpick);
-        if (i>-1) draft.physicalRoomIds.splice(i,1);
-        paint();
-      });
-    });
+    // The "Specific Rooms" picker is a big enough sub-tree that it renders itself
+    // (see renderScopeRoomsBody) rather than forcing a full drawer repaint on every
+    // keystroke/checkbox — that would lose focus in the search/range inputs.
+    if (draft.scope === 'rooms') renderScopeRoomsBody();
 
     document.getElementById('peSave').addEventListener('click', function(){ savePlan(this); });
+    reviewSave = function(){
+      var saveBtn = document.getElementById('peSave');
+      if (!saveBtn) return;
+      if (draft.scope === 'rooms' && !draft.physicalRoomIds.length){
+        saveBtn.title = 'Select at least one physical room before saving.';
+      } else saveBtn.title = '';
+    };
+    reviewSave();
   }
 
   function savePlan(btn){
@@ -753,7 +939,26 @@ function openPlanEditor(planId){
     });
     if (dupe) errs.push('Another rate plan on this room type already uses this name.');
     if (!(Number(draft.basePrice) > 0)) errs.push('Enter a base price greater than 0.');
-    if (draft.scope==='rooms' && !draft.physicalRoomIds.length) errs.push('Select at least one physical room for this plan.');
+    if (!CAN_MANAGE) errs.push('You don’t have permission to modify rate-plan assignments.');
+    if (draft.scope==='rooms'){
+      if (!draft.physicalRoomIds.length) errs.push('Select at least one physical room for this plan.');
+      else {
+        // Re-check every selected room against LIVE state — it may have been
+        // deactivated, marked not-sellable, or reassigned to another room type
+        // since this drawer opened.
+        var freshState = PG.getState();
+        var badInactive = [], badType = [], missing = [];
+        draft.physicalRoomIds.forEach(function(id){
+          var r = freshState.physicalRooms.find(function(x){return x.id===id;});
+          if (!r) { missing.push(id); return; }
+          if (r.roomTypeId !== draft.roomTypeId) { badType.push(r.roomNumber); return; }
+          if (!r.isActive || !r.isSellable) badInactive.push(r.roomNumber);
+        });
+        if (missing.length) errs.push(missing.length + ' selected room(s) no longer exist. Reopen the picker and reselect.');
+        if (badType.length) errs.push('Room(s) ' + badType.join(', ') + ' no longer belong to ' + PG.esc(rtName(draft.roomTypeId)) + '.');
+        if (badInactive.length) errs.push('Room(s) ' + badInactive.join(', ') + ' are inactive or not sellable and can’t be assigned to a rate plan.');
+      }
+    }
     if (errs.length){
       status.innerHTML = '<div class="help-note help-note-danger" style="margin-top:6px;">' + PG.icon('alert',16) +
         '<div>' + errs.map(PG.esc).join('<br>') + '</div></div>';
@@ -1510,6 +1715,8 @@ if (!CAN_VIEW){
     '<strong>No access to Rate Plans &amp; Pricing</strong>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();
+  window.pgAssistantRefresh = renderShell; // lets the Hotel Assistant update this screen after applying a change
+  PG.mountHotelAssistant('Rate Plans & Pricing');
 }
 </script>
 </body>

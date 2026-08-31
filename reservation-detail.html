@@ -16,11 +16,8 @@
   .t-item .t-time{font-size:11px;color:var(--pg-gray-500);}
   .t-item .t-text{font-size:12.8px;color:var(--pg-gray-800);margin-top:2px;}
   .section-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--pg-gray-200);color:var(--pg-gray-700);font-size:11px;font-weight:700;margin-right:8px;}
-  .more-wrap{position:relative;display:inline-block;}
-  .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);min-width:220px;z-index:30;display:none;overflow:hidden;}
-  .more-menu.show{display:block;}
-  .more-menu a, .more-menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:12.5px;color:var(--pg-gray-800);background:none;border:none;cursor:pointer;}
-  .more-menu a:hover, .more-menu button:hover{background:var(--pg-gray-100);}
+  /* .more-wrap / .more-btn / .more-menu now live in style.css (PG.wireMoreMenus) so
+     every table/page action menu in the app is literally the same component. */
   .room-item-card{border:1px solid var(--pg-border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:var(--pg-gray-100);}
   .room-item-card .ri-top{display:flex;justify-content:space-between;align-items:center;}
   .room-item-card h4{font-size:13.5px;}
@@ -52,7 +49,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("reservations", ["Reservations", "Reservations", "Reservation Detail"]);
+var page = PG.mount("reservations", ["Hotel Operations", "Reservations", "Reservation Detail"]);
 var s = PG.getState();
 var id = new URLSearchParams(location.search).get('id');
 var r = s.reservations.find(function(x){return x.id===id;});
@@ -202,12 +199,12 @@ function render(){
       (canManage() ? '<button class="btn btn-outline" id="editBtn">Edit Reservation</button>' : '') +
       (canCancel ? '<button class="btn btn-danger-outline" id="cancelBtn">Cancel Reservation</button>' : '') +
       '<div class="more-wrap">' +
-        '<button class="btn btn-outline" id="moreBtn">More &#9662;</button>' +
-        '<div class="more-menu" id="moreMenu">' +
-          (r.status==='Confirmed' && CAN_MANAGE ? '<button id="markCompletedBtn">Mark as Completed</button><button id="markNoShowBtn">Mark as No Show</button>' : '') +
-          '<a href="operations-calendar.html">Open Operations Calendar</a>' +
-          '<a href="reservations.html">Back to Reservations</a>' +
-          '<button id="printStub">Print Summary</button>' +
+        '<button class="more-btn" id="moreBtn" aria-label="More actions" aria-haspopup="menu" title="More actions">' + PG.icon('dots',16) + '</button>' +
+        '<div class="more-menu" id="moreMenu" role="menu">' +
+          (r.status==='Confirmed' && CAN_MANAGE ? '<button id="markCompletedBtn">' + PG.icon('check',15) + ' Mark as Completed</button><button id="markNoShowBtn">' + PG.icon('x',15) + ' Mark as No Show</button><div class="menu-sep"></div>' : '') +
+          '<a href="operations-calendar.html">' + PG.icon('calendar',15) + ' Open Operations Calendar</a>' +
+          '<a href="reservations.html">' + PG.icon('list',15) + ' Back to Reservations</a>' +
+          '<button id="printStub">' + PG.icon('note',15) + ' Print Summary</button>' +
         '</div>' +
       '</div>' +
     '</div></div>';
@@ -280,11 +277,10 @@ function render(){
 
   if (canManage()) document.getElementById('editBtn').addEventListener('click', openEditDrawer);
   if (canCancel) document.getElementById('cancelBtn').addEventListener('click', openCancelConfirm);
-  document.getElementById('moreBtn').addEventListener('click', function(e){ e.stopPropagation(); document.getElementById('moreMenu').classList.toggle('show'); });
-  document.addEventListener('click', function(){ var m=document.getElementById('moreMenu'); if(m) m.classList.remove('show'); });
-  document.getElementById('printStub').addEventListener('click', function(){ PG.toast('Printing / export is outside this MVP prototype.', 'warn'); });
-  var mc = document.getElementById('markCompletedBtn'); if (mc) mc.addEventListener('click', function(){ openStatusActionConfirm('Completed'); });
-  var mn = document.getElementById('markNoShowBtn'); if (mn) mn.addEventListener('click', function(){ openStatusActionConfirm('No Show'); });
+  PG.wireMoreMenus(page);
+  document.getElementById('printStub').addEventListener('click', function(){ PG.closeMoreMenu(false); PG.toast('Printing / export is outside this MVP prototype.', 'warn'); });
+  var mc = document.getElementById('markCompletedBtn'); if (mc) mc.addEventListener('click', function(){ PG.closeMoreMenu(false); openStatusActionConfirm('Completed'); });
+  var mn = document.getElementById('markNoShowBtn'); if (mn) mn.addEventListener('click', function(){ PG.closeMoreMenu(false); openStatusActionConfirm('No Show'); });
 
   document.querySelectorAll('.change-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openChangeRoomForAssignment(el.dataset.assignment, el.dataset.item, el.dataset.rt); }); });
   document.querySelectorAll('.assign-room-btn').forEach(function(el){ el.addEventListener('click', function(){ openAssignRoomFor(el.dataset.item, el.dataset.rt); }); });

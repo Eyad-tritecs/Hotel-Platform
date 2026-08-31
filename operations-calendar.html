@@ -149,7 +149,29 @@
   .opc-drawer-row .v{font-weight:700;text-align:right;}
   .opc-drawer-section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-500);margin:18px 0 8px;}
   .opc-drawer-section-title:first-child{margin-top:0;}
-  .opc-qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+  /* ---- Reservation drawer header: guest name is the strongest label, the       */
+  /* reservation number is visually secondary (§3). ---- */
+  .rd-head-guest{font-size:17px;font-weight:700;color:var(--pg-gray-900);line-height:1.25;}
+  .rd-head-num{font-size:12px;color:var(--pg-gray-500);font-weight:500;margin-top:1px;}
+  .rd-head-badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+
+  /* ---- Compact icon rows for the Stay Summary card ---- */
+  .rd-card{border:1px solid var(--pg-border);border-radius:var(--pg-radius-btn);background:#fff;overflow:hidden;}
+  .rd-irow{display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--pg-gray-200);font-size:12.5px;}
+  .rd-irow:last-child{border-bottom:none;}
+  .rd-irow .ic{width:16px;height:16px;flex-shrink:0;color:var(--pg-gray-500);display:inline-flex;}
+  .rd-irow .k{color:var(--pg-gray-600);min-width:108px;flex-shrink:0;}
+  .rd-irow .v{font-weight:600;color:var(--pg-gray-900);text-align:right;flex:1;}
+  .rd-attr-chips{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end;}
+
+  /* ---- Action hierarchy: primary dominant, secondary neutral, destructive        */
+  /* separated at the bottom — buttons must NOT all carry the same visual weight    */
+  /* (§3). This replaces the old 2-column grid of identical outline buttons. ---- */
+  .rd-actions{display:flex;flex-direction:column;gap:10px;width:100%;}
+  .rd-actions .btn{width:100%;justify-content:center;}
+  .rd-secondary-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .rd-danger-row{border-top:1px solid var(--pg-border);padding-top:10px;margin-top:2px;}
 
   @media (max-width:900px){ .opc-wrap{height:calc(100vh - 460px);} }
 
@@ -1078,6 +1100,19 @@ function init(){
 
   function drow(label, value){ return '<div class="opc-drawer-row"><span class="muted">'+label+'</span><span class="v">'+value+'</span></div>'; }
 
+  function rdIcon(name, size){ return '<span class="ic">' + PG.icon(name, size||16) + '</span>'; }
+  function rdRow(icon, label, value){
+    return '<div class="rd-irow">' + rdIcon(icon) + '<span class="k">'+label+'</span><span class="v">'+value+'</span></div>';
+  }
+
+  // Amount paid / outstanding — this MVP has no partial payments, so the split is
+  // binary off paymentStatus, matching the same logic reservation-detail.html uses.
+  function paymentAmounts(res, total){
+    if (res.paymentStatus === 'Paid') return { paid: total, outstanding: 0 };
+    if (res.paymentStatus === 'Refunded') return { paid: 0, outstanding: 0 };
+    return { paid: 0, outstanding: total };
+  }
+
   function openReservationDrawer(resId, itemId, assignmentId){
     var st = PG.getState();
     var res = st.reservations.find(function(r){return r.id===resId;});
@@ -1089,65 +1124,119 @@ function init(){
     var nights = PG.nightsBetween(res.checkIn, res.checkOut);
     var guests = res.rooms.reduce(function(a,x){return a+x.adults+(x.children||0);},0);
     var total = PG.reservationTotal(st, res);
+    var amounts = paymentAmounts(res, total);
     var needsAttention = room ? !PG.roomEligibleForStay(st, room, res.checkIn, res.checkOut, assignment.id) : false;
-    var conflictBars = room ? barsForRoomLocal(st, room.id).filter(function(b){ return b.conflict && ((b.assignment&&b.assignment.id===assignment.id) || false); }) : [];
+    var canCancel = res.status!=='Cancelled' && res.status!=='Completed';
+
+    /* ---- Header: guest name is the strongest label, reservation # secondary ---- */
+    var header = '<div><h3 class="rd-head-guest">' + PG.esc(cust ? cust.name : 'Guest') + '</h3>' +
+      '<div class="rd-head-num">' + res.id + '</div>' +
+      '<div class="rd-head-badges">' + PG.statusBadge(res.status) + PG.payBadge(res.paymentStatus) + '</div></div>' +
+      '<button class="pg-modal-close" onclick="PG.closeModal(\'resDrawer\')" aria-label="Close">' + PG.icon('x',18) + '</button>';
 
     var body = '';
+
+    /* ---- Stay summary card ---- */
+    body += '<div class="opc-drawer-section-title">Stay Summary</div>';
+    body += '<div class="rd-card">' +
+      rdRow('calendar', 'Check-in', PG.fmtDateShort(res.checkIn)) +
+      rdRow('calendar', 'Check-out', PG.fmtDateShort(res.checkOut)) +
+      rdRow('clock', 'Nights', nights) +
+      rdRow('user', 'Guests', guests) +
+      rdRow('door', 'Room Type', PG.esc(rtName(item.roomTypeId))) +
+      (room
+        ? rdRow('door', 'Assigned Room', 'Room ' + PG.esc(room.roomNumber) + ' &middot; Floor ' + room.floor)
+        : rdRow('alert', 'Assigned Room', '<span style="color:var(--pg-danger);">Needs Attention</span>')) +
+      (room && roomAttrChips(room) ? '<div class="rd-irow">' + rdIcon('tag') + '<span class="k">Attributes</span><span class="v rd-attr-chips">' + roomAttrChips(room) + '</span></div>' : '') +
+    '</div>';
+    if (needsAttention) body += '<div class="help-note help-note-danger" style="margin-top:10px;">' + PG.icon('alert',16) + '<div>This room is no longer eligible for these dates (blocked or reassigned elsewhere). Choose a replacement.</div></div>';
+    else if (!room) body += '<div class="help-note help-note-danger" style="margin-top:10px;">' + PG.icon('alert',16) + '<div>Needs Attention — this unit has no physical room. Assign one to resolve this reservation.</div></div>';
+
+    /* ---- Guest section ---- */
     body += '<div class="opc-drawer-section-title">Guest</div>';
-    body += drow('Name', PG.esc(cust.name)) + drow('Phone', PG.esc(cust.phone)) + drow('Email', PG.esc(cust.email));
-    body += '<div class="opc-drawer-section-title">Reservation</div>';
-    body += drow('Reservation #', '<a href="reservation-detail.html?id='+res.id+'">'+res.id+'</a>') +
-      drow('Status', PG.statusBadge(res.status)) + drow('Payment', PG.payBadge(res.paymentStatus)) +
-      drow('Arrival', PG.fmtDate(res.checkIn)) + drow('Departure', PG.fmtDate(res.checkOut)) +
-      drow('Nights', nights) + drow('Guests', guests);
-    body += '<div class="opc-drawer-section-title">Room</div>';
-    body += drow('Room Type', PG.esc(rtName(item.roomTypeId)));
-    if (room){
-      body += drow('Assigned Room', 'Room ' + PG.esc(room.roomNumber) + ' &middot; Floor ' + room.floor);
-      if (needsAttention) body += '<div class="help-note help-note-danger" style="margin-top:8px;">&#9888; This room is no longer eligible for these dates (blocked or reassigned elsewhere). Choose a replacement.</div>';
-    } else {
-      body += '<div class="help-note help-note-danger" style="margin-top:8px;">&#9888; Needs Attention — this unit has no physical room. Assign one to resolve this reservation.</div>';
-    }
+    body += '<div class="rd-card">' +
+      rdRow('user', 'Name', PG.esc(cust ? cust.name : '—')) +
+      rdRow('card', 'Phone', PG.esc(cust && cust.phone ? cust.phone : '—')) +
+      rdRow('note', 'Email', PG.esc(cust && cust.email ? cust.email : '—')) +
+      (cust && cust.nationality ? rdRow('info', 'Nationality', PG.esc(cust.nationality)) : '') +
+    '</div>' +
+    (cust ? '<a class="btn btn-light btn-sm" style="margin-top:8px;" href="guest-detail.html?id='+cust.id+'">' + PG.icon('user',15) + ' Open Guest Profile</a>' : '');
+
+    /* ---- Payment section ---- */
     body += '<div class="opc-drawer-section-title">Payment</div>';
-    body += drow('Method', res.paymentMethod||'—') + drow('Total', PG.fmtMoney(total));
-    body += '<div class="opc-drawer-section-title">Notes &amp; Flags</div>';
-    body += drow('Internal Notes', res.notes ? '1 note' : 'None') +
-      drow('Flags', [ ['Failed','Expired','Refund Pending'].indexOf(res.paymentStatus)>-1 ? 'Payment Exception' : null, res.rooms.reduce(function(a,x){return a+x.qty;},0)>1?'Multi-Room':null ].filter(Boolean).join(', ') || 'None');
+    body += '<div class="rd-card">' +
+      '<div class="rd-irow">' + rdIcon('card') + '<span class="k">Status</span><span class="v">' + PG.payBadge(res.paymentStatus) + '</span></div>' +
+      rdRow('money', 'Amount Paid', PG.fmtMoney(amounts.paid)) +
+      rdRow('money', 'Outstanding', PG.fmtMoney(amounts.outstanding)) +
+      rdRow('card', 'Method', PG.esc(res.paymentMethod || '—')) +
+    '</div>';
+    // A payment action only appears when one is actually applicable — never a dead button.
+    if (amounts.outstanding > 0 || res.paymentStatus === 'Failed' || res.paymentStatus === 'Expired'){
+      body += '<a class="btn btn-light btn-sm" style="margin-top:8px;" href="reservation-detail.html?id='+res.id+'">' + PG.icon('card',15) + ' Open Payment</a>';
+    }
+
+    /* ---- Notes and activity ---- */
+    body += '<div class="opc-drawer-section-title">Internal Notes</div>';
+    body += res.notes && res.notes.trim()
+      ? '<div class="rd-card" style="padding:11px 13px;font-size:12.5px;color:var(--pg-gray-700);">' + PG.esc(res.notes) + '</div>'
+      : '<div class="text-sm muted">No internal notes.</div>';
+
+    var roomHistory = res.activity.filter(function(a){ return /room|assign/i.test(a.text); });
+    body += '<div class="opc-drawer-section-title">Room Assignment History</div>';
+    body += roomHistory.length
+      ? '<div class="timeline" style="padding-left:18px;">' + roomHistory.slice().reverse().slice(0,4).map(function(a){
+          return '<div style="padding-bottom:10px;font-size:12.5px;"><div class="muted text-sm">'+PG.fmtDateShort(a.ts.slice(0,10))+' &middot; '+a.ts.slice(11)+'</div><div>'+PG.esc(a.text)+'</div></div>';
+        }).join('') + '</div>'
+      : '<div class="text-sm muted">No room changes recorded.</div>';
+
     body += '<div class="opc-drawer-section-title">Recent Activity</div>';
+    var lastActivity = res.activity.length ? res.activity[res.activity.length-1] : null;
+    body += (lastActivity ? '<div class="text-sm muted" style="margin-bottom:8px;">Last updated ' + PG.fmtDateShort(lastActivity.ts.slice(0,10)) + ' &middot; ' + lastActivity.ts.slice(11) + '</div>' : '');
     body += '<div class="timeline" style="padding-left:18px;">' + res.activity.slice().reverse().slice(0,4).map(function(a){
       return '<div style="padding-bottom:10px;font-size:12.5px;"><div class="muted text-sm">'+PG.fmtDateShort(a.ts.slice(0,10))+' &middot; '+a.ts.slice(11)+'</div><div>'+PG.esc(a.text)+'</div></div>';
     }).join('') + '</div>';
     body += '<div id="opc-inline-cancel"></div>';
 
-    var qa = '<div class="opc-qa-grid">' +
-      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Open Reservation</a>' +
-      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Edit Reservation</a>' +
-      (room && CAN_MANAGE ? '<button class="btn btn-outline btn-sm" id="opc-change-room" style="grid-column:span 2;">Change Room</button>' : '') +
-      (!room && CAN_MANAGE ? '<button class="btn btn-primary btn-sm" id="opc-assign-room" style="grid-column:span 2;">Assign Room</button>' : '') +
-      '<button class="btn btn-outline btn-sm" id="opc-send-confirm">Send Confirmation</button>' +
-      '<a class="btn btn-outline btn-sm" href="reservation-detail.html?id='+res.id+'">Open Payment</a>' +
-      (res.status!=='Cancelled' && res.status!=='Completed' ? '<button class="btn btn-danger-outline btn-sm" id="opc-cancel-res" style="grid-column:span 2;">Cancel Reservation</button>' : '') +
-    '</div>';
+    /* ---- Action hierarchy: primary dominant, secondary neutral, destructive        */
+    /* separated and styled danger, each action carries an icon + label (§3). ---- */
+    var actions = '<div class="rd-actions">';
+    actions += '<a class="btn btn-primary" href="reservation-detail.html?id='+res.id+'">' + PG.icon('edit',16) + ' Edit Reservation</a>';
+    actions += '<div class="rd-secondary-row">';
+    actions += (room && CAN_MANAGE)
+      ? '<button class="btn btn-outline btn-sm" id="opc-change-room">' + PG.icon('door',14) + ' Change Room</button>'
+      : (!room && CAN_MANAGE)
+        ? '<button class="btn btn-primary btn-sm" id="opc-assign-room">' + PG.icon('door',14) + ' Assign Room</button>'
+        : '<span></span>';
+    actions += cust ? '<a class="btn btn-outline btn-sm" href="guest-detail.html?id='+cust.id+'">' + PG.icon('user',14) + ' Open Guest</a>' : '<span></span>';
+    actions += room ? '<a class="btn btn-outline btn-sm" href="physical-rooms.html?room='+room.id+'">' + PG.icon('door',14) + ' View Room</a>' : '<span></span>';
+    actions += '</div>';
+    if (canCancel){
+      actions += '<div class="rd-danger-row"><button class="btn btn-danger-outline btn-sm" id="opc-cancel-res" style="width:100%;justify-content:center;">' + PG.icon('trash',14) + ' Cancel Reservation</button></div>';
+    }
+    actions += '</div>';
 
     resDrawer.innerHTML = '<div class="pg-drawer">' +
-      '<div class="pg-drawer-header"><h3>'+res.id+'</h3><button class="pg-modal-close" onclick="PG.closeModal(\'resDrawer\')">&times;</button></div>' +
+      '<div class="pg-drawer-header">'+header+'</div>' +
       '<div class="pg-drawer-body">'+body+'</div>' +
-      '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;">'+qa+'</div>' +
+      '<div class="pg-drawer-footer" style="flex-direction:column;align-items:stretch;">'+actions+'</div>' +
     '</div>';
 
     var chg = document.getElementById('opc-change-room'); if (chg) chg.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, assignmentId); });
     var assignBtn = document.getElementById('opc-assign-room'); if (assignBtn) assignBtn.addEventListener('click', function(){ PG.closeModal('resDrawer'); openChangeRoomFor(resId, itemId, null); });
-    var sendBtn = document.getElementById('opc-send-confirm'); if (sendBtn) sendBtn.addEventListener('click', function(){
-      PG.toast('Sending confirmations is outside this MVP prototype.', 'warn');
-      // Recorded even though nothing was actually sent — a real communications channel is
-      // out of MVP scope, but the attempt itself is still an auditable action (§ audit
-      // coverage: "communications").
-      PG.addAudit('Communication Attempted', resId + ' — guest confirmation send attempted (no real channel exists in this MVP).', null, { module: 'Communications', recordId: resId });
-    });
     var cancelBtn = document.getElementById('opc-cancel-res');
     if (cancelBtn) cancelBtn.addEventListener('click', function(){ showInlineCancel(res); });
 
     PG.openModal('resDrawer');
+  }
+
+  // Compact attribute chips for the assigned room — view, accessibility features,
+  // connecting rooms — shown only "when available" per §3, never an empty row.
+  function roomAttrChips(room){
+    var bits = [];
+    if (room.view) bits.push(room.view);
+    (room.accessibilityFeatures || []).forEach(function(a){ bits.push(a); });
+    if (!bits.length) return '';
+    return bits.map(function(b){ return '<span class="chip">' + PG.esc(b) + '</span>'; }).join('');
   }
 
   function showInlineCancel(res){

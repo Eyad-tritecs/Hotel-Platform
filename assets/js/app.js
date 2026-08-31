@@ -1597,20 +1597,28 @@
      then setup, then admin. Availability & Inventory stays in this array carrying
      hidden:true so its route, files and logic remain fully intact while every access
      point to it disappears (same mechanism as superAdminOnly, filtered alongside it). */
+  // Hotel Operations is the one section a day-to-day user lives in: the full
+  // reservation-to-payment operational path in one logical order, per §1. Rooms/Rates/
+  // Payments used to be scattered across "Hotel Configuration" and "Payments" —
+  // consolidating them here removes those as duplicate homes for the same pages.
+  // Availability & Inventory stays in this array with hidden:true so its route, page,
+  // and logic remain fully intact — only the nav entry (and every other visible access
+  // point) disappears; see §2 and the "hidden" filter in renderSidebar().
   var NAV = [
     { section: "Hotel Operations", items: [
-      { key: "dashboard", label: "Dashboard", href: "index.html", icon: "grid" },
+      { key: "dashboard", label: "Overview", href: "index.html", icon: "grid" },
+      { key: "reservations", label: "Reservations", href: "reservations.html", icon: "list" },
+      { key: "new-reservation", label: "New Reservation", href: "new-reservation.html", icon: "plus" },
       { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" },
+      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
+      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
+      { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
+      { key: "payments", label: "Payments", href: "payments.html", icon: "card" },
       { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
       { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar", hidden: true }
     ]},
-    { section: "Reservations", items: [
-      { key: "reservations", label: "Reservations", href: "reservations.html", icon: "list" },
-      { key: "new-reservation", label: "New Reservation", href: "new-reservation.html", icon: "plus" },
+    { section: "Guests", items: [
       { key: "guests", label: "Guests", href: "guests.html", icon: "user" }
-    ]},
-    { section: "Payments", items: [
-      { key: "payments", label: "Payments", href: "payments.html", icon: "card" }
     ]},
     { section: "Reports", items: [
       { key: "reservation-reports", label: "Reservation Reports", href: "reservation-reports.html", icon: "chart" },
@@ -1618,9 +1626,6 @@
       { key: "payment-reports", label: "Payment Reports", href: "payment-reports.html", icon: "chart" }
     ]},
     { section: "Hotel Configuration", items: [
-      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
-      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
-      { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
       { key: "taxes", label: "Taxes & Fees", href: "taxes-fees.html", icon: "percent" },
       { key: "policies", label: "Hotel Policies", href: "hotel-policies.html", icon: "shield" },
       { key: "payment-config", label: "Payment Configuration", href: "payment-configuration.html", icon: "settings" }
@@ -2211,6 +2216,90 @@
       },
       getValue: function () { return selected ? selected.id : null; }
     };
+  }
+
+  /* ================================================================ */
+  /* Shared row-action menu (".more-wrap > .more-btn + .more-menu")     */
+  /*                                                                    */
+  /* Every table's kebab menu in the app uses this ONE wiring function  */
+  /* instead of a hand-rolled click-delegate per page. Two things it    */
+  /* fixes that per-page copies kept re-introducing:                    */
+  /*                                                                    */
+  /*  1. Visual drift — every page restyled .more-menu locally instead  */
+  /*     of using the shared component in style.css.                   */
+  /*  2. Clipping — a menu absolutely-positioned inside a container     */
+  /*     with `overflow-x:auto` gets its overflow-y implicitly forced   */
+  /*     to `auto` too (a CSS rule, not a bug in any one page), so a    */
+  /*     short table clips the dropdown and forces an inner scrollbar.  */
+  /*     The fix is a portal: while open, the menu is reparented to     */
+  /*     <body> with `position:fixed`, positioned from the trigger's    */
+  /*     own bounding rect, and restored to its original DOM slot on    */
+  /*     close — so listeners bound to it never need rebinding.         */
+  /* ================================================================ */
+  var MENU_PORTAL_OPEN = null; // { menu, btn, parent, next } — at most one open at a time
+  function closeMoreMenu(restoreFocus) {
+    if (!MENU_PORTAL_OPEN) return;
+    var rec = MENU_PORTAL_OPEN;
+    rec.menu.classList.remove("show");
+    rec.menu.style.position = ""; rec.menu.style.top = ""; rec.menu.style.left = "";
+    rec.menu.style.right = ""; rec.menu.style.bottom = ""; rec.menu.style.minWidth = "";
+    rec.menu.removeAttribute("data-flipped");
+    if (rec.parent) rec.parent.insertBefore(rec.menu, rec.next || null);
+    rec.btn.setAttribute("aria-expanded", "false");
+    MENU_PORTAL_OPEN = null;
+    if (restoreFocus && rec.btn && document.contains(rec.btn)) rec.btn.focus();
+  }
+  function openMoreMenu(btn, menu) {
+    if (MENU_PORTAL_OPEN && MENU_PORTAL_OPEN.menu === menu) { closeMoreMenu(true); return; }
+    closeMoreMenu(false);
+    var parent = menu.parentNode, next = menu.nextSibling;
+    document.body.appendChild(menu);
+    menu.classList.add("show");
+    menu.style.position = "fixed";
+    menu.style.minWidth = Math.max(190, btn.getBoundingClientRect().width) + "px";
+    var r = btn.getBoundingClientRect();
+    var mw = menu.offsetWidth || 210, mh = menu.offsetHeight || 200;
+    var rtl = document.documentElement.dir === "rtl";
+    // End-align under the trigger by default (matches the old `right:0` look);
+    // flip to the opposite side if that would run off the viewport.
+    var alignEnd = !rtl;
+    var left = alignEnd ? r.right - mw : r.left;
+    if (left < 6) left = 6;
+    if (left + mw > window.innerWidth - 6) left = window.innerWidth - mw - 6;
+    var top = r.bottom + 4, flipped = false;
+    if (top + mh > window.innerHeight - 6 && r.top - mh - 4 >= 6) { top = r.top - mh - 4; flipped = true; }
+    menu.style.left = left + "px"; menu.style.top = top + "px";
+    if (flipped) menu.setAttribute("data-flipped", "true");
+    btn.setAttribute("aria-expanded", "true");
+    MENU_PORTAL_OPEN = { menu: menu, btn: btn, parent: parent, next: next };
+    var first = menu.querySelector("a, button:not(:disabled)");
+    if (first) first.focus();
+  }
+  // Attach once globally — every page's menus share this one delegate rather than each
+  // page registering its own document click/keydown/scroll listeners.
+  var MORE_MENU_GLOBAL_WIRED = false;
+  function wireMoreMenus(root) {
+    (root || document).querySelectorAll(".more-btn").forEach(function (btn) {
+      if (btn.dataset.moreWired) return;
+      btn.dataset.moreWired = "1";
+      btn.setAttribute("aria-haspopup", "menu");
+      btn.setAttribute("aria-expanded", "false");
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var wrap = btn.closest(".more-wrap");
+        var menu = wrap ? wrap.querySelector(".more-menu") : null;
+        if (menu) openMoreMenu(btn, menu);
+      });
+    });
+    if (MORE_MENU_GLOBAL_WIRED) return;
+    MORE_MENU_GLOBAL_WIRED = true;
+    document.addEventListener("click", function () { closeMoreMenu(false); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMoreMenu(true); });
+    // A scroll anywhere on the page can leave a fixed-position portal menu visually
+    // detached from the trigger it belongs to — closing is simpler and safer than
+    // tracking every scrollable ancestor to reposition live.
+    window.addEventListener("scroll", function () { closeMoreMenu(false); }, true);
+    window.addEventListener("resize", function () { closeMoreMenu(false); });
   }
 
   function enhanceSelects(root) {
@@ -2953,6 +3042,669 @@
     openModal("pgDeleteGuestModal");
   }
 
+  /* ================================================================ */
+  /* Hotel Assistant — dummy provider behind a replaceable interface    */
+  /*                                                                    */
+  /* AssistantService                                                   */
+  /*   ├── MockAssistantProvider   (wired up now — no network calls,    */
+  /*   │     no API keys, mutates state through the SAME functions      */
+  /*   │     every page's own forms already use)                       */
+  /*   └── RealAssistantProvider   (future — swap ASSISTANT_CONFIG.mode */
+  /*         to "live" and provide a matching .interpret/.validate/     */
+  /*         .execute; the drawer UI below never changes)               */
+  /*                                                                    */
+  /* Every proposed change is a structured Command, never a direct DOM  */
+  /* edit: {type, targetEntity, propertyId, userId, userRole,           */
+  /* requiredPermissions, params, validation, confirmed, result, audit}.*/
+  /* The UI walks Interpret → Clarify → Confirm → Apply and never       */
+  /* mutates state on the first natural-language message alone.        */
+  /* ================================================================ */
+  var ASSISTANT_CONFIG = { assistantEnabled: true, assistantMode: "mock" };
+
+  function buildCommand(type, params) {
+    var st = getState();
+    return {
+      type: type,
+      targetEntity: null,
+      propertyId: (st.hotel && st.hotel.propertyCode) || null,
+      userId: CURRENT_ROLE,
+      userRole: CURRENT_ROLE,
+      requiredPermissions: ASSISTANT_PERMS[type] || [],
+      params: params || {},
+      validation: { ok: null, errors: [] },
+      confirmed: false,
+      result: null,
+      audit: null
+    };
+  }
+  // The same named permissions every page already gates its own actions behind — the
+  // assistant is never a side door around them.
+  var ASSISTANT_PERMS = {
+    createPhysicalRooms: ["manage_physical_rooms"], updatePhysicalRooms: ["manage_physical_rooms"],
+    createRatePlan: ["manage_rates"], updateRatePlan: ["manage_rates"], createPricingPeriod: ["manage_rates"],
+    createReservation: ["assign_rooms"], updateReservation: ["assign_rooms"],
+    createRoomBlock: ["block_rooms"], navigateToPage: [], searchPlatform: []
+  };
+
+  // Pages intentionally hidden from navigation (currently just Availability &
+  // Inventory) never surface as an assistant destination, matching every other
+  // access point that was removed in §2.
+  var ASSISTANT_NAV_MAP = [
+    { rx: /pricing period/i, label: "Rate Plans & Pricing → Pricing Periods", href: "rates.html?tab=periods" },
+    { rx: /rate plan/i, label: "Rate Plans & Pricing → Rate Plans", href: "rates.html?tab=plans" },
+    { rx: /room attribute|bed configuration|accessib|connecting room/i, label: "Physical Rooms → Edit Room", href: "physical-rooms.html" },
+    { rx: /room block|block.*room|out of order|out of service/i, label: "Physical Rooms or Operations Calendar → Add Room Block", href: "physical-rooms.html" },
+    { rx: /operations calendar|room assignment|move.*room|calendar/i, label: "Operations Calendar", href: "operations-calendar.html" },
+    { rx: /guest|customer/i, label: "Guests", href: "guests.html" },
+    { rx: /payment|refund/i, label: "Payments", href: "payments.html" },
+    { rx: /new reservation|book a room|create.*reservation/i, label: "New Reservation", href: "new-reservation.html" },
+    { rx: /reservation/i, label: "Reservations", href: "reservations.html" },
+    { rx: /tax|fee/i, label: "Hotel Configuration → Taxes & Fees", href: "taxes-fees.html" },
+    { rx: /room type/i, label: "Room Types", href: "room-types.html" },
+    { rx: /audit/i, label: "Administration → Audit", href: "audit.html" },
+    { rx: /permission/i, label: "Administration → Permissions", href: "permissions.html" },
+    { rx: /availability|inventory/i, label: "Operations Calendar (availability by physical room)", href: "operations-calendar.html" }
+  ];
+
+  var MONTHS = { jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,
+    aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12 };
+  // "1 July to 30 September" / "10 September to 14 September" — this MVP's dates are
+  // seeded in 2026, so a bare "1 July" resolves to the nearest occurrence at/after TODAY.
+  function parseNaturalDateRange(text) {
+    var rx = /(\d{1,2})\s+([a-zA-Z]+)\s*(?:to|-|–|until)\s*(\d{1,2})\s+([a-zA-Z]+)/i;
+    var m = text.match(rx);
+    if (!m) return null;
+    var mo1 = MONTHS[m[2].toLowerCase()], mo2 = MONTHS[m[4].toLowerCase()];
+    if (!mo1 || !mo2) return null;
+    var year = Number(TODAY.slice(0, 4));
+    function toIso(day, month) {
+      var iso = year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+      if (iso < TODAY) iso = (year + 1) + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+      return iso;
+    }
+    var start = toIso(Number(m[1]), mo1), end = toIso(Number(m[3]), mo2);
+    return end > start ? { start: start, end: end } : null;
+  }
+  function parseRoomNumberRange(text) {
+    var m = text.match(/(\d{2,4})\s*(?:to|-|–|through)\s*(\d{2,4})/);
+    if (!m) return null;
+    var lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+    if (isNaN(lo) || isNaN(hi) || hi < lo || hi - lo > 500) return null;
+    var out = [];
+    for (var n = lo; n <= hi; n++) out.push(String(n));
+    return out;
+  }
+  function findRoomTypeByName(state, text) {
+    var low = text.toLowerCase();
+    return state.roomTypes.find(function (rt) { return low.indexOf(rt.name.toLowerCase()) > -1 || low.indexOf(rt.name.replace(/ Room$/i, "").toLowerCase()) > -1; }) || null;
+  }
+  function findMoneyAmount(text) {
+    var m = text.match(/(\d+(?:\.\d+)?)\s*(usd|dollars?)?/i);
+    return m ? Number(m[1]) : null;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* MockAssistantProvider — interpret / validate / execute             */
+  /* ---------------------------------------------------------------- */
+  var MockAssistantProvider = {
+    /* Step 1 — Understand the request. Returns a structured interpretation:
+       {ok, command, preview:{intent,module,affected,dates,prices,quantity,missing[],impact},
+        clarify:{question, quickChoices:[{label,value}], paramKey} | null, reply}         */
+    interpret: function (text) {
+      var st = getState();
+      var t = (text || "").trim();
+      var low = t.toLowerCase();
+
+      // ---- Navigation / discoverability — answered directly, no command needed. ----
+      if (/^(where|how do i|how can i|open|show me|take me to)\b/i.test(t) || /\bpage\b/i.test(t)) {
+        var nav = ASSISTANT_NAV_MAP.find(function (n) { return n.rx.test(t); });
+        if (nav) {
+          return { ok: true, command: null, preview: null, clarify: null,
+            reply: "You can do that here: <strong>" + esc(nav.label) + "</strong>.",
+            navTarget: nav };
+        }
+      }
+
+      // ---- Room block ----
+      if (/\bblock\b/i.test(low) && /room/i.test(low)) {
+        var range = parseRoomNumberRange(t);
+        var reasonGuess = /maintenance|repair|renovat/i.test(low) ? "Out of Order"
+          : /clean|hold/i.test(low) ? "Management Hold" : null;
+        var cmd = buildCommand("createRoomBlock", { roomNumbers: range, reasonText: t, blockType: reasonGuess });
+        var missing = [];
+        if (!range || !range.length) missing.push("roomNumbers");
+        if (!reasonGuess) missing.push("blockType");
+        return {
+          ok: true, command: cmd,
+          preview: { intent: "Block physical rooms", module: "Physical Rooms",
+            affected: range ? range.length + " room(s): " + range.join(", ") : "(rooms not recognized)",
+            dates: null, prices: null, quantity: range ? range.length : null, missing: missing },
+          clarify: !reasonGuess ? { question: "What type of block should this be?", paramKey: "blockType",
+            quickChoices: [{label:"Out of Order",value:"Out of Order"},{label:"Out of Service",value:"Out of Service"},
+              {label:"Management Hold",value:"Management Hold"},{label:"Other",value:"Other"}] }
+            : (!range ? { question: "Which room numbers should be blocked? (e.g. 203 to 205)", paramKey: "roomNumbers", quickChoices: [] } : null),
+          reply: null
+        };
+      }
+
+      // ---- Physical rooms (bulk create) ----
+      if (/\b(add|create)\b/i.test(low) && /\broom/i.test(low) && !/reservation/i.test(low) && !/block/i.test(low)) {
+        var qtyMatch = t.match(/(\d+)\s+physical\s+rooms?/i);
+        var range2 = parseRoomNumberRange(t);
+        var rt = findRoomTypeByName(st, t);
+        var bldMatch = t.match(/\b(?:in|across|at)\s+(?:the\s+)?([A-Z][A-Za-z0-9 ]{2,30}(?:Building|Wing|Tower))/);
+        var building = bldMatch ? bldMatch[1].trim() : (st.physicalRooms[0] ? st.physicalRooms[0].building : null);
+        var qty = qtyMatch ? Number(qtyMatch[1]) : (range2 ? range2.length : null);
+        var cmd2 = buildCommand("createPhysicalRooms", { roomNumbers: range2, quantity: qty, roomTypeId: rt ? rt.id : null, building: building });
+        var missing2 = [];
+        if (!rt) missing2.push("roomType");
+        if (!building) missing2.push("building");
+        if (!range2 && !qty) missing2.push("quantity");
+        return {
+          ok: true, command: cmd2,
+          preview: { intent: "Create physical rooms", module: "Physical Rooms",
+            affected: range2 ? "Rooms " + range2[0] + "–" + range2[range2.length-1] : (qty ? qty + " new room(s)" : "(quantity not recognized)"),
+            dates: null, prices: null, quantity: qty, missing: missing2 },
+          clarify: !rt ? { question: "Which room type should be assigned?", paramKey: "roomTypeId",
+              quickChoices: st.roomTypes.map(function(x){return {label:x.name, value:x.id};}) }
+            : !building ? { question: "Which building should these rooms belong to?", paramKey: "building",
+                quickChoices: distinctBuildings(st).map(function(b){return {label:b,value:b};}).concat([{label:"Main Building",value:"Main Building"}]) }
+            : null,
+          reply: null
+        };
+      }
+
+      // ---- Rate plan creation ----
+      if (/\b(rate plan|plan)\b/i.test(low) && /(base price|create|breakfast)/i.test(low) && !/pricing period/i.test(low)) {
+        var range3 = parseRoomNumberRange(t);
+        var price3 = findMoneyAmount(t.replace(/\b\d{2,4}\s*(?:to|-|–|through)\s*\d{2,4}\b/, ""));
+        var meal = /breakfast/i.test(low) ? "Breakfast Included" : null;
+        var rt3 = range3 ? roomTypeForNumbers(st, range3) : findRoomTypeByName(st, t);
+        var cmd3 = buildCommand("createRatePlan", { name: meal || "New Rate Plan", mealPlan: meal || "Room Only",
+          roomNumbers: range3, roomTypeId: rt3 ? rt3.id : null, basePrice: price3, currency: "USD" });
+        var missing3 = [];
+        if (!rt3) missing3.push("roomTypeId");
+        if (price3 == null) missing3.push("basePrice");
+        return {
+          ok: true, command: cmd3,
+          preview: { intent: "Create rate plan", module: "Rate Plans & Pricing",
+            affected: range3 ? "Rooms " + range3[0] + "–" + range3[range3.length-1] : (rt3 ? rt3.name : "(room scope not recognized)"),
+            dates: null, prices: price3 != null ? PG_fmtMoneySafe(price3) + " / night" : null, quantity: range3 ? range3.length : null, missing: missing3 },
+          clarify: !rt3 ? { question: "Which room type should this rate plan apply to?", paramKey: "roomTypeId",
+              quickChoices: st.roomTypes.map(function(x){return {label:x.name, value:x.id};}) }
+            : (price3 == null ? { question: "What base price per night should this plan use, and in which currency?", paramKey: "basePrice", quickChoices: [{label:"USD 100",value:"100"},{label:"USD 120",value:"120"},{label:"USD 150",value:"150"}] } : null),
+          reply: null
+        };
+      }
+
+      // ---- Pricing period ----
+      if (/pricing period/i.test(low) || (/season|holiday|vacation/i.test(low) && /price/i.test(low))) {
+        var dr = parseNaturalDateRange(t);
+        var price4 = findMoneyAmount(t);
+        var nameMatch = t.match(/\b(?:the\s+)?([A-Z][a-zA-Z ]{3,30}?)\s+pricing period/i) || t.match(/create a\s+([A-Za-z ]{3,30}?)\s+pricing period/i);
+        var name4 = nameMatch ? nameMatch[1].trim() : (/summer/i.test(low) ? "The Summer Vacation" : null);
+        var cmd4 = buildCommand("createPricingPeriod", { name: name4, startDate: dr?dr.start:null, endDate: dr?dr.end:null, price: price4, ratePlanId: null });
+        var missing4 = [];
+        if (!name4) missing4.push("name");
+        if (!dr) missing4.push("dates");
+        if (price4 == null) missing4.push("price");
+        missing4.push("ratePlanId");
+        return {
+          ok: true, command: cmd4,
+          preview: { intent: "Create pricing period", module: "Rate Plans & Pricing",
+            affected: "(select the rate plan to override)", dates: dr ? PG.fmtDateShort(dr.start)+" – "+PG.fmtDateShort(dr.end) : null,
+            prices: price4 != null ? PG_fmtMoneySafe(price4) + " / night" : null, quantity: null, missing: missing4 },
+          clarify: { question: "Which rate plan should this pricing period override?", paramKey: "ratePlanId",
+            quickChoices: st.ratePlans.slice(0,6).map(function(p){return {label:p.name+" ("+ (st.roomTypes.find(function(r){return r.id===p.roomTypeId;})||{}).name +")", value:p.id};}) },
+          reply: null
+        };
+      }
+
+      // ---- Reservation ----
+      if (/reservation/i.test(low) || /\bbook\b/i.test(low)) {
+        var dr2 = parseNaturalDateRange(t);
+        var adultsMatch = t.match(/(\d+|one|two|three|four)\s+adults?/i);
+        var wordNum = {one:1,two:2,three:3,four:4};
+        var adults = adultsMatch ? (wordNum[adultsMatch[1].toLowerCase()] || parseInt(adultsMatch[1],10)) : null;
+        var cmd5 = buildCommand("createReservation", { checkIn: dr2?dr2.start:null, checkOut: dr2?dr2.end:null, adults: adults, customerId: null, roomTypeId: null, autoAssign: true });
+        var missing5 = [];
+        if (!dr2) missing5.push("dates");
+        missing5.push("customerId");
+        return {
+          ok: true, command: cmd5,
+          preview: { intent: "Create reservation", module: "Reservations",
+            affected: "(select a guest)", dates: dr2 ? PG.fmtDateShort(dr2.start)+" – "+PG.fmtDateShort(dr2.end) : null,
+            prices: null, quantity: adults, missing: missing5 },
+          clarify: { question: "Which guest is this reservation for?", paramKey: "customerId",
+            quickChoices: st.customers.slice(0,5).map(function(c){return {label:c.name, value:c.id};}) },
+          reply: null
+        };
+      }
+
+      return { ok: false, command: null, preview: null, clarify: null,
+        reply: "I can help with: creating physical rooms, rate plans, pricing periods, reservations, and room blocks, or finding a page. Try something like “Block rooms 203 to 205 for maintenance.”" };
+    },
+
+    /* Step 3 (validate before showing the confirmation card) — reuses the SAME engine
+       functions every real form on the page already validates against. */
+    validate: function (command) {
+      var st = getState();
+      var p = command.params, errs = [];
+      if (command.requiredPermissions.some(function (perm) { return !hasPermission(perm); })) {
+        errs.push("You don’t have permission to perform this action.");
+      }
+      if (command.type === "createPhysicalRooms") {
+        if (!p.roomTypeId) errs.push("A room type is required.");
+        if (!p.building) errs.push("A building is required.");
+        var nums = p.roomNumbers || (p.quantity ? autoNumberRange(st, p.roomTypeId, p.quantity) : null);
+        if (!nums || !nums.length) errs.push("At least one room number is required.");
+        else {
+          var dupes = nums.filter(function (n) { return st.physicalRooms.some(function (r) { return r.roomNumber === n; }); });
+          if (dupes.length) errs.push("Room number(s) already exist: " + dupes.join(", "));
+        }
+        command.params.resolvedNumbers = nums;
+      } else if (command.type === "createRatePlan") {
+        if (!p.roomTypeId) errs.push("A room type is required.");
+        if (p.basePrice == null || !(Number(p.basePrice) > 0)) errs.push("A base price greater than 0 is required.");
+        if (p.roomNumbers && p.roomNumbers.length) {
+          var rt = st.roomTypes.find(function(x){return x.id===p.roomTypeId;});
+          var missing = p.roomNumbers.filter(function(n){ return !st.physicalRooms.some(function(r){return r.roomTypeId===p.roomTypeId && r.roomNumber===n;}); });
+          if (missing.length) errs.push("No " + (rt?rt.name:"matching") + " room numbered " + missing.join(", "));
+        }
+      } else if (command.type === "createPricingPeriod") {
+        if (!p.ratePlanId) errs.push("A rate plan is required.");
+        if (!p.name) errs.push("A period name is required.");
+        if (!p.startDate || !p.endDate) errs.push("A valid date range is required.");
+        if (p.price == null || !(Number(p.price) > 0)) errs.push("A price greater than 0 is required.");
+        if (!errs.length) {
+          var plan = ratePlanById(st, p.ratePlanId);
+          var candidate = { startDate: p.startDate, endDate: p.endDate, daysOfWeek: [0,1,2,3,4,5,6], active: true };
+          var overlaps = overlappingPeriods(plan, candidate, null);
+          if (overlaps.length) errs.push("Overlaps existing period “" + overlaps[0].name + "” on this plan.");
+        }
+      } else if (command.type === "createReservation") {
+        if (!p.customerId) errs.push("A guest is required.");
+        if (!p.checkIn || !p.checkOut || p.checkOut <= p.checkIn) errs.push("A valid date range is required.");
+        if (!p.roomTypeId) p.roomTypeId = st.roomTypes[0] ? st.roomTypes[0].id : null;
+        if (!p.roomTypeId) errs.push("No room type available.");
+        else {
+          var avail = validateAvailability(st, p.roomTypeId, p.checkIn, p.checkOut, 1);
+          if (!avail.ok) errs.push("Insufficient inventory for the selected dates.");
+        }
+      } else if (command.type === "createRoomBlock") {
+        if (!p.roomNumbers || !p.roomNumbers.length) errs.push("At least one room number is required.");
+        if (!p.blockType) errs.push("A block type is required.");
+        if (p.roomNumbers) {
+          var notFound = p.roomNumbers.filter(function(n){ return !st.physicalRooms.some(function(r){return r.roomNumber===n;}); });
+          if (notFound.length) errs.push("No room numbered " + notFound.join(", "));
+        }
+      }
+      command.validation = { ok: errs.length === 0, errors: errs };
+      return command.validation;
+    },
+
+    /* Step 4 — apply, through the exact same state-mutating + audit path a real form
+       uses. Mock mode only: no network, no external AI, no bypass of validation. */
+    execute: function (command) {
+      var st = getState();
+      var p = command.params;
+      try {
+        if (command.type === "createPhysicalRooms") {
+          var rt = st.roomTypes.find(function(x){return x.id===p.roomTypeId;});
+          var nums = p.resolvedNumbers || p.roomNumbers;
+          var created = [];
+          nums.forEach(function (num) {
+            var id = "room-" + Date.now() + "-" + num;
+            st.physicalRooms.push({ id: id, propertyId: st.hotel.propertyCode, roomNumber: num, roomTypeId: p.roomTypeId,
+              building: p.building, floor: Math.floor(Number(num) / 100) || 1, bedConfiguration: rt ? rt.bed : "1 Queen Bed",
+              view: "", accessibilityFeatures: [], connectingRoomIds: [], notes: "Created via Hotel Assistant.",
+              isActive: true, isSellable: true, operationalStatus: "Available" });
+            created.push(id);
+          });
+          setState(st);
+          addAudit("Physical Room Created", created.length + " room(s) created via Hotel Assistant: " + nums.join(", ") + " (" + (rt?rt.name:"") + ").", null,
+            { module: "Physical Rooms", recordId: created.join(","), newValue: nums.join(",") });
+          command.result = { ok: true, message: nums.length + " " + (rt?rt.name:"room") + "(s) were added successfully. Rooms " + nums[0] + "–" + nums[nums.length-1] + " are now visible in Physical Rooms.", link: { label: "Open Physical Rooms", href: "physical-rooms.html" } };
+        } else if (command.type === "createRatePlan") {
+          var id2 = "rp-" + Date.now();
+          var scope = p.roomNumbers && p.roomNumbers.length ? "rooms" : "roomType";
+          var physicalRoomIds = [];
+          if (scope === "rooms") {
+            physicalRoomIds = st.physicalRooms.filter(function(r){ return r.roomTypeId===p.roomTypeId && p.roomNumbers.indexOf(r.roomNumber)>-1; }).map(function(r){return r.id;});
+          }
+          st.ratePlans.push({ id: id2, propertyId: st.hotel.propertyCode, roomTypeId: p.roomTypeId, scope: scope, physicalRoomIds: physicalRoomIds,
+            name: p.name, code: null, mealPlan: p.mealPlan || "Room Only", description: "Created via Hotel Assistant.",
+            basePrice: Number(p.basePrice), currency: p.currency || "USD", active: true, isDefault: false, periods: [],
+            createdAt: nowIso(), updatedAt: nowIso() });
+          setState(st);
+          addAudit("Rate Plan Created", p.name + " created via Hotel Assistant, base " + PG_fmtMoneySafe(p.basePrice) + "/night.", null,
+            { module: "Rate Plans & Pricing", recordId: id2, newValue: p.name });
+          command.result = { ok: true, message: "“" + p.name + "” was created at " + PG_fmtMoneySafe(p.basePrice) + " / night.", link: { label: "Open Rate Plans & Pricing", href: "rates.html?plan=" + id2 } };
+        } else if (command.type === "createPricingPeriod") {
+          var plan2 = ratePlanById(st, p.ratePlanId);
+          var pid = "pp-" + Date.now();
+          plan2.periods = plan2.periods || [];
+          plan2.periods.push({ id: pid, name: p.name, startDate: p.startDate, endDate: p.endDate, daysOfWeek: [0,1,2,3,4,5,6],
+            mode: "same", prices: { same: Number(p.price) }, active: true, createdAt: nowIso(), updatedAt: nowIso() });
+          plan2.updatedAt = nowIso();
+          setState(st);
+          addAudit("Pricing Period Created", "“" + p.name + "” created on " + plan2.name + " via Hotel Assistant, " + PG_fmtMoneySafe(p.price) + "/night.", null,
+            { module: "Rate Plans & Pricing", recordId: pid, newValue: p.name });
+          command.result = { ok: true, message: "“" + p.name + "” was added to " + plan2.name + ".", link: { label: "Open Rate Plans & Pricing", href: "rates.html?plan=" + plan2.id + "&period=" + pid } };
+        } else if (command.type === "createReservation") {
+          var cust = st.customers.find(function(c){return c.id===p.customerId;});
+          var rtRes = st.roomTypes.find(function(x){return x.id===p.roomTypeId;});
+          var resId = "RES-" + st.nextResId; st.nextResId += 1;
+          var assign = autoAssignRoomsForItem(st, { roomTypeId: p.roomTypeId, checkIn: p.checkIn, checkOut: p.checkOut, qty: 1,
+            requireAccessibility: [], bedConfiguration: null, requireConnecting: false, keepRoomIds: [], excludeRoomIds: [] });
+          if (assign.shortfall > 0) { command.result = { ok: false, message: "No eligible room could be assigned for these dates." }; return command.result; }
+          var occ = { adults: rtRes.maxAdults, children: 0 };
+          var room = { id: resId + "-itm-1", roomTypeId: p.roomTypeId, qty: 1, adults: p.adults || occ.adults, children: 0,
+            ratePlanId: (defaultRatePlanFor(st, p.roomTypeId)||{}).id || null };
+          snapshotRoomItemPricing(st, room, p.checkIn, p.checkOut);
+          var roomCharges = roomItemCharge(st, { checkIn: p.checkIn, checkOut: p.checkOut }, room);
+          var pricing = computePricing(st, roomCharges, p.checkIn);
+          var reservation = { id: resId, customerId: p.customerId, source: "Admin / Direct Manual", createdAt: nowIso(),
+            checkIn: p.checkIn, checkOut: p.checkOut, status: "Confirmed", paymentStatus: "Pay on Arrival", paymentMethod: "Pay on Arrival",
+            rooms: [room], taxAmount: pricing.taxAmount, feeAmount: pricing.feeAmount, notes: "Created via Hotel Assistant.",
+            activity: [{ ts: nowIso(), text: "Reservation created via Hotel Assistant." }] };
+          st.reservations.push(reservation);
+          assign.assignedRoomIds.forEach(function (roomId) {
+            st.roomAssignments.push({ id: "asn-" + Date.now() + "-" + roomId, propertyId: st.hotel.propertyCode, reservationId: resId,
+              reservationItemId: room.id, physicalRoomId: roomId, arrivalDate: p.checkIn, departureDate: p.checkOut,
+              assignmentStatus: "Assigned", assignedAt: nowIso(), assignedBy: "Hotel Assistant", changeReason: "" });
+          });
+          setState(st);
+          addAudit("Reservation Created", resId + " created via Hotel Assistant for " + (cust?cust.name:"guest") + ".", null,
+            { module: "Reservations", recordId: resId, newValue: p.checkIn + "–" + p.checkOut });
+          command.result = { ok: true, message: resId + " was created for " + (cust?cust.name:"the guest") + ", " + PG.fmtDateShort(p.checkIn) + " – " + PG.fmtDateShort(p.checkOut) + ".", link: { label: "Open Reservation", href: "reservation-detail.html?id=" + resId } };
+        } else if (command.type === "createRoomBlock") {
+          var rooms3 = st.physicalRooms.filter(function(r){ return p.roomNumbers.indexOf(r.roomNumber)>-1; });
+          var created3 = [];
+          rooms3.forEach(function (r) {
+            var bid = "blk-" + Date.now() + "-" + r.roomNumber;
+            st.roomBlocks.push({ id: bid, propertyId: st.hotel.propertyCode, physicalRoomId: r.id, startDate: TODAY, endDate: addDays(TODAY, 3),
+              type: p.blockType, reason: p.reasonText || p.blockType, notes: "Created via Hotel Assistant.", createdAt: nowIso(), createdBy: "Hotel Assistant" });
+            created3.push(r.roomNumber);
+          });
+          setState(st);
+          addAudit("Physical Room Blocked", created3.length + " room(s) blocked via Hotel Assistant (" + p.blockType + "): " + created3.join(", ") + ".", null,
+            { module: "Room Blocks", recordId: created3.join(","), newValue: p.blockType });
+          command.result = { ok: true, message: created3.length + " room(s) blocked as " + p.blockType + ": " + created3.join(", ") + ".", link: { label: "Open Physical Rooms", href: "physical-rooms.html" } };
+        } else {
+          command.result = { ok: false, message: "This action isn’t supported yet." };
+        }
+      } catch (e) {
+        command.result = { ok: false, message: "Couldn’t apply the change — " + (e && e.message ? e.message : "please try again.") };
+      }
+      command.audit = { user: CURRENT_ROLE, ts: nowIso(), module: command.type, command: command.type,
+        before: null, after: command.result, result: command.result ? command.result.ok : false, reason: "Confirmed via Hotel Assistant" };
+      return command.result;
+    }
+  };
+
+  function distinctBuildings(state) {
+    var seen = {}, out = [];
+    state.physicalRooms.forEach(function (r) { if (!seen[r.building]) { seen[r.building] = true; out.push(r.building); } });
+    return out;
+  }
+  function roomTypeForNumbers(state, nums) {
+    var r = state.physicalRooms.find(function (x) { return nums.indexOf(x.roomNumber) > -1; });
+    return r ? state.roomTypes.find(function (x) { return x.id === r.roomTypeId; }) : null;
+  }
+  function autoNumberRange(state, roomTypeId, qty) {
+    var existing = state.physicalRooms.filter(function (r) { return r.roomTypeId === roomTypeId; }).map(function (r) { return parseInt(r.roomNumber, 10); });
+    var start = (existing.length ? Math.max.apply(null, existing) : 100) + 1;
+    var out = [];
+    for (var i = 0; i < qty; i++) out.push(String(start + i));
+    return out;
+  }
+  function PG_fmtMoneySafe(v) { return fmtMoney(Number(v) || 0); }
+
+  var AssistantService = {
+    provider: MockAssistantProvider, // swap to a RealAssistantProvider later; UI is unchanged
+    interpret: function (text) { return this.provider.interpret(text); },
+    validate: function (command) { return this.provider.validate(command); },
+    execute: function (command) { return this.provider.execute(command); }
+  };
+
+  /* ================================================================ */
+  /* Hotel Assistant UI — floating button + right-side drawer / mobile  */
+  /* sheet. Mounted once per page via PG.mountHotelAssistant(module).   */
+  /* ================================================================ */
+  function mountHotelAssistant(moduleLabel) {
+    if (!ASSISTANT_CONFIG.assistantEnabled) return;
+    if (document.getElementById("pgAssistantBtn")) return; // idempotent if called twice
+
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.id = "pgAssistantBtn"; btn.className = "pg-assistant-fab";
+    btn.setAttribute("aria-label", "Ask Hotel Assistant");
+    btn.innerHTML = ICONS.spark + '<span class="pg-assistant-fab-label">Ask Hotel Assistant</span>';
+    document.body.appendChild(btn);
+
+    var overlay = document.createElement("div");
+    overlay.className = "pg-drawer-overlay"; overlay.id = "pgAssistantDrawer";
+    document.body.appendChild(overlay);
+
+    var convo = []; // {role:'user'|'assistant', html}
+    var pendingCommand = null, pendingClarify = null, pendingPreview = null;
+    var loading = false, errorMsg = null;
+
+    function push(role, html) { convo.push({ role: role, html: html }); }
+    function clearConvo() { convo = []; pendingCommand = null; pendingClarify = null; pendingPreview = null; errorMsg = null; render(); }
+
+    function bubble(entry) {
+      return '<div class="pg-asst-msg ' + entry.role + '">' + entry.html + '</div>';
+    }
+    function previewCard(preview) {
+      var rows = [
+        ["Intent", esc(preview.intent)], ["Module", esc(preview.module)], ["Affected", preview.affected || "—"],
+        ["Dates", preview.dates || "—"], ["Price", preview.prices || "—"], ["Quantity", preview.quantity != null ? preview.quantity : "—"]
+      ];
+      return '<div class="pg-asst-card"><div class="pg-asst-card-title">' + icon("info",14) + ' Understood request</div>' +
+        rows.map(function (r) { return '<div class="pg-asst-card-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join("") +
+        (preview.missing && preview.missing.length ? '<div class="pg-asst-card-missing">' + icon("alert",13) + ' Missing: ' + preview.missing.join(", ") + '</div>' : '') +
+      '</div>';
+    }
+    // Friendly field labels + id-to-name resolution so the confirmation card reads
+    // "Room Type: Deluxe Room" rather than "roomTypeId: dlx".
+    var ASST_PARAM_LABELS = { roomNumbers:"Room Numbers", quantity:"Quantity", roomTypeId:"Room Type", building:"Building",
+      name:"Name", mealPlan:"Meal Plan", basePrice:"Base Price", currency:"Currency", startDate:"Start Date", endDate:"End Date",
+      price:"Price", ratePlanId:"Rate Plan", checkIn:"Check-in", checkOut:"Check-out", adults:"Adults", customerId:"Guest",
+      autoAssign:"Auto-Assign Room", blockType:"Block Type", reasonText:"Reason" };
+    function friendlyParamValue(state, key, value) {
+      if (key === "roomTypeId") { var rt = state.roomTypes.find(function (x) { return x.id === value; }); return rt ? rt.name : value; }
+      if (key === "ratePlanId") { var p = ratePlanById(state, value); return p ? p.name : value; }
+      if (key === "customerId") { var c = state.customers.find(function (x) { return x.id === value; }); return c ? c.name : value; }
+      if (key === "roomNumbers" && Array.isArray(value)) return value.join(", ");
+      if (key === "basePrice" || key === "price") return fmtMoney(Number(value));
+      if (key === "checkIn" || key === "checkOut" || key === "startDate" || key === "endDate") return fmtDateShort(value);
+      return String(value);
+    }
+    function confirmCard(command) {
+      var v = command.validation, st2 = getState();
+      var rows = Object.keys(command.params).filter(function(k){return command.params[k]!=null && k!=='resolvedNumbers';}).map(function (k) {
+        return '<div class="pg-asst-card-row"><span>' + esc(ASST_PARAM_LABELS[k] || k) + '</span><span>' + esc(friendlyParamValue(st2, k, command.params[k])) + '</span></div>';
+      }).join("");
+      return '<div class="pg-asst-card">' +
+        '<div class="pg-asst-card-title">' + icon("check",14) + ' Confirm this change</div>' + rows +
+        (v.errors.length ? '<div class="pg-asst-card-missing">' + v.errors.map(esc).join("<br>") + '</div>' : '') +
+        '<div class="pg-asst-card-actions">' +
+          '<button class="btn btn-primary btn-sm" id="asstConfirm"' + (!v.ok ? ' disabled' : '') + '>' + icon("check",14) + ' Confirm and Apply</button>' +
+          '<button class="btn btn-light btn-sm" id="asstEdit">Edit Request</button>' +
+          '<button class="btn btn-light btn-sm" id="asstCancel">Cancel</button>' +
+        '</div></div>';
+    }
+
+    function render() {
+      var d = overlay;
+      d.innerHTML = '<div class="pg-drawer pg-assistant-drawer">' +
+        '<div class="pg-drawer-header"><div><h3>' + icon("spark",16) + ' Hotel Assistant</h3>' +
+          '<div class="muted text-sm">' + esc(moduleLabel) + ' · dummy mode</div></div>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button class="btn-icon" id="asstClear" title="Clear conversation" aria-label="Clear conversation">' + icon("refresh",16) + '</button>' +
+            '<button class="pg-modal-close" onclick="PG.closeModal(\'pgAssistantDrawer\')" aria-label="Close">' + icon("x",18) + '</button>' +
+          '</div></div>' +
+        '<div class="pg-drawer-body pg-asst-convo" id="asstConvo">' +
+          (convo.length ? convo.map(bubble).join("") : '<div class="pg-asst-empty">' + icon("spark",22) +
+            '<div>Ask me to create rooms, rate plans, pricing periods, reservations, or room blocks — or ask where to find something.</div></div>') +
+          (loading ? '<div class="pg-asst-msg assistant"><span class="pg-asst-typing"><span></span><span></span><span></span></span></div>' : '') +
+          (errorMsg ? '<div class="help-note help-note-danger">' + icon("alert",16) + '<div>' + esc(errorMsg) + '</div></div>' : '') +
+        '</div>' +
+        '<div class="pg-drawer-footer pg-asst-footer">' +
+          (pendingClarify && pendingClarify.quickChoices && pendingClarify.quickChoices.length ?
+            '<div class="pg-asst-chips">' + pendingClarify.quickChoices.map(function (c) {
+              return '<button type="button" class="pg-chip" data-quick="' + esc(String(c.value)) + '">' + esc(c.label) + '</button>';
+            }).join("") + '</div>' : '') +
+          '<div class="pg-asst-inputrow">' +
+            '<button class="btn-icon bordered" id="asstVoice" aria-label="Voice input (not available in this prototype)" title="Voice input — not available in this prototype" disabled>' + icon("note",16) + '</button>' +
+            '<input class="form-control" id="asstInput" type="text" placeholder="' + (pendingClarify ? esc(pendingClarify.question) : "Ask the Hotel Assistant…") + '" aria-label="Message">' +
+            '<button class="btn btn-primary btn-icon" id="asstSend" aria-label="Send">' + icon("plus",16) + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+      var convoBox = document.getElementById("asstConvo");
+      convoBox.scrollTop = convoBox.scrollHeight;
+
+      document.getElementById("asstClear").addEventListener("click", clearConvo);
+      document.getElementById("asstSend").addEventListener("click", onSend);
+      document.getElementById("asstInput").addEventListener("keydown", function (e) { if (e.key === "Enter") onSend(); });
+      d.querySelectorAll("[data-quick]").forEach(function (b) {
+        b.addEventListener("click", function () { onQuickChoice(b.dataset.quick); });
+      });
+      var confirmBtn = document.getElementById("asstConfirm");
+      if (confirmBtn) confirmBtn.addEventListener("click", onConfirmApply);
+      var editBtn = document.getElementById("asstEdit");
+      if (editBtn) editBtn.addEventListener("click", function () { pendingCommand = null; pendingPreview = null; push("assistant", "No problem — tell me what to change."); render(); });
+      var cancelBtn = document.getElementById("asstCancel");
+      if (cancelBtn) cancelBtn.addEventListener("click", function () { pendingCommand = null; pendingClarify = null; pendingPreview = null; push("assistant", "Cancelled — nothing was changed."); render(); });
+    }
+
+    function onQuickChoice(value) {
+      if (!pendingClarify || !pendingCommand) return;
+      var choice = (pendingClarify.quickChoices || []).find(function (c) { return String(c.value) === value; });
+      pendingCommand.params[pendingClarify.paramKey] = value;
+      push("user", esc(choice ? choice.label : value));
+      pendingClarify = null;
+      afterAnswer();
+    }
+
+    function afterAnswer() {
+      // Re-derive missing[] against the now-updated params and either ask the next
+      // question or move to the confirmation card — never applies on the first message.
+      var cmd = pendingCommand;
+      var stillMissing = [];
+      if (cmd.type === "createPhysicalRooms") {
+        if (!cmd.params.roomTypeId) stillMissing.push({ q: "Which room type should be assigned?", key: "roomTypeId",
+          choices: PG.getState().roomTypes.map(function (x) { return { label: x.name, value: x.id }; }) });
+        else if (!cmd.params.building) stillMissing.push({ q: "Which building should these rooms belong to?", key: "building",
+          choices: distinctBuildings(PG.getState()).map(function (b) { return { label: b, value: b }; }) });
+      } else if (cmd.type === "createRatePlan") {
+        if (!cmd.params.roomTypeId) stillMissing.push({ q: "Which room type should this rate plan apply to?", key: "roomTypeId",
+          choices: PG.getState().roomTypes.map(function (x) { return { label: x.name, value: x.id }; }) });
+        else if (cmd.params.basePrice == null) stillMissing.push({ q: "What base price per night (USD)?", key: "basePrice",
+          choices: [{label:"100",value:"100"},{label:"120",value:"120"},{label:"150",value:"150"}] });
+      } else if (cmd.type === "createPricingPeriod" && !cmd.params.ratePlanId) {
+        stillMissing.push({ q: "Which rate plan should this pricing period override?", key: "ratePlanId",
+          choices: PG.getState().ratePlans.slice(0,6).map(function (p) { return { label: p.name, value: p.id }; }) });
+      } else if (cmd.type === "createReservation" && !cmd.params.customerId) {
+        stillMissing.push({ q: "Which guest is this reservation for?", key: "customerId",
+          choices: PG.getState().customers.slice(0,5).map(function (c) { return { label: c.name, value: c.id }; }) });
+      } else if (cmd.type === "createRoomBlock" && !cmd.params.blockType) {
+        stillMissing.push({ q: "What type of block should this be?", key: "blockType",
+          choices: [{label:"Out of Order",value:"Out of Order"},{label:"Out of Service",value:"Out of Service"},{label:"Management Hold",value:"Management Hold"},{label:"Other",value:"Other"}] });
+      }
+      if (stillMissing.length) {
+        var next = stillMissing[0];
+        pendingClarify = { question: next.q, paramKey: next.key, quickChoices: next.choices };
+        push("assistant", esc(next.q));
+        render();
+        return;
+      }
+      // Nothing left to ask — validate and show the confirmation card.
+      var v = AssistantService.validate(cmd);
+      push("assistant", confirmCard(cmd));
+      render();
+    }
+
+    function onConfirmApply() {
+      if (!pendingCommand || !pendingCommand.validation.ok) return;
+      loading = true; render();
+      setTimeout(function () {
+        var cmd = pendingCommand;
+        cmd.confirmed = true;
+        var result = AssistantService.execute(cmd);
+        loading = false;
+        pendingCommand = null; pendingClarify = null; pendingPreview = null;
+        if (result && result.ok) {
+          push("assistant", '<div class="help-note help-note-success">' + icon("check",16) + '<div>' + esc(result.message) +
+            (result.link ? ' <a href="' + result.link.href + '">' + esc(result.link.label) + '</a>' : '') + '</div></div>');
+          // "Update the visible screen when the current mock architecture supports it"
+          // (§7 step 4) — each host page that mounts the assistant assigns its own
+          // table/summary re-render function to this global hook, if it has one.
+          if (typeof window.pgAssistantRefresh === "function") { try { window.pgAssistantRefresh(); } catch (e) {} }
+        } else {
+          errorMsg = (result && result.message) || "Something went wrong applying this change.";
+          push("assistant", '<div class="help-note help-note-danger">' + icon("alert",16) + '<div>' + esc(errorMsg) + '</div></div>');
+        }
+        render();
+      }, 550);
+    }
+
+    function onSend() {
+      var input = document.getElementById("asstInput");
+      var text = input.value.trim();
+      if (!text) return;
+      push("user", esc(text));
+      input.value = "";
+
+      if (pendingClarify) {
+        pendingCommand.params[pendingClarify.paramKey] = text;
+        pendingClarify = null;
+        afterAnswer();
+        return;
+      }
+
+      loading = true; errorMsg = null; render();
+      setTimeout(function () {
+        var out = AssistantService.interpret(text);
+        loading = false;
+        if (out.navTarget) {
+          push("assistant", out.reply + ' <a href="' + out.navTarget.href + '" id="asstNavLink">Open ' + esc(out.navTarget.label.split("→").pop().trim()) + '</a>');
+          render();
+          return;
+        }
+        if (!out.ok || !out.command) {
+          push("assistant", esc(out.reply || "I didn’t understand that."));
+          render();
+          return;
+        }
+        pendingCommand = out.command; pendingPreview = out.preview; pendingClarify = out.clarify;
+        push("assistant", previewCard(out.preview));
+        if (out.clarify) {
+          pendingClarify = out.clarify;
+          push("assistant", esc(out.clarify.question));
+          render();
+        } else {
+          afterAnswer();
+        }
+      }, 450);
+    }
+
+    btn.addEventListener("click", function () { render(); openModal("pgAssistantDrawer"); });
+
+    // Never let the assistant cover a drawer/modal's own primary action — while any
+    // other drawer or modal is open, shrink the FAB to icon-only rather than hide it
+    // outright, so it stays reachable but out of the way (§7).
+    function syncFabForOverlays() {
+      var anyOtherOpen = Array.prototype.some.call(document.querySelectorAll(".pg-drawer-overlay.show, .pg-modal-overlay.show"),
+        function (el) { return el.id !== "pgAssistantDrawer"; });
+      btn.classList.toggle("compact", anyOtherOpen);
+    }
+    new MutationObserver(syncFabForOverlays).observe(document.body, { attributes: true, attributeFilter: ["class"], subtree: true });
+  }
+
   /* ---------------------------------------------------------------- */
   /* Public API                                                         */
   /* ---------------------------------------------------------------- */
@@ -3046,6 +3798,11 @@
     openModal: openModal,
     closeModal: closeModal,
     enhanceSelects: enhanceSelects,
+    ASSISTANT_CONFIG: ASSISTANT_CONFIG,
+    AssistantService: AssistantService,
+    mountHotelAssistant: mountHotelAssistant,
+    wireMoreMenus: wireMoreMenus,
+    closeMoreMenu: closeMoreMenu,
     renderManagedSelect: renderManagedSelect,
     segmented: segmented,
     wireSegmented: wireSegmented,

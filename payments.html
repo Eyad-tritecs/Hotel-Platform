@@ -32,7 +32,7 @@
 <div id="pg-app"></div>
 <script src="assets/js/app.js"></script>
 <script>
-var page = PG.mount("payments", ["Payments", "Payments"]);
+var page = PG.mount("payments", ["Hotel Operations", "Payments"]);
 var s = PG.getState();
 var CAN_VIEW = PG.hasPermission('view_payments');
 var CAN_MANAGE = PG.hasPermission('view_payments'); // generate/resend link is part of viewing+working a payment, not a separate permission in this MVP

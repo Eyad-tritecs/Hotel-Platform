@@ -15,7 +15,7 @@
 var params = new URLSearchParams(location.search);
 var id = params.get('id');
 var readOnly = params.get('mode') === 'view';
-var page = PG.mount("room-types", ["Hotel Configuration", "Room Types", id ? (readOnly ? "View Room Type" : "Edit Room Type") : "Add Room Type"]);
+var page = PG.mount("room-types", ["Hotel Operations", "Room Types", id ? (readOnly ? "View Room Type" : "Edit Room Type") : "Add Room Type"]);
 var s = PG.getState();
 var rt = id ? s.roomTypes.find(function(r){return r.id===id;}) : null;
 

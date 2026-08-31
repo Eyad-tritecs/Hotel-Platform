@@ -209,40 +209,41 @@ function init() {
         '<td>' + activeStateHtml(r) + '</td>' +
         '<td><div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;">' +
           '<button class="btn btn-outline btn-sm view-btn" data-id="' + r.id + '">View</button>' +
-          '<div class="more-wrap"><button class="more-btn" data-id="' + r.id + '" aria-label="Actions for room ' + r.roomNumber + '" aria-haspopup="menu">' + PG.icon('dots', 16) + '</button>' +
-            '<div class="more-menu" data-menu-for="' + r.id + '">' +
-              '<a href="new-reservation.html?rt=' + r.roomTypeId + '&room=' + r.id + '&date=' + PG.TODAY + '">Create Reservation</a>' +
-              (CAN_MANAGE ? '<button class="edit-action" data-id="' + r.id + '">Edit</button>' : '') +
-              (CAN_BLOCK ? '<button class="block-action" data-id="' + r.id + '">Block Room</button>' : '') +
-              (CAN_VIEW_CALENDAR ? '<a href="operations-calendar.html?room=' + r.id + '">View in Operations Calendar</a>' : '') +
-              (CAN_MANAGE ? '<button class="toggle-active-action" data-id="' + r.id + '">' + (r.isActive ? 'Deactivate' : 'Activate') + '</button>' : '') +
+          '<div class="more-wrap"><button class="more-btn" data-id="' + r.id + '" aria-label="Actions for room ' + PG.esc(r.roomNumber) + '" aria-haspopup="menu" title="More actions">' + PG.icon('dots', 16) + '</button>' +
+            '<div class="more-menu" data-menu-for="' + r.id + '" role="menu">' +
+              (CAN_MANAGE ? '<button class="edit-action" data-id="' + r.id + '">' + PG.icon('edit', 15) + ' Edit Room</button>' : '') +
+              '<a href="new-reservation.html?rt=' + r.roomTypeId + '&room=' + r.id + '&date=' + PG.TODAY + '">' + PG.icon('plus', 15) + ' Create Reservation</a>' +
+              (CAN_BLOCK ? '<button class="block-action" data-id="' + r.id + '">' + PG.icon('lockClosed', 15) + ' Add Room Block</button>' : '') +
+              '<div class="menu-sep"></div>' +
+              (CAN_VIEW_CALENDAR ? '<a href="operations-calendar.html?room=' + r.id + '">' + PG.icon('calendar', 15) + ' View Calendar</a>' : '') +
+              '<button class="view-detail-action" data-id="' + r.id + '">' + PG.icon('info', 15) + ' View Room Details</button>' +
+              (CAN_MANAGE ? '<div class="menu-sep"></div><button class="toggle-active-action' + (r.isActive ? ' danger' : '') + '" data-id="' + r.id + '">' +
+                PG.icon(r.isActive ? 'ban' : 'check', 15) + ' ' + (r.isActive ? 'Deactivate Room' : 'Activate Room') + '</button>' : '') +
             '</div>' +
           '</div>' +
         '</div></td>' +
       '</tr>';
     }).join('');
+    PG.wireMoreMenus(body);
   }
 
   function renderAll() { renderSummary(); renderTable(); }
+  window.pgAssistantRefresh = renderAll; // lets the Hotel Assistant update this screen after applying a change
 
-  function closeAllMenus() { document.querySelectorAll('.more-menu').forEach(function (m) { m.classList.remove('show'); }); }
-  document.addEventListener('click', closeAllMenus);
-
-  document.getElementById('roomsBody').addEventListener('click', function (e) {
+  // Row menus are wired per-render by PG.wireMoreMenus() (called at the end of
+  // renderTable()) — it owns open/close, outside-click, Escape, and the portal
+  // positioning that keeps the menu from being clipped by the table container.
+  //
+  // This delegate listens on `document`, not `#roomsBody`: while a menu is open its
+  // items live under <body> (PG.openMoreMenu reparents them there), so a listener
+  // scoped to the table would stop seeing clicks on them the moment the portal moves.
+  document.addEventListener('click', function (e) {
     var t;
-    if (t = e.target.closest('.more-btn')) {
-      e.stopPropagation();
-      var id = t.dataset.id;
-      var menu = document.querySelector('.more-menu[data-menu-for="' + id + '"]');
-      var wasOpen = menu.classList.contains('show');
-      closeAllMenus();
-      if (!wasOpen) menu.classList.add('show');
-      return;
-    }
-    if (t = e.target.closest('.view-btn')) { openDetailsDrawer(t.dataset.id); return; }
-    if (t = e.target.closest('.edit-action')) { closeAllMenus(); openRoomDrawer(t.dataset.id); return; }
-    if (t = e.target.closest('.block-action')) { closeAllMenus(); openBlockModal(t.dataset.id); return; }
-    if (t = e.target.closest('.toggle-active-action')) { closeAllMenus(); toggleActive(t.dataset.id); return; }
+    if (t = e.target.closest('#roomsBody .view-btn')) { openDetailsDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.view-detail-action')) { PG.closeMoreMenu(false); openDetailsDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.edit-action')) { PG.closeMoreMenu(false); openRoomDrawer(t.dataset.id); return; }
+    if (t = e.target.closest('.block-action')) { PG.closeMoreMenu(false); openBlockModal(t.dataset.id); return; }
+    if (t = e.target.closest('.toggle-active-action')) { PG.closeMoreMenu(false); toggleActive(t.dataset.id); return; }
   });
 
   // ---- Filters ----
@@ -722,6 +723,7 @@ if (!CAN_VIEW) {
     'You don\'t have permission to view Physical Rooms.<br>Contact a Hotel Admin to request access.</div></div></div>';
 } else {
   init();
+  PG.mountHotelAssistant('Physical Rooms');
 }
 </script>
 </body>

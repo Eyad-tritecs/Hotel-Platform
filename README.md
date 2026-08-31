@@ -438,6 +438,16 @@ A from-scratch (not select-wrapping) dropdown for editable string lists — used
 | Link Sent, Important (guest flag) | `.badge-purple` | Info / distinguishing flag |
 | Pay on Arrival, Reserved | `.badge-blue` | Info |
 
+### 6.5 Row-action menu (`PG.wireMoreMenus(root)`)
+
+The `.more-wrap > .more-btn + .more-menu` kebab menu used on every table (Physical Rooms, Rate Plans, Pricing Periods, Guests, Reservation Detail, Guest Detail) is wired by **one shared function**, not a per-page click-delegate — call `PG.wireMoreMenus(container)` after rendering the rows and it binds every `.more-btn` inside it.
+
+**Why this exists:** a menu absolutely-positioned inside a container with `overflow-x:auto` gets its `overflow-y` implicitly forced to `auto` too (a real CSS rule, not a per-page bug), so a short table — e.g. Pricing Periods filtered to one row — clipped its own dropdown and forced an inner scrollbar to reach it. The fix is a **portal**: while open, `PG.openMoreMenu()` reparents the `.more-menu` node to `<body>` with `position:fixed`, positions it from the trigger's own `getBoundingClientRect()`, flips it upward if there isn't room below, clamps it inside the viewport horizontally, and restores it to its original DOM slot (via `insertBefore`, not a clone — so any listeners already bound to its buttons keep working) on close. z-index is `600`, deliberately higher than cards, sticky headers, and **both** the modal and drawer overlays (`100`), because a menu can be triggered from inside a drawer.
+
+**Consequence for click handlers:** because the menu's items live under `<body>` while open, a click-delegate scoped to the table (`#roomsBody.addEventListener('click', …)`) stops seeing clicks on them the moment the portal moves them. Every page delegates menu-item clicks on `document` instead — `closest()` still resolves correctly regardless of where the node currently sits in the tree. Call `PG.closeMoreMenu(false)` at the top of an action handler if you also want the menu to visually close before its own side effect (opening a drawer/modal) takes over.
+
+Escape closes the open menu and returns focus to its trigger; a click anywhere else closes it too; a `window` scroll/resize closes it rather than trying to track every scrollable ancestor and reposition live.
+
 ---
 
 ## 7. Current navigation structure
@@ -445,15 +455,16 @@ A from-scratch (not select-wrapping) dropdown for editable string lists — used
 Defined in the `NAV` array in `app.js`:
 
 ```
-Hotel Management  → Dashboard (index.html), Operations Calendar (operations-calendar.html),
-                     Hotel Profile, Room Types, Physical Rooms (physical-rooms.html),
-                     Rates, [Availability & Inventory — hidden, see below]
-Reservations      → Reservations, New Reservation, Guests (guests.html)
-Payments          → Payments
+Hotel Operations  → Overview (index.html), Reservations, New Reservation, Operations Calendar,
+                     Hotel Profile, Room Types, Rate Plans & Pricing, Payments, Physical Rooms,
+                     [Availability & Inventory — hidden, see below]
+Guests            → Guests (guests.html)
 Reports           → Reservation Reports, Inventory Reports, Payment Reports
-Settings          → Hotel Policies, Taxes & Fees, Payment Configuration
+Hotel Configuration → Taxes & Fees, Hotel Policies, Payment Configuration
 Administration    → Hotels (hotels.html — NOT YET BUILT, super-admin-only), Users, Roles, Permissions, Audit
 ```
+
+**Everything a day-to-day user touches lives in one "Hotel Operations" section**, in the order a booking actually flows (reservation → calendar → room/rate setup → payment), rather than split across "Hotel Configuration"/"Payments"/"Reservations" the way it used to be — that split meant Rate Plans, Hotel Profile and Room Types had a *different* nav home than the operational pages that constantly link into them. Moving them consolidated three former homes into one and left no duplicate entries behind (verify with `grep -c 'href="rates.html"' app.js` style checks if you add a new page here — it should appear in exactly one `NAV` entry). Breadcrumb section labels on the moved pages were updated to `"Hotel Operations"` to match; `CRUMB_LINKS["Hotel Operations"]` already pointed at `index.html`, so no new mapping was needed. `reservations-ar.html` keeps its own hand-written, hardcoded sidebar (it predates `PG.mount`/`NAV` entirely — see §8) and was **not** reordered to match; it remains the one deliberately-unsynced Arabic screen.
 
 **The nav still links to one page that doesn't exist yet:** `hotels.html`. This is intentional — screens get built incrementally, one focused prompt at a time, not all at once. When you build it, just create the file at that exact filename and the nav + breadcrumb linking will work automatically (add the new label to `CRUMB_LINKS` too).
 
@@ -509,6 +520,8 @@ Interaction pattern only loosely modeled on Mews-style hotel operations calendar
 - **Conflict detection is real, not styled-in.** `barsForRoom()` flags any two bars on the same physical room whose `[start,end)` ranges overlap — the seeded `blk-3` vs. `asn-5` conflict on `fam-402` (§4.6, §9) is the one live, out-of-the-box demonstration of the `.opc-bar.conflict` styling (thick red outline + hazard stripes + a warning icon). Every other combination of assignments/blocks is now prevented at write time.
 - **Status/type is never color-only.** Every bar variant pairs a background tint with a distinct `border-style` (solid = confirmed/firm, dashed = tentative/hold, dotted = "Other" block) plus icons and a full-sentence `aria-label`.
 - **Change Room / Assign Room reuse `PG.renderChangeRoomDrawer()`** — this page never reimplements a room picker. Cancel Reservation is an *inline* reveal inside the Reservation drawer (reason + Confirm/Keep), a deliberate scope reduction versus `reservation-detail.html`'s full before/after-inventory modal. "Open/Edit Reservation" and "Open Payment" all link to `reservation-detail.html`. There is no Check In / Check Out action anywhere, and no Unassign Room action anywhere.
+- **The Reservation drawer's action area has a real hierarchy, not five identical buttons.** `.rd-actions`: **Edit Reservation** is the one full-width `.btn-primary` at the top; **Change Room / Open Guest / View Room** sit in a 3-column `.rd-secondary-row` of `.btn-outline`; **Cancel Reservation** is alone below a hairline in `.rd-danger-row`, `.btn-danger-outline`, and only rendered at all when `res.status` isn't already `Cancelled`/`Completed`. The header itself puts the **guest name** in an `<h3 class="rd-head-guest">` (17px) with the reservation number as a muted 12px line underneath, not the other way around — `openReservationDrawer()` in `operations-calendar.html`. The Stay Summary / Guest / Payment sections are compact icon rows (`.rd-irow`, `rdRow(icon, label, value)`), and a Payment action link (`Open Payment`) is only shown `if (amounts.outstanding > 0 || res.paymentStatus === 'Failed' || res.paymentStatus === 'Expired')` — never rendered as a dead button with nothing to do.
+- **There is no "Send Confirmation" button anywhere in this app.** It used to exist as a stub in this drawer (toast-only, logged a `"Communication Attempted"` audit entry, no real channel). It was removed outright — not replaced with another non-working button — because a permanently-fake action is worse than no action; `PG.addAudit`'s `Communication Attempted` action string and the general `activity[]`/`audit[]` records it used to write are untouched (nothing was deleted from the data model), there's just no UI path that writes a new one anymore. Don't reintroduce it without an explicit instruction to.
 - **Editing a Room Block here can't be saved into a conflict either** — its conflict box lists every affected reservation with its own inline **Change Room** button, exactly like `PG.renderBlockRoomModal()` (see below).
 - **Clicking an empty cell (no drag) never fires for `!CAN_MANAGE`**, and only navigates to `new-reservation.html?rt=&room=&date=` — it never creates a reservation directly from the calendar.
 - **Save failures are handled with real `try/catch`** around every `PG.setState()` call, not a scripted/random failure generator.
@@ -571,6 +584,39 @@ Interaction pattern only loosely modeled on Mews-style hotel operations calendar
 - **"Unassigned Reservations" is a diagnostic report, not a UI concept.** It lists any active reservation item with fewer physical-room assignments than its quantity — the same self-heal condition Reservation Detail already flags as "Needs Attention" (§4.7) — and its own copy states plainly this should always be empty in normal operation. It is **not** a lane, filter, or status anywhere else, and must never be treated as license to reintroduce one (§4.7, §9).
 - **Every report's filters include a disabled single-option Property selector** (this pilot has one property, no switcher — same convention as the header's property pill) and a date range where relevant; no report has an amount-range filter, since that capability doesn't exist anywhere else in the app and wasn't invented here either.
 - **Saved Views on the Dashboard are just links with query params**, not a new saved-view feature: `reservation-reports.html?report=arrivals&from=&to=`, `?report=departures&from=&to=`, `?report=unassigned`, `payments.html?status=Issues` (a new pseudo-status meaning Failed ∪ Expired ∪ Refund Pending, handled in `filteredRows()` alongside the existing "Payment Required" ∪ "Link Sent" grouping), and `inventory-reports.html?report=blocked&from=&to=`. Every report page reads `?report=`/`?from=`/`?to=`/`?status=` on load and calls the same `selectReport()`/`render()` a card click would. Custom user-created saved views were deliberately not built (see §11) — the five predefined ones above are what was asked for.
+
+### 8.8 Rate plan room-targeting picker — scalable "Specific Rooms" selection
+
+`rates.html`'s Rate Plan editor drawer's "Target scope" section, when set to **Specific Physical Rooms**, does not render a checkbox for every room in the property — that stops scaling well before a real 300-room hotel. Inside the drawer, `renderScopeRoomsBody()` owns its own re-render (a `#peScopeRooms` sub-tree, not the whole drawer) so typing in the search/range inputs never loses focus:
+
+- **Scope filters** (Building, Floor, Operational Status, Sellable) + a **search box** narrow `scopeFilteredRooms()`.
+- **Bulk selection**: "Select all filtered", "Select all in [Building]", "Select all Floor [N]", "Select all [Room Type]", and a **room-number range parser** (`parseRoomRanges("101-110, 201-210, 305")`) that reports back exactly which numbers matched, which don't exist, which were inactive/not-sellable, and which were already selected — never a silent partial add.
+- **The visible list is capped at 60 rows with a "Show N more" button** (`scopeUi.visible`) rather than a true virtualized/windowed list — a deliberate, documented simplification given this prototype's ~20-room seed data; the cap is what satisfies "don't render hundreds of rows unnecessarily" without pulling in a virtualization library for a dataset this small. If a future prompt seeds hundreds of physical rooms, revisit this with real windowing.
+- **Selection summary** (`selectionSummaryGroups()`) groups picked rooms by building/floor, collapsing a fully-selected floor to `"Main Building · Floor 1 (all 5)"` and a partial one to a collapsed number range via `PG.summarizeRoomNumbers()`; "Review individual rooms" expands to per-room removable chips.
+- **Validation at save time re-checks live state** (not just the drawer's local draft) — a room selected when the drawer opened that has since been deactivated, marked not-sellable, or reassigned to a different room type is caught and named by number in `savePlan()`'s error list, exactly like every other validation message in this app.
+- A known ordering bug worth remembering if you touch this code: the range-add handler must build its feedback message **after** calling `renderScopeRoomsBody()`, not before — that function fully rebuilds `#peScopeRooms` (including a fresh, empty `#peRangeFeedback`), so setting the feedback text first just gets wiped by the rebuild that follows it.
+
+### 8.9 Hotel Assistant (`PG.AssistantService`, `PG.mountHotelAssistant`) — dummy mode
+
+A floating "Ask Hotel Assistant" button (bottom-right, `.pg-assistant-fab`) + right-side drawer, mounted via **one line** on each host page: `PG.mountHotelAssistant('<Module Label>')`, currently called from `physical-rooms.html`, `rates.html`, `room-types.html`, and `reservations.html` only — it does not appear on any other page. While a real drawer/modal is open elsewhere on the page, a `MutationObserver` watching for `.show` on `.pg-drawer-overlay`/`.pg-modal-overlay` shrinks the FAB to icon-only (`.compact`) so it never competes with that surface's own primary action.
+
+**This is a safe dummy — no network calls, no API keys, nothing bypasses existing validation or permissions.** The architecture is deliberately provider-shaped so a real one can replace it later without touching the drawer UI:
+
+```
+PG.AssistantService
+  .provider → MockAssistantProvider   (the only one wired up)
+              RealAssistantProvider   (future — same .interpret/.validate/.execute shape)
+```
+
+Every proposed change is a structured **Command** (`buildCommand(type, params)` in `app.js`) — `{type, targetEntity, propertyId, userId, userRole, requiredPermissions, params, validation, confirmed, result, audit}` — never a direct DOM edit. `ASSISTANT_PERMS` maps each command type to the same named permission (`manage_physical_rooms`, `manage_rates`, `assign_rooms`, `block_rooms`, …) the page's own form already checks, and `validate()` refuses the command if the current role doesn't hold it. `ASSISTANT_CONFIG = { assistantEnabled: true, assistantMode: "mock" }` is the single switch a future real integration would flip.
+
+**The conversation is a hard state machine, never a one-shot mutation:** `interpret()` (Step 1 — a small regex/keyword parser per command type, `MockAssistantProvider.interpret`) → **Clarify** (Step 2 — if a required param is missing, one focused question with quick-choice chips, re-asked via `afterAnswer()` until nothing is missing) → **Confirm** (Step 3 — `validate()` runs the *same* engine checks the real forms use — `validateAvailability`, `overlappingPeriods`, room active/sellable checks — and the confirmation card's Confirm button stays disabled until `validation.ok`) → **Apply** (Step 4 — `execute()` mutates state through the exact same functions a real save button calls: `autoAssignRoomsForItem`, `snapshotRoomItemPricing`, `addAudit`, etc.) — the first natural-language message alone never applies anything.
+
+Implemented command types: `createPhysicalRooms`, `createRatePlan`, `createPricingPeriod`, `createReservation`, `createRoomBlock`, plus `navigateToPage`/discoverability answers (a static `ASSISTANT_NAV_MAP` of regex → page, which deliberately never resolves to `availability-inventory.html` — asking "where's availability" routes to the Operations Calendar instead, same as every other hidden-page access point in §2). `updatePhysicalRooms`/`updateRatePlan`/`updateReservation`/`searchPlatform` are named in the command-type list for forward-compatibility but have no `interpret()` branch yet — an unrecognized request gets a plain-language fallback listing what the assistant can currently do, never a silent no-op or a crash.
+
+**"Update the visible screen" (§7 step 4) is done via one global hook, not page-coupling:** each host page assigns `window.pgAssistantRefresh = <its own render function>` right after its first render (`renderAll` on Physical Rooms, `render` on Reservations, `renderShell` on Rate Plans & Pricing; Room Types has no live-updating command yet, so it doesn't set one). After a successful `execute()`, the assistant calls `window.pgAssistantRefresh()` if the current page defined it — the shared `app.js` code never imports a page-specific function directly.
+
+**Known, deliberate simplifications:** the voice-record button is present with the required `aria-label` but is inert (`disabled`) — no real audio pipeline exists in this prototype, and a fake "listening" animation was judged more misleading than an honestly-disabled control. The natural-language parser is a small set of regexes tuned to the example requests in the prompt that created it, not a general NLU — phrasings well outside those patterns fall through to the capability-list fallback rather than guessing wrong.
 
 ---
 

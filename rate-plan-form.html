@@ -22,7 +22,7 @@
 var id = new URLSearchParams(location.search).get('id');
 var target = 'rates.html?tab=plans' + (id ? '&plan=' + encodeURIComponent(id) + '&edit=1' : '&new=1');
 
-var page = PG.mount("rates", ["Hotel Configuration", "Rate Plans & Pricing", id ? "Edit Rate Plan" : "Add Rate Plan"]);
+var page = PG.mount("rates", ["Hotel Operations", "Rate Plans & Pricing", id ? "Edit Rate Plan" : "Add Rate Plan"]);
 page.innerHTML =
   '<div class="pg-page-head"><div><h1>Rate Plan</h1>' +
     '<div class="sub">Rate plans are now edited in a drawer on the Rate Plans tab</div></div></div>' +
