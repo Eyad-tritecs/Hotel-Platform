@@ -1009,6 +1009,11 @@ function init(){
   function setSelection(roomId, roomTypeId, lo, hi){
     activeSelection = { roomId: roomId, roomTypeId: roomTypeId, lo: lo, hi: hi };
     renderSelectionOverlay(roomId, roomTypeId, lo, hi, false);
+    // One click (or one drag) is enough to reach the quick-create choice — no second
+    // click on "+ Add" required. The button stays in the selection box as a way back
+    // into the popover if the user dismisses it without cancelling the selection.
+    var addBtn = document.getElementById('opcRangeAddBtn');
+    if (addBtn) openQuickCreatePopover(addBtn);
   }
   function clearSelection(){
     activeSelection = null;
