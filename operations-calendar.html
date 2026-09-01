@@ -11,6 +11,7 @@
   .opc-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;}
   .opc-toolbar-left, .opc-toolbar-right{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
   .opc-toolbar input[type="date"]{width:150px;}
+  .opc-range-label{font-size:13px;font-weight:700;color:var(--pg-gray-900);white-space:nowrap;padding:0 2px;}
   .opc-search{width:230px;}
   .opc-legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:11.5px;color:var(--pg-gray-600);margin-bottom:12px;}
   .opc-legend-item{display:flex;align-items:center;gap:6px;white-space:nowrap;}
@@ -31,49 +32,34 @@
   .opc-group-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);position:sticky;left:0;width:fit-content;min-width:100%;font-size:12.5px;box-sizing:border-box;}
   .opc-collapse-btn{background:none;border:none;cursor:pointer;font-size:11px;color:var(--pg-gray-600);width:16px;flex-shrink:0;}
 
-  .opc-row{display:flex;border-bottom:1px solid var(--pg-gray-200);}
-  .opc-room-info{position:sticky;left:0;z-index:10;width:210px;min-width:210px;background:#fff;border-right:1px solid var(--pg-border);padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;box-sizing:border-box;}
+  .opc-row{display:flex;border-bottom:1px solid var(--pg-gray-200);position:relative;}
+  .opc-room-info{position:sticky;left:0;z-index:10;width:210px;min-width:210px;background:#fff;border-right:1px solid var(--pg-border);padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:3px;box-sizing:border-box;}
   .opc-row:hover .opc-room-info{background:var(--pg-gray-100);}
   .opc-room-num{font-weight:700;font-size:12.8px;color:var(--pg-gray-900);}
   .opc-room-meta{font-size:11px;color:var(--pg-gray-500);}
-  .opc-quickadd{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:1px solid var(--pg-border);background:#fff;color:var(--pg-primary);font-weight:700;cursor:pointer;line-height:1;display:none;}
-  .opc-room-info{position:sticky;}
-  .opc-row{position:relative;}
-  .opc-row:hover .opc-quickadd, .opc-row:focus-within .opc-quickadd{display:block;}
+  /* Compact operational-status dot + label — replaces the old full-width badge pill. */
+  .opc-status{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--pg-gray-700);}
+  .opc-status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--pg-gray-400);}
+  .opc-status-dot.available{background:#0BB463;}
+  .opc-status-dot.reserved{background:var(--pg-primary);}
+  .opc-status-dot.held{background:#c99400;}
+  .opc-status-dot.out-of-order{background:var(--pg-danger);}
+  .opc-status-dot.out-of-service{background:var(--pg-gray-500);}
+  .opc-status-dot.inactive{background:var(--pg-gray-300);}
 
-  /* ---- Availability summary strip (section 7) ---- */
-  .opc-sum-row{position:sticky;top:52px;z-index:19;display:flex;background:#fff;
-    border-bottom:1px solid var(--pg-border);}
-  .opc-sum-corner{position:sticky;inset-inline-start:0;z-index:20;width:210px;min-width:210px;background:#fff;
-    border-right:1px solid var(--pg-border);padding:8px 14px;display:flex;flex-direction:column;justify-content:center;
-    box-sizing:border-box;}
-  .opc-sum-corner .t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--pg-gray-600);}
-  .opc-sum-corner .m{font-size:11px;color:var(--pg-gray-500);margin-top:1px;}
-  .opc-sum-cell{width:90px;min-width:90px;flex-shrink:0;
-    border-right:1px solid var(--pg-gray-200);padding:6px 6px 7px;text-align:center;box-sizing:border-box;}
-  .opc-sum-cell.today{background:rgba(27,132,255,.06);}
-  .opc-sum-occ{font-size:13px;font-weight:700;color:#0BB463;line-height:1.1;}
-  .opc-sum-occ.warm{color:#A56A00;}
-  .opc-sum-occ.hot{color:var(--pg-danger);}
-  .opc-sum-bar{height:3px;border-radius:2px;background:var(--pg-gray-200);margin:4px 8px 5px;overflow:hidden;}
-  .opc-sum-bar span{display:block;height:100%;background:currentColor;color:var(--pg-primary);
-    background:var(--pg-primary);border-radius:2px;}
-  .opc-sum-counts{display:flex;justify-content:center;gap:6px;font-size:10.5px;font-weight:700;}
-  .opc-sum-counts .ok{color:#0BB463;}
-  .opc-sum-counts .res{color:var(--pg-primary);}
-  .opc-sum-counts .blk{color:var(--pg-gray-500);}
-  .opc-sum-flag{margin-top:3px;font-size:9px;font-weight:800;letter-spacing:.04em;border-radius:4px;padding:1px 4px;display:inline-block;}
-  .opc-sum-flag.low{background:var(--pg-warning-light);color:#A56A00;}
-  .opc-sum-flag.full{background:var(--pg-danger-light);color:var(--pg-danger);}
-  .opc-sum-flag.stop{background:var(--pg-danger);color:#fff;}
-
-  .opc-track{position:relative;height:62px;flex-shrink:0;}
+  .opc-track{position:relative;height:56px;flex-shrink:0;}
   .opc-cell{position:absolute;top:0;bottom:0;border-right:1px solid var(--pg-gray-200);cursor:pointer;}
   .opc-cell:hover{background:var(--pg-primary-light);}
   .opc-cell.today{background:rgba(27,132,255,.05);}
   .opc-cell.weekend{background:#fbfbfd;}
+  /* Subtle hover teaser only — the real affordance is the persistent selection's own
+     "+ Add" control rendered once a cell (or range) is actually selected. */
+  .opc-cell:not(.has-selection):hover::after{
+    content:"+ Add";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:10.5px;font-weight:700;color:var(--pg-primary);pointer-events:none;
+  }
 
-  .opc-bar{position:absolute;top:9px;height:44px;border-radius:8px;padding:0 8px;display:flex;align-items:center;gap:6px;
+  .opc-bar{position:absolute;top:9px;height:44px;border-radius:7px;padding:0 8px;display:flex;align-items:center;gap:6px;
     font-size:12px;font-weight:600;overflow:hidden;white-space:nowrap;text-align:left;
     transition:box-shadow .12s,transform .12s;}
   .opc-bar:hover{box-shadow:0 4px 12px rgba(0,0,0,.14);z-index:6;}
@@ -98,8 +84,8 @@
      darken on hover so the target is unmistakable. */
   .opc-handle{position:absolute;top:0;bottom:0;width:11px;display:flex;align-items:center;justify-content:center;
     cursor:col-resize;background:rgba(0,0,0,.07);opacity:.9;transition:background .12s,opacity .12s;z-index:2;}
-  .opc-handle.start{inset-inline-start:0;border-radius:8px 0 0 8px;}
-  .opc-handle.end{inset-inline-end:0;border-radius:0 8px 8px 0;}
+  .opc-handle.start{inset-inline-start:0;border-radius:7px 0 0 7px;}
+  .opc-handle.end{inset-inline-end:0;border-radius:0 7px 7px 0;}
   .opc-handle::before{content:"";width:3px;height:16px;border-radius:2px;
     border-inline-start:1.5px solid currentColor;border-inline-end:1.5px solid currentColor;opacity:.65;}
   .opc-bar:hover .opc-handle{background:rgba(0,0,0,.15);opacity:1;}
@@ -178,18 +164,41 @@
   .opc-group-header{flex-wrap:wrap;row-gap:6px;}
   .opc-group-summary{display:flex;gap:14px;flex-wrap:wrap;margin-left:auto;font-size:11px;color:var(--pg-gray-600);}
   .opc-group-summary b{color:var(--pg-gray-900);font-weight:700;}
-  .opc-manage-avail-btn{margin-left:8px;}
   .opc-row.highlight-flash{animation:opc-row-flash 1.8s ease-out 1;}
   @keyframes opc-row-flash{0%{background:var(--pg-primary-light);}100%{background:transparent;}}
-
-  .opc-block-btn{position:absolute;right:34px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:1px solid var(--pg-border);background:#fff;color:var(--pg-danger);font-weight:700;cursor:pointer;line-height:1;display:none;font-size:12px;}
-  .opc-row:hover .opc-block-btn, .opc-row:focus-within .opc-block-btn{display:block;}
 
   .opc-bar.res, .opc-bar.block{touch-action:none;}
   .opc-bar.drag-source{opacity:.35;}
   .opc-drag-ghost{position:absolute;top:8px;height:36px;border-radius:6px;border:2px dashed var(--pg-primary);background:rgba(27,132,255,.14);z-index:15;pointer-events:none;display:flex;align-items:center;padding:0 8px;font-size:11.5px;font-weight:700;color:var(--pg-primary-dark);overflow:hidden;white-space:nowrap;}
   .opc-drag-ghost.invalid{border-color:var(--pg-danger);background:rgba(248,40,90,.12);color:var(--pg-danger);}
-  .opc-range-select{position:absolute;top:2px;bottom:2px;background:rgba(27,132,255,.14);border:2px dashed var(--pg-primary);border-radius:4px;z-index:14;pointer-events:none;}
+
+  /* ---- Contextual range selection: replaces the old permanently-visible per-row  */
+  /* quickadd (+) and block (🚫) icon buttons. A click or drag on empty cells marks */
+  /* a pending selection — highlighted range, a small tooltip bubble, and a single  */
+  /* "+ Add" control — which the user must explicitly click to choose what to do    */
+  /* with it, via the quick-create popover below. Nothing happens until that click. */
+  .opc-range-select{position:absolute;top:2px;bottom:2px;background:rgba(27,132,255,.12);border:2px solid var(--pg-primary);border-radius:6px;z-index:14;display:flex;align-items:center;justify-content:center;}
+  .opc-range-select.dragging{border-style:dashed;pointer-events:none;}
+  .opc-range-tip{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:var(--pg-gray-900);color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:5px 10px;border-radius:6px;pointer-events:none;box-shadow:0 4px 10px rgba(0,0,0,.18);}
+  .opc-range-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--pg-gray-900);}
+  .opc-range-add{background:var(--pg-primary);color:#fff;border:none;border-radius:20px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(27,132,255,.35);}
+  .opc-range-add:hover{background:var(--pg-primary-dark);}
+
+  .opc-quickcreate-popover{position:fixed;z-index:60;width:270px;background:#fff;border:1px solid var(--pg-border);border-radius:12px;box-shadow:0 12px 32px rgba(17,24,39,.18);padding:8px;}
+  .opc-qc-opt{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:none;border:1.5px solid transparent;border-radius:9px;padding:9px 10px;cursor:pointer;font-family:inherit;}
+  .opc-qc-opt + .opc-qc-opt{margin-top:4px;}
+  .opc-qc-opt > span:last-child{display:flex;flex-direction:column;gap:1px;min-width:0;}
+  .opc-qc-opt .qc-ic{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .opc-qc-opt .qc-label{font-size:13px;font-weight:700;color:var(--pg-gray-900);}
+  .opc-qc-opt .qc-desc{font-size:11.5px;color:var(--pg-gray-500);margin-top:1px;}
+  .opc-qc-opt.new-res .qc-ic{background:var(--pg-primary-light);color:var(--pg-primary);}
+  .opc-qc-opt.new-res:hover{background:var(--pg-primary-light);border-color:var(--pg-primary);}
+  .opc-qc-opt.block-room .qc-ic{background:var(--pg-danger-light);color:var(--pg-danger);}
+  .opc-qc-opt.block-room:hover{background:var(--pg-danger-light);border-color:var(--pg-danger);}
+  .opc-qc-cancel{display:block;width:100%;text-align:center;background:none;border:none;padding:8px 0 2px;margin-top:2px;font-size:12px;font-weight:600;color:var(--pg-gray-500);cursor:pointer;border-top:1px solid var(--pg-gray-200);}
+  .opc-qc-cancel:hover{color:var(--pg-gray-800);}
+
+  .opc-helper-text{font-size:11.5px;color:var(--pg-gray-500);display:flex;align-items:center;gap:6px;}
 
   .impact-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--pg-gray-200);font-size:12.5px;gap:10px;}
   .impact-row:last-child{border-bottom:none;}
@@ -227,8 +236,11 @@ function init(){
   function custOf(res){ return s.customers.find(function(c){return c.id===res.customerId;}); }
 
   var html = '';
-  html += '<div class="pg-page-head"><div><h1>Operations Calendar</h1><div class="sub">Daily room control — every physical room, every night, across the property</div></div>' +
-    '<div class="pg-actions"><a class="btn btn-primary" href="new-reservation.html">+ New Reservation</a></div></div>';
+  html += '<div class="pg-page-head"><div><h1>Operations Calendar</h1><div class="sub">Manage reservations, room assignments, and room blocks</div></div>' +
+    '<div class="pg-actions">' +
+      (CAN_BLOCK ? '<button type="button" class="btn btn-outline" id="headerAddBlockBtn">' + PG.icon('ban',15) + ' Add Room Block</button>' : '') +
+      (CAN_MANAGE ? '<a class="btn btn-primary" href="new-reservation.html">' + PG.icon('plus',15) + ' New Reservation</a>' : '') +
+    '</div></div>';
 
   html += '<div class="card"><div class="card-body">' +
     '<div class="opc-toolbar">' +
@@ -236,16 +248,19 @@ function init(){
         '<button class="btn btn-outline btn-sm ic-dir" id="prevBtn" aria-label="Previous period" title="Previous period">' + PG.icon('chevronLeft',15) + '</button>' +
         '<button class="btn btn-outline btn-sm" id="todayBtn">Today</button>' +
         '<button class="btn btn-outline btn-sm ic-dir" id="nextBtn" aria-label="Next period" title="Next period">' + PG.icon('chevronRight',15) + '</button>' +
-        '<input type="date" class="form-control" id="datePicker" aria-label="Jump to date" value="'+startDate+'">' +
+        '<span class="opc-range-label" id="opcRangeLabel"></span>' +
+        '<input type="date" class="form-control" id="datePicker" aria-label="Jump to date" title="Jump to date" value="'+startDate+'" style="width:132px;">' +
         PG.segmented('opcSpan', [{value:'7',label:'7 Days'},{value:'14',label:'14 Days'},{value:'30',label:'30 Days'}], String(viewDays), {ariaLabel:'Date range length'}) +
       '</div>' +
       '<div class="opc-toolbar-right">' +
-        '<input class="form-control opc-search" id="opcSearch" type="search" placeholder="Search guest, RES#, phone, room…" aria-label="Search calendar">' +
+        '<input class="form-control opc-search" id="opcSearch" type="search" placeholder="Search guest, reservation or room" aria-label="Search calendar">' +
         '<button class="btn btn-outline btn-sm" id="filtersBtn">' + PG.icon('filter',15) + ' Filters<span id="filterCount"></span></button>' +
+        '<button type="button" class="btn-icon" id="moreActionsBtn" aria-haspopup="menu" aria-expanded="false" title="More actions" aria-label="More actions">' + PG.icon('dots',16) + '</button>' +
       '</div>' +
     '</div>' +
     '<div class="opc-legend" id="opcLegend"></div>' +
     '<div class="opc-chips" id="opcChips"></div>' +
+    '<div class="opc-helper-text">' + PG.icon('info',13) + ' Drag a bar to move &middot; Drag its edges to resize &middot; Select a room and date range to add a reservation or block.</div>' +
     '<div class="opc-wrap" id="opcWrap"><div class="opc-grid" id="opcGrid"></div></div>' +
   '</div></div>';
 
@@ -253,7 +268,9 @@ function init(){
   PG.enhanceSelects(page);
 
   renderLegend();
+  syncRangeLabel();
   attachDragHandlers();
+  wireHeaderActions();
   document.getElementById('opcGrid').innerHTML = skeletonHtml();
   // Deep-link support, e.g. operations-calendar.html?room=std-101 — used by Physical
   // Rooms' "View on Operations Calendar" action. Expands that room's group if collapsed
@@ -279,19 +296,81 @@ function init(){
   document.getElementById('todayBtn').addEventListener('click', function(){ startDate = PG.TODAY; syncDatePicker(); renderGrid(); });
   document.getElementById('datePicker').addEventListener('change', function(){ if(this.value){ startDate = this.value; renderGrid(); } });
   PG.wireSegmented(page, 'opcSpan', function(v){ viewDays = parseInt(v,10); renderGrid(); });
-  function syncDatePicker(){ document.getElementById('datePicker').value = startDate; }
+  function syncDatePicker(){ document.getElementById('datePicker').value = startDate; syncRangeLabel(); }
+  function syncRangeLabel(){
+    var dates = dateWindow();
+    var el = document.getElementById('opcRangeLabel');
+    if (el) el.textContent = PG.fmtDateShort(dates[0]) + ' – ' + PG.fmtDateShort(dates[dates.length-1]);
+  }
   document.getElementById('opcSearch').addEventListener('input', function(){ searchQuery = this.value.trim().toLowerCase(); renderGrid(); });
   document.getElementById('filtersBtn').addEventListener('click', openFiltersDrawer);
+
+  var pickRoomModal = document.createElement('div');
+  pickRoomModal.className = 'pg-modal-overlay';
+  pickRoomModal.id = 'pickRoomModal';
+  document.body.appendChild(pickRoomModal);
+  function openPickRoomForBlock(){
+    var st = PG.getState();
+    var opts = st.physicalRooms.slice().sort(function(a,b){ return a.roomNumber<b.roomNumber?-1:1; })
+      .map(function(r){ return '<option value="'+r.id+'">Room '+PG.esc(r.roomNumber)+' — '+PG.esc(rtName(r.roomTypeId))+'</option>'; }).join('');
+    pickRoomModal.innerHTML = '<div class="pg-modal">' +
+      '<div class="pg-modal-header"><h3>Add Room Block</h3><button class="pg-modal-close" id="pr-close">&times;</button></div>' +
+      '<div class="pg-modal-body"><div class="form-group"><label class="form-label">Room</label><select class="form-control" id="pr-room">'+opts+'</select></div></div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="pr-cancel">Cancel</button><button class="btn btn-primary" id="pr-continue">Continue</button></div>' +
+    '</div>';
+    PG.enhanceSelects(pickRoomModal);
+    document.getElementById('pr-close').addEventListener('click', function(){ PG.closeModal('pickRoomModal'); });
+    document.getElementById('pr-cancel').addEventListener('click', function(){ PG.closeModal('pickRoomModal'); });
+    document.getElementById('pr-continue').addEventListener('click', function(){
+      var roomId = document.getElementById('pr-room').value;
+      PG.closeModal('pickRoomModal');
+      PG.renderBlockRoomModal({ physicalRoomId: roomId, defaultStart: startDate, defaultEnd: startDate, onSaved: function(){ renderGrid(); } });
+    });
+    PG.openModal('pickRoomModal');
+  }
+  function wireHeaderActions(){
+    var addBlockBtn = document.getElementById('headerAddBlockBtn');
+    if (addBlockBtn) addBlockBtn.addEventListener('click', openPickRoomForBlock);
+    var moreBtn = document.getElementById('moreActionsBtn');
+    if (moreBtn) moreBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      openMoreActionsMenu(moreBtn);
+    });
+  }
+  var moreMenu = null;
+  function openMoreActionsMenu(anchor){
+    closeMoreActionsMenu();
+    var rect = anchor.getBoundingClientRect();
+    moreMenu = document.createElement('div');
+    moreMenu.className = 'opc-quickcreate-popover';
+    moreMenu.style.width = '190px';
+    moreMenu.style.top = (rect.bottom + 6) + 'px';
+    moreMenu.style.right = (window.innerWidth - rect.right) + 'px';
+    moreMenu.innerHTML = '<button type="button" class="opc-qc-opt new-res" id="moreRefresh"><span class="qc-ic">' + PG.icon('refresh',16) + '</span><span><span class="qc-label">Refresh Calendar</span></span></button>';
+    document.body.appendChild(moreMenu);
+    document.getElementById('moreRefresh').addEventListener('click', function(){ closeMoreActionsMenu(); renderGrid(); PG.toast('Calendar refreshed.', 'success'); });
+    anchor.setAttribute('aria-expanded', 'true');
+    setTimeout(function(){ document.addEventListener('mousedown', onOutsideMoreMenu); }, 0);
+  }
+  function onOutsideMoreMenu(e){
+    if (moreMenu && !moreMenu.contains(e.target) && e.target.id !== 'moreActionsBtn'){ closeMoreActionsMenu(); }
+  }
+  function closeMoreActionsMenu(){
+    if (moreMenu && moreMenu.parentNode) moreMenu.parentNode.removeChild(moreMenu);
+    moreMenu = null;
+    document.removeEventListener('mousedown', onOutsideMoreMenu);
+    var btn = document.getElementById('moreActionsBtn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
 
   function renderLegend(){
     function item(swatchStyle, label){ return '<div class="opc-legend-item"><span class="opc-legend-swatch" style="'+swatchStyle+'"></span>'+label+'</div>'; }
     document.getElementById('opcLegend').innerHTML =
       item('background:var(--pg-success-light);border:1.5px solid #0bb463;', 'Confirmed') +
-      item('background:var(--pg-warning-light);border:1.5px dashed #c99400;', 'Pending Payment / Draft') +
+      item('background:var(--pg-warning-light);border:1.5px dashed #c99400;', 'Pending / Hold') +
       item('background:var(--pg-primary-light);border:1.5px solid var(--pg-primary);', 'Completed') +
-      item('background:var(--pg-danger-light);border:1.5px solid var(--pg-danger);', 'Out of Order') +
-      item('background:var(--pg-gray-300);border:1.5px dashed var(--pg-gray-600);', 'Out of Service / Hold') +
-      item('background:var(--pg-danger-light);border:2.5px solid var(--pg-danger);background-image:repeating-linear-gradient(45deg, rgba(248,40,90,.25) 0 5px, transparent 5px 10px);', 'Conflict — needs resolution');
+      item('background:var(--pg-gray-300);border:1.5px dashed var(--pg-gray-600);background-image:repeating-linear-gradient(45deg, rgba(0,0,0,.08) 0 5px, transparent 5px 10px);', 'Room Block') +
+      item('background:var(--pg-danger-light);border:2.5px solid var(--pg-danger);background-image:repeating-linear-gradient(45deg, rgba(248,40,90,.25) 0 5px, transparent 5px 10px);', 'Conflict');
   }
 
   /* ================================================================ */
@@ -524,50 +603,13 @@ function init(){
     return { 'Out of Order':'wrench', 'Out of Service':'ban', 'Management Hold':'lockClosed' }[type] || 'info';
   }
 
-  /* One compact summary column per visible date: occupancy, and the available /
-     reserved / blocked split behind it. Counts come from the same physical-room facts
-     the rows below draw, so the strip can never disagree with the grid it sits on. */
-  function renderAvailabilityStrip(st, dates){
-    var rooms = st.physicalRooms.filter(function(r){ return r.isActive && r.isSellable; });
-    var total = rooms.length;
-    var cells = dates.map(function(d){
-      var reserved = 0, blocked = 0;
-      rooms.forEach(function(r){
-        var status = PG.roomStatusOn(st, r.id, d);
-        if (status === 'Reserved' || status === 'Held') reserved++;
-        else if (status === 'Out of Order' || status === 'Out of Service') blocked++;
-      });
-      var available = Math.max(0, total - reserved - blocked);
-      var occ = total ? Math.round(reserved / total * 100) : 0;
-      // Stop Sell is a commercial (room-type) flag; surface it here because it changes
-      // what can be sold on that night even when physical rooms are free.
-      var stopSell = st.roomTypes.some(function(rt){ return PG.isStopSell(st, rt.id, d); });
-      var flag = stopSell ? 'stop' : (available === 0 ? 'full' : (available <= 2 ? 'low' : ''));
-      var tone = occ >= 90 ? 'hot' : (occ >= 60 ? 'warm' : '');
-      var title = PG.fmtDate(d) + ' — ' + occ + '% occupancy\n' +
-        available + ' available · ' + reserved + ' reserved · ' + blocked + ' blocked' +
-        (stopSell ? '\nStop Sell is active on at least one room type' : '');
-      return '<div class="opc-sum-cell' + (d===PG.TODAY?' today':'') + '" title="' + PG.esc(title) + '">' +
-        '<div class="opc-sum-occ ' + tone + '">' + occ + '%</div>' +
-        '<div class="opc-sum-bar"><span style="width:' + occ + '%"></span></div>' +
-        '<div class="opc-sum-counts">' +
-          '<span class="ok" title="Available">' + available + '</span>' +
-          '<span class="res" title="Reserved or held">' + reserved + '</span>' +
-          '<span class="blk" title="Blocked">' + blocked + '</span>' +
-        '</div>' +
-        (flag ? '<div class="opc-sum-flag ' + flag + '">' +
-          (flag==='stop' ? 'STOP' : flag==='full' ? 'FULL' : 'LOW') + '</div>' : '') +
-      '</div>';
-    }).join('');
-    return '<div class="opc-sum-row"><div class="opc-sum-corner">' +
-      '<div class="t">Availability</div><div class="m">' + total + ' sellable rooms</div></div>' + cells + '</div>';
-  }
-
   function renderGrid(){
+    clearSelection();
     var st = PG.getState();
     s = st;
     var dates = dateWindow();
     var wrap = document.getElementById('opcGrid');
+    syncRangeLabel();
 
     if (!st.physicalRooms.length){
       wrap.innerHTML = '<div class="empty-state"><div class="ic">&#127976;</div>No physical rooms exist for this property yet.<br><br><a class="btn btn-primary" href="physical-rooms.html">Go to Physical Rooms</a></div>';
@@ -579,8 +621,6 @@ function init(){
         var isToday = d===PG.TODAY, isWeekend = [4,5].indexOf(PG.dayOfWeek(d))>-1;
         return '<div class="opc-date-cell'+(isToday?' today':'')+(isWeekend?' weekend':'')+'"><div class="dow">'+PG.weekdayOf(d)+'</div>'+PG.fmtDateShort(d)+'</div>';
       }).join('') + '</div>';
-
-    headerHtml += renderAvailabilityStrip(st, dates);
 
     var bodyHtml = '';
 
@@ -599,16 +639,12 @@ function init(){
         var gs = groupSummary(st, typeDef);
         bodyHtml += '<div class="opc-group-header" data-group="'+typeDef.id+'">' +
           '<button type="button" class="opc-collapse-btn" data-toggle-group="'+typeDef.id+'" aria-expanded="'+(!isCollapsed)+'">'+(isCollapsed?'&#9656;':'&#9662;')+'</button>' +
-          '<strong>'+PG.esc(typeDef.name)+'</strong><span class="muted text-sm">'+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span>' +
+          '<span class="ic" style="display:inline-flex;color:var(--pg-gray-500);">'+PG.icon('bed',14)+'</span>' +
+          '<strong style="text-transform:uppercase;letter-spacing:.02em;font-size:11.5px;">'+PG.esc(typeDef.name)+'</strong>' +
+          '<span class="muted text-sm">&middot; '+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span>' +
           '<div class="opc-group-summary">' +
-            '<span>Active &amp; Sellable <b>'+gs.activeSellable+'</b></span>' +
-            '<span>Reserved <b>'+gs.reserved+'</b></span>' +
-            '<span>Held <b>'+gs.held+'</b></span>' +
-            '<span>Blocked <b>'+gs.blocked+'</b></span>' +
-            '<span>Available <b>'+gs.available+'</b></span>' +
-            '<span'+(gs.manualAdjustment!==0?' style="color:var(--pg-primary);"':'')+'>Remaining Sellable <b>'+gs.remainingSellable+'</b>'+(gs.manualAdjustment!==0?' ('+(gs.manualAdjustment>0?'+':'')+gs.manualAdjustment+' adj.)':'')+(gs.stopSell?' <span class="badge badge-red" style="margin-left:4px;"><span class="badge-dot"></span>Stop Sell</span>':'')+'</span>' +
+            '<span><b>'+gs.available+'</b> available &middot; <b>'+gs.reserved+'</b> reserved &middot; <b>'+gs.held+'</b> held &middot; <b>'+gs.blocked+'</b> blocked</span>' +
           '</div>' +
-          (CAN_MANAGE ? '<button type="button" class="btn btn-outline btn-sm opc-manage-avail-btn" data-manage-avail="'+typeDef.id+'">Manage Availability</button>' : '') +
         '</div>';
         if (!isCollapsed) bodyHtml += typeRooms.map(function(room){ return renderRoomRow(st, room, dates); }).join('');
       });
@@ -628,6 +664,12 @@ function init(){
     }
   }
 
+  // Compact dot + label — Clean/Dirty/Inspected/Checked In/Out are deliberately not
+  // among the supported statuses (housekeeping/front-desk workflows are out of scope).
+  function statusDotClass(status){
+    return { 'Available':'available', 'Reserved':'reserved', 'Held':'held',
+      'Out of Order':'out-of-order', 'Out of Service':'out-of-service', 'Inactive':'inactive' }[status] || 'inactive';
+  }
   function renderRoomRow(st, room, dates){
     var bars = barsForRoom(st, room.id);
     var visibleBars = bars.filter(function(b){ return barPassesFilters(b, dates[0], PG.addDays(dates[dates.length-1],1)); });
@@ -636,12 +678,11 @@ function init(){
       var isToday=d===PG.TODAY, isWeekend=[4,5].indexOf(PG.dayOfWeek(d))>-1;
       return '<div class="opc-cell'+(isToday?' today':'')+(isWeekend?' weekend':'')+'" style="left:'+(i*CELL_W)+'px;width:'+CELL_W+'px;" data-empty-room="'+room.id+'" data-empty-rt="'+room.roomTypeId+'" data-empty-date="'+d+'"></div>';
     }).join('');
+    var status = PG.roomStatusOn(st, room.id, PG.TODAY);
     return '<div class="opc-row" data-room-row="'+room.id+'">' +
       '<div class="opc-room-info"><div class="opc-room-num">Room '+PG.esc(room.roomNumber)+'</div>' +
-      '<div class="opc-room-meta">'+PG.esc(rtName(room.roomTypeId))+' &middot; Fl '+room.floor+'</div>' +
-      PG.roomStatusBadge(PG.roomStatusOn(st, room.id, PG.TODAY)) +
-      (CAN_BLOCK?'<button type="button" class="opc-block-btn" data-block-room="'+room.id+'" title="Block Room '+PG.esc(room.roomNumber)+'" aria-label="Block Room '+PG.esc(room.roomNumber)+'">&#9940;</button>':'') +
-      (CAN_MANAGE?'<button type="button" class="opc-quickadd" data-quickadd-room="'+room.id+'" data-quickadd-rt="'+room.roomTypeId+'" title="New reservation for Room '+PG.esc(room.roomNumber)+'" aria-label="New reservation for Room '+PG.esc(room.roomNumber)+'">+</button>':'') +
+      '<div class="opc-room-meta">'+PG.esc(rtName(room.roomTypeId))+' &middot; Floor '+room.floor+'</div>' +
+      '<div class="opc-status"><span class="opc-status-dot '+statusDotClass(status)+'"></span>'+PG.esc(status)+'</div>' +
       '</div>' +
       '<div class="opc-track" style="width:'+(dates.length*CELL_W)+'px;">'+cellsHtml+barsHtml+'</div>' +
     '</div>';
@@ -656,29 +697,9 @@ function init(){
       el.addEventListener('click', function(){ if (suppressNextClick){ suppressNextClick=false; return; } openBlockDrawer(el.dataset.block); });
       el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); } });
     });
-    root.querySelectorAll('[data-empty-room]').forEach(function(el){
-      el.addEventListener('click', function(){
-        if (suppressNextClick){ suppressNextClick=false; return; }
-        if (!CAN_MANAGE) return;
-        location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.emptyRt) + '&room=' + encodeURIComponent(el.dataset.emptyRoom) + '&date=' + encodeURIComponent(el.dataset.emptyDate);
-      });
-    });
-    root.querySelectorAll('[data-quickadd-room]').forEach(function(el){
-      el.addEventListener('click', function(e){
-        e.stopPropagation();
-        location.href = 'new-reservation.html?rt=' + encodeURIComponent(el.dataset.quickaddRt) + '&room=' + encodeURIComponent(el.dataset.quickaddRoom) + '&date=' + encodeURIComponent(dateWindow()[0]);
-      });
-    });
-    root.querySelectorAll('[data-block-room]').forEach(function(el){
-      el.addEventListener('click', function(e){
-        e.stopPropagation();
-        if (!CAN_BLOCK) return;
-        PG.renderBlockRoomModal({ physicalRoomId: el.dataset.blockRoom, defaultStart: dateWindow()[0], defaultEnd: dateWindow()[0], onSaved: function(){ renderGrid(); } });
-      });
-    });
-    root.querySelectorAll('[data-manage-avail]').forEach(function(el){
-      el.addEventListener('click', function(){ openManageAvailability(el.dataset.manageAvail); });
-    });
+    // Empty-cell clicks/drags are handled by attachDragHandlers()'s single delegated
+    // mousedown listener (beginRangeDrag) — that produces a persistent selection with
+    // its own "+ Add" control and quick-create popover, rather than navigating directly.
   }
 
   /* ================================================================ */
@@ -692,10 +713,12 @@ function init(){
   var suppressNextClick = false;
   // Must match .opc-handle's width in CSS — the visible handle IS the hit target.
   var EDGE_PX = 11;
+  var activeSelection = null; // {roomId, roomTypeId, lo, hi} — the pending click/drag range
 
   function attachDragHandlers(){
     document.getElementById('opcGrid').addEventListener('mousedown', function(e){
       if ((!CAN_MANAGE && !CAN_BLOCK) || e.button !== 0) return;
+      if (e.target.closest('.opc-range-select')) return; // the selection's own "+ Add" control handles its own click
       var bar = e.target.closest('.opc-bar');
       if (bar){
         // A reservation bar needs assign_rooms; a block bar needs block_rooms — each
@@ -705,7 +728,12 @@ function init(){
         beginBarDrag(bar, e); return;
       }
       var cell = e.target.closest('[data-empty-room]');
-      if (cell){ if (!CAN_BLOCK) return; beginRangeDrag(cell, e); }
+      if (cell) beginRangeDrag(cell, e);
+    });
+    document.addEventListener('mousedown', function(e){
+      if (!activeSelection) return;
+      if (e.target.closest('.opc-range-select') || e.target.closest('.opc-quickcreate-popover') || e.target.closest('[data-empty-room]')) return;
+      clearSelection();
     });
   }
 
@@ -715,7 +743,6 @@ function init(){
     return g;
   }
   function removeGhost(){ var g = document.getElementById('opcDragGhost'); if (g && g.parentNode) g.parentNode.removeChild(g); }
-  function removeRangeGhost(){ var g = document.getElementById('opcRangeGhost'); if (g && g.parentNode) g.parentNode.removeChild(g); }
 
   function beginBarDrag(barEl, e){
     var kind = barEl.dataset.kind;
@@ -951,12 +978,13 @@ function init(){
     PG.openModal('blockDateChangeModal');
   }
 
-  /* ---- Drag across empty cells → Create Room Block modal ---- */
+  /* ---- Click or drag across empty cells → persistent selection → "+ Add" →   */
+  /* quick-create popover (New Reservation / Block Room). Nothing is created    */
+  /* until the user explicitly picks one of those two options. ---- */
   function beginRangeDrag(cellEl, e){
-    var trackEl = cellEl.closest('.opc-track');
     var dates = dateWindow();
     var startIdx = dates.indexOf(cellEl.dataset.emptyDate);
-    var ctx = { roomId: cellEl.dataset.emptyRoom, startIdx: startIdx, endIdx: startIdx, startX: e.clientX, moved: false, trackEl: trackEl };
+    var ctx = { roomId: cellEl.dataset.emptyRoom, roomTypeId: cellEl.dataset.emptyRt, startIdx: startIdx, endIdx: startIdx, startX: e.clientX, moved: false };
 
     function onMove(ev){
       var dx = ev.clientX - ctx.startX;
@@ -964,36 +992,108 @@ function init(){
       if (!ctx.moved) return;
       var deltaIdx = Math.round(dx / CELL_W);
       ctx.endIdx = Math.max(0, Math.min(dates.length - 1, startIdx + deltaIdx));
-      renderRangeGhost(ctx, dates);
+      renderSelectionOverlay(ctx.roomId, ctx.roomTypeId, Math.min(ctx.startIdx,ctx.endIdx), Math.max(ctx.startIdx,ctx.endIdx), true);
     }
     function onUp(){
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      removeRangeGhost();
-      if (ctx.moved){
-        suppressNextClick = true;
-        var lo = Math.min(ctx.startIdx, ctx.endIdx), hi = Math.max(ctx.startIdx, ctx.endIdx);
-        PG.renderBlockRoomModal({ physicalRoomId: ctx.roomId, defaultStart: dates[lo], defaultEnd: dates[hi], onSaved: function(){ renderGrid(); } });
-      }
+      suppressNextClick = true;
+      var lo = Math.min(ctx.startIdx, ctx.endIdx), hi = Math.max(ctx.startIdx, ctx.endIdx);
+      setSelection(ctx.roomId, ctx.roomTypeId, lo, hi);
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     e.preventDefault();
   }
-  function renderRangeGhost(ctx, dates){
-    var g = document.getElementById('opcRangeGhost');
-    if (!g){ g = document.createElement('div'); g.id = 'opcRangeGhost'; g.className = 'opc-range-select'; ctx.trackEl.appendChild(g); }
-    else if (g.parentNode !== ctx.trackEl){ ctx.trackEl.appendChild(g); }
-    var lo = Math.min(ctx.startIdx, ctx.endIdx), hi = Math.max(ctx.startIdx, ctx.endIdx);
+
+  function setSelection(roomId, roomTypeId, lo, hi){
+    activeSelection = { roomId: roomId, roomTypeId: roomTypeId, lo: lo, hi: hi };
+    renderSelectionOverlay(roomId, roomTypeId, lo, hi, false);
+  }
+  function clearSelection(){
+    activeSelection = null;
+    var g = document.getElementById('opcSelectionBox');
+    if (g && g.parentNode) g.parentNode.removeChild(g);
+    closeQuickCreatePopover();
+  }
+  function renderSelectionOverlay(roomId, roomTypeId, lo, hi, dragging){
+    var trackEl = document.querySelector('[data-room-row="'+roomId+'"] .opc-track');
+    if (!trackEl) return;
+    var dates = dateWindow();
+    var room = roomById(roomId);
+    var g = document.getElementById('opcSelectionBox');
+    if (!g){ g = document.createElement('div'); g.id = 'opcSelectionBox'; trackEl.appendChild(g); }
+    else if (g.parentNode !== trackEl){ trackEl.appendChild(g); }
+    g.className = 'opc-range-select' + (dragging ? ' dragging' : '');
     g.style.left = (lo * CELL_W + 2) + 'px';
     g.style.width = ((hi - lo + 1) * CELL_W - 4) + 'px';
+    if (dragging || (!CAN_MANAGE && !CAN_BLOCK)){ g.innerHTML = ''; return; }
+    var nights = hi - lo + 1;
+    var tip = 'Room ' + (room?PG.esc(room.roomNumber):'') + ' &middot; ' + PG.fmtDateShort(dates[lo]) + '&ndash;' + PG.fmtDateShort(PG.addDays(dates[hi],1)) + ' &middot; ' + nights + ' night' + (nights===1?'':'s');
+    g.innerHTML = '<div class="opc-range-tip">' + tip + '</div>' +
+      '<button type="button" class="opc-range-add" id="opcRangeAddBtn">' + PG.icon('plus',12) + ' Add</button>';
+    document.getElementById('opcRangeAddBtn').addEventListener('click', function(e){
+      e.stopPropagation();
+      openQuickCreatePopover(document.getElementById('opcRangeAddBtn'));
+    });
+  }
+
+  function openQuickCreatePopover(anchorBtn){
+    closeQuickCreatePopover();
+    if (!activeSelection) return;
+    var sel = activeSelection;
+    var room = roomById(sel.roomId);
+    var dates = dateWindow();
+    var rect = anchorBtn.getBoundingClientRect();
+    var pop = document.createElement('div');
+    pop.className = 'opc-quickcreate-popover';
+    pop.id = 'opcQuickCreatePopover';
+    var opts = '';
+    if (CAN_MANAGE) opts += '<button type="button" class="opc-qc-opt new-res" id="qcNewRes"><span class="qc-ic">' + PG.icon('calendar',16) + '</span><span><span class="qc-label">New Reservation</span><span class="qc-desc">Create a booking for Room ' + PG.esc(room.roomNumber) + '</span></span></button>';
+    if (CAN_BLOCK) opts += '<button type="button" class="opc-qc-opt block-room" id="qcBlockRoom"><span class="qc-ic">' + PG.icon('ban',16) + '</span><span><span class="qc-label">Block Room</span><span class="qc-desc">Make Room ' + PG.esc(room.roomNumber) + ' unavailable</span></span></button>';
+    pop.innerHTML = opts + '<button type="button" class="opc-qc-cancel" id="qcCancelSel">Cancel selection</button>';
+    document.body.appendChild(pop);
+
+    // Anchored beside the "+ Add" trigger, flipped/clamped to stay in the viewport so it
+    // never covers the selected row or the reservations around it.
+    var popW = 270;
+    var left = rect.right + 10;
+    if (left + popW > window.innerWidth - 8) left = rect.left - popW - 10;
+    if (left < 8) left = Math.max(8, Math.min(window.innerWidth - popW - 8, rect.left));
+    pop.style.left = left + 'px';
+    pop.style.top = Math.max(8, rect.top - 6) + 'px';
+    var popH = pop.offsetHeight;
+    if (rect.top - 6 + popH > window.innerHeight - 8) pop.style.top = Math.max(8, window.innerHeight - popH - 8) + 'px';
+
+    var newResBtn = document.getElementById('qcNewRes');
+    if (newResBtn) newResBtn.addEventListener('click', function(){
+      location.href = 'new-reservation.html?rt=' + encodeURIComponent(sel.roomTypeId) + '&room=' + encodeURIComponent(sel.roomId) + '&date=' + encodeURIComponent(dates[sel.lo]);
+    });
+    var blockBtn = document.getElementById('qcBlockRoom');
+    if (blockBtn) blockBtn.addEventListener('click', function(){
+      closeQuickCreatePopover();
+      PG.renderBlockRoomModal({ physicalRoomId: sel.roomId, defaultStart: dates[sel.lo], defaultEnd: dates[sel.hi], onSaved: function(){ clearSelection(); renderGrid(); } });
+    });
+    document.getElementById('qcCancelSel').addEventListener('click', function(){ clearSelection(); });
+    setTimeout(function(){ document.addEventListener('mousedown', onOutsideQuickCreate); }, 0);
+  }
+  function onOutsideQuickCreate(e){
+    var pop = document.getElementById('opcQuickCreatePopover');
+    if (pop && !pop.contains(e.target) && !e.target.closest('.opc-range-select')) clearSelection();
+  }
+  function closeQuickCreatePopover(){
+    var pop = document.getElementById('opcQuickCreatePopover');
+    if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+    document.removeEventListener('mousedown', onOutsideQuickCreate);
   }
 
   /* ================================================================ */
-  /* Room Type group availability summary + Manage Availability             */
-  /* (exposes the existing Stop Sell / manual-adjustment / physical-capacity */
-  /* rules inline in the calendar — same engine, no separate page, and the   */
-  /* hidden availability-inventory.html's own logic is untouched).           */
+  /* Room-type group summary — compact, read-only counters shown in each     */
+  /* group header (§ Room-type groups). Manage Availability was removed from  */
+  /* the Operations Calendar entirely per spec; the underlying availability   */
+  /* engine (PG.computeAvailability et al.) is untouched and still used       */
+  /* elsewhere (Rate Plans & Pricing, the hidden Availability & Inventory      */
+  /* page) — only this page's UI surface for editing it was removed.          */
   /* ================================================================ */
   function groupSummary(st, typeDef){
     var typeRooms = st.physicalRooms.filter(function(r){return r.roomTypeId===typeDef.id;});
@@ -1005,89 +1105,8 @@ function init(){
       else if (stt==='Held') held++;
       else if (stt==='Out of Order' || stt==='Out of Service') blocked++;
     });
-    var a = PG.computeAvailability(st, typeDef.id, PG.TODAY);
-    return {
-      activeSellable: activeSellable, reserved: reserved, held: held, blocked: blocked,
-      available: Math.max(0, activeSellable - reserved - held - blocked),
-      remainingSellable: a.available, manualAdjustment: PG.dateAdjustmentFor(st, typeDef.id, PG.TODAY), stopSell: a.stopSell
-    };
-  }
-
-  var manageAvailModal = document.createElement('div');
-  manageAvailModal.className = 'pg-modal-overlay';
-  manageAvailModal.id = 'manageAvailModal';
-  document.body.appendChild(manageAvailModal);
-  function openManageAvailability(roomTypeId){
-    var st = PG.getState();
-    var typeDef = rt(roomTypeId);
-    var physicalCap = PG.activeSellablePhysicalCount(st, roomTypeId);
-    render();
-    function render(){
-      var freshSt = PG.getState();
-      var d0 = dateWindow()[0];
-      var key = roomTypeId+'|'+d0;
-      var stopEntry = freshSt.inventoryOverrides[key] || null;
-      var adj = PG.dateAdjustmentFor(freshSt, roomTypeId, d0);
-      var a = PG.computeAvailability(freshSt, roomTypeId, d0);
-      manageAvailModal.innerHTML = '<div class="pg-modal">' +
-        '<div class="pg-modal-header"><h3>Manage Availability — '+PG.esc(typeDef.name)+'</h3><button class="pg-modal-close" id="ma-close">&times;</button></div>' +
-        '<div class="pg-modal-body">' +
-          '<div class="help-note">Showing '+PG.fmtDate(d0)+' (first date of the current calendar view). Manual adjustments can never exceed this room type\'s '+physicalCap+' active, sellable physical room(s).</div>' +
-          '<div class="impact-row"><span>Configured Sellable</span><span><b>'+typeDef.sellable+'</b></span></div>' +
-          '<div class="impact-row"><span>Manual Adjustment (this date)</span><span><b>'+(adj>0?'+':'')+adj+'</b></span></div>' +
-          '<div class="impact-row"><span>Stop Sell</span><span>'+(stopEntry?'<span class="badge badge-red"><span class="badge-dot"></span>Active — '+PG.esc(stopEntry.reason)+'</span>':'<span class="badge badge-gray"><span class="badge-dot"></span>Not applied</span>')+'</span></div>' +
-          '<div class="impact-row"><strong>Sellable Availability</strong><strong>'+a.available+'</strong></div>' +
-          '<div class="form-group" style="margin-top:14px;"><label class="form-label">Adjust Manual Inventory for '+PG.fmtDateShort(d0)+'</label>' +
-            '<div style="display:flex;gap:8px;"><input type="number" class="form-control" id="ma-qty" placeholder="e.g. 1 or -1" style="max-width:140px;"><button class="btn btn-outline btn-sm" id="ma-apply-adj">Apply</button></div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="pg-modal-footer">' +
-          (stopEntry ? '<button class="btn btn-outline" id="ma-reopen">Reopen for This Date</button>' : '<button class="btn btn-danger-outline" id="ma-stopsell">Stop Sell for This Date</button>') +
-          '<button class="btn btn-primary" id="ma-done">Done</button>' +
-        '</div></div>';
-      document.getElementById('ma-close').addEventListener('click', function(){ PG.closeModal('manageAvailModal'); });
-      document.getElementById('ma-done').addEventListener('click', function(){ PG.closeModal('manageAvailModal'); renderGrid(); });
-      var reopenBtn = document.getElementById('ma-reopen');
-      if (reopenBtn) reopenBtn.addEventListener('click', function(){
-        var reason = prompt('Reason for reopening?', 'Availability restored');
-        if (reason==null) return;
-        var st2 = PG.getState();
-        delete st2.inventoryOverrides[key];
-        PG.setState(st2);
-        PG.addAudit('Inventory Reopened', typeDef.name+', '+PG.fmtDateShort(d0)+'. Reason: '+reason+'.');
-        PG.toast(typeDef.name+' reopened for '+PG.fmtDateShort(d0)+'.', 'success');
-        render();
-      });
-      var stopBtn = document.getElementById('ma-stopsell');
-      if (stopBtn) stopBtn.addEventListener('click', function(){
-        var reason = prompt('Reason for Stop Sell?', 'Operational hold');
-        if (!reason) { PG.toast('A reason is required to Stop Sell.', 'danger'); return; }
-        var st2 = PG.getState();
-        st2.inventoryOverrides[key] = {stopSell:true, reason:reason};
-        PG.setState(st2);
-        PG.addAudit('Stop Sell Applied', typeDef.name+', '+PG.fmtDateShort(d0)+'. Reason: '+reason+'.');
-        PG.toast(typeDef.name+' set to Stop Sell for '+PG.fmtDateShort(d0)+'.', 'warn');
-        render();
-      });
-      document.getElementById('ma-apply-adj').addEventListener('click', function(){
-        var qty = parseInt(document.getElementById('ma-qty').value, 10);
-        if (!qty){ PG.toast('Enter a non-zero adjustment quantity.', 'danger'); return; }
-        var st2 = PG.getState();
-        var current = PG.dateAdjustmentFor(st2, roomTypeId, d0);
-        var wouldBe = typeDef.sellable + current + qty;
-        if (qty>0 && wouldBe > physicalCap){
-          PG.toast('Cannot increase sellable inventory past the '+physicalCap+' active, sellable physical room(s) for '+PG.fmtDateShort(d0)+'.', 'danger');
-          return;
-        }
-        st2.dateAdjustments[key] = current + qty;
-        st2.adjustments.push({ts:PG.nowIso(), roomTypeId:roomTypeId, type: qty>0?'Increase Sellable Inventory':'Decrease Sellable Inventory', qty:Math.abs(qty), from:d0, to:d0, reason:'Adjusted from Operations Calendar', notes:''});
-        PG.setState(st2);
-        PG.addAudit('Inventory Adjusted', (qty>0?'Increase':'Decrease')+' Sellable Inventory — '+typeDef.name+', '+PG.fmtDateShort(d0)+'. Before: '+(typeDef.sellable+current)+', After: '+wouldBe+'.');
-        PG.toast('Inventory adjusted for '+PG.fmtDateShort(d0)+'.', 'success');
-        render();
-      });
-    }
-    PG.openModal('manageAvailModal');
+    return { activeSellable: activeSellable, reserved: reserved, held: held, blocked: blocked,
+      available: Math.max(0, activeSellable - reserved - held - blocked) };
   }
 
   /* ================================================================ */
