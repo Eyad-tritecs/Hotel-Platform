@@ -1592,47 +1592,47 @@
     return !!allowed && allowed.indexOf(CURRENT_ROLE) > -1;
   }
 
-  /* Navigation grouped by what the user is trying to DO, not by which developer built
-     it: daily room operations, then the reservation pipeline, then money, then reading,
-     then setup, then admin. Availability & Inventory stays in this array carrying
-     hidden:true so its route, files and logic remain fully intact while every access
-     point to it disappears (same mechanism as superAdminOnly, filtered alongside it). */
-  // Hotel Operations is the one section a day-to-day user lives in: the full
-  // reservation-to-payment operational path in one logical order, per §1. Rooms/Rates/
-  // Payments used to be scattered across "Hotel Configuration" and "Payments" —
-  // consolidating them here removes those as duplicate homes for the same pages.
-  // Availability & Inventory stays in this array with hidden:true so its route, page,
-  // and logic remain fully intact — only the nav entry (and every other visible access
-  // point) disappears; see §2 and the "hidden" filter in renderSidebar().
+  /* Navigation reorganized per the "Reorganize the Complete Sidebar Navigation" spec:
+     6 sections ordered by what the user is trying to DO — daily operations, then rooms
+     & pricing setup (physical rooms are the foundation of room assignment, room types
+     define the categories physical rooms belong to, rates/pricing are configured for
+     room types or physical rooms — hence that exact order), then guests, then reading
+     (reports), then hotel-level configuration, then platform administration.
+     Availability & Inventory stays in this array carrying hidden:true so its route,
+     files, components, state, mock data, and calculations remain fully intact while
+     every access point to it (sidebar, search, shortcuts, breadcrumbs) disappears —
+     same mechanism as superAdminOnly, filtered alongside it in renderSidebar(). */
   var NAV = [
     { section: "Hotel Operations", items: [
-      { key: "dashboard", label: "Overview", href: "index.html", icon: "grid" },
+      { key: "dashboard", label: "Overview Dashboard", href: "index.html", icon: "grid" },
+      { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" },
       { key: "reservations", label: "Reservations", href: "reservations.html", icon: "list" },
       { key: "new-reservation", label: "New Reservation", href: "new-reservation.html", icon: "plus" },
-      { key: "operations-calendar", label: "Operations Calendar", href: "operations-calendar.html", icon: "calendar" },
-      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
-      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "bed" },
+      { key: "payments", label: "Payments", href: "payments.html", icon: "card" }
+    ]},
+    { section: "Rooms Management & Pricing", items: [
+      { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "bed" },
+      { key: "room-types", label: "Room Types", href: "room-types.html", icon: "roomsGroup" },
       { key: "rates", label: "Rate Plans & Pricing", href: "rates.html", icon: "tag" },
-      { key: "payments", label: "Payments", href: "payments.html", icon: "card" },
-      { key: "physical-rooms", label: "Physical Rooms", href: "physical-rooms.html", icon: "door" },
       { key: "availability", label: "Availability & Inventory", href: "availability-inventory.html", icon: "calendar", hidden: true }
     ]},
-    { section: "Guests", items: [
+    { section: "Guest Management", items: [
       { key: "guests", label: "Guests", href: "guests.html", icon: "user" }
     ]},
-    { section: "Reports", items: [
+    { section: "Reports & Insights", items: [
       { key: "reservation-reports", label: "Reservation Reports", href: "reservation-reports.html", icon: "chart" },
-      { key: "inventory-reports", label: "Inventory Reports", href: "inventory-reports.html", icon: "chart" },
-      { key: "payment-reports", label: "Payment Reports", href: "payment-reports.html", icon: "chart" }
+      { key: "inventory-reports", label: "Inventory Reports", href: "inventory-reports.html", icon: "boxes" },
+      { key: "payment-reports", label: "Payment Reports", href: "payment-reports.html", icon: "trend" }
     ]},
     { section: "Hotel Configuration", items: [
+      { key: "hotel-profile", label: "Hotel Profile", href: "hotel-profile.html", icon: "building" },
       { key: "taxes", label: "Taxes & Fees", href: "taxes-fees.html", icon: "percent" },
       { key: "policies", label: "Hotel Policies", href: "hotel-policies.html", icon: "shield" },
       { key: "payment-config", label: "Payment Configuration", href: "payment-configuration.html", icon: "settings" }
     ]},
     { section: "Administration", items: [
       { key: "hotels", label: "Hotels", href: "hotels.html", icon: "building", superAdminOnly: true },
-      { key: "users", label: "Users", href: "users.html", icon: "user" },
+      { key: "users", label: "Users", href: "users.html", icon: "users" },
       { key: "roles", label: "Roles", href: "roles.html", icon: "layers" },
       { key: "permissions", label: "Permissions", href: "permissions.html", icon: "lock" },
       { key: "audit", label: "Audit", href: "audit.html", icon: "clock" }
@@ -1688,7 +1688,9 @@
     bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M13.7 20a1.9 1.9 0 0 1-3.4 0"/></svg>',
     grip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>',
     lockClosed: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11"/></svg>',
-    users: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c1.2-3.4 3.9-5 6.5-5s5.3 1.6 6.5 5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6M18 15.4c1.7.7 3 2.2 3.6 4.6"/></svg>'
+    users: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c1.2-3.4 3.9-5 6.5-5s5.3 1.6 6.5 5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6M18 15.4c1.7.7 3 2.2 3.6 4.6"/></svg>',
+    roomsGroup: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="6" width="7" height="7" rx="1"/><rect x="14.5" y="6" width="7" height="7" rx="1"/><rect x="8.5" y="15" width="7" height="6" rx="1"/></svg>',
+    boxes: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>'
   };
 
   // Inline an icon at an explicit size. Every functional control in this app should
@@ -1710,19 +1712,21 @@
       if (!visibleItems.length) return;
       html += '<div class="pg-nav-section"><div class="pg-nav-section-title">' + sec.section + "</div>";
       visibleItems.forEach(function (it) {
-        html += '<a class="pg-nav-item' + (it.key === activeKey ? " active" : "") + '" href="' + it.href + '"><span class="ic">' + ICONS[it.icon] + '</span><span>' + it.label + "</span></a>";
+        html += '<a class="pg-nav-item' + (it.key === activeKey ? " active" : "") + '" href="' + it.href + '" title="' + esc(it.label) + '"><span class="ic">' + ICONS[it.icon] + '</span><span>' + it.label + "</span></a>";
       });
       html += "</div>";
     });
     html += "</nav></aside>";
+    html += '<div class="pg-sidebar-backdrop" id="pg-sidebar-backdrop"></div>';
     return html;
   }
 
   var CRUMB_LINKS = {
-    "Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Operations": "index.html", "Hotel Configuration": "hotel-profile.html", "Room Types": "room-types.html",
+    "Dashboard": "index.html", "Overview Dashboard": "index.html", "Operations Calendar": "operations-calendar.html", "Hotel Operations": "index.html",
+    "Rooms Management & Pricing": "physical-rooms.html", "Hotel Configuration": "hotel-profile.html", "Room Types": "room-types.html",
     "Physical Rooms": "physical-rooms.html", "Rate Plans & Pricing": "rates.html", "Availability & Inventory": "availability-inventory.html", "Reservations": "reservations.html",
-    "New Reservation": "new-reservation.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
-    "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
+    "New Reservation": "new-reservation.html", "Guest Management": "guests.html", "Guests": "guests.html", "Guided Journey": "demo-journey.html", "Payments": "payments.html",
+    "Reports & Insights": "reservation-reports.html", "Reports": "reservation-reports.html", "Settings": "hotel-policies.html", "Hotel Policies": "hotel-policies.html", "Taxes & Fees": "taxes-fees.html",
     "Payment Configuration": "payment-configuration.html", "Administration": "users.html", "Hotels": "hotels.html", "Users": "users.html",
     "Roles": "roles.html", "Permissions": "permissions.html", "Audit": "audit.html"
   };
@@ -1743,6 +1747,8 @@
        destructive demo-only control belongs. */
     var html = '<header class="pg-header">';
     html += '<div class="pg-header-left">';
+    html += '<button class="btn-icon pg-sidebar-toggle" id="pg-sidebar-toggle" aria-label="Open navigation menu" aria-controls="pg-app" aria-expanded="false" title="Menu">' +
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>';
     html += '<div class="pg-property-ctx" title="Current property — this pilot has a single hotel, so no switcher is shown">' + ICONS.building + '<span>Palestine Grand Hotel</span></div>';
     html += '<div class="pg-breadcrumb">' + crumbHtml + "</div></div>";
     html += '<div class="pg-gsearch">' +
@@ -1964,7 +1970,40 @@
     });
     wireGlobalSearch();
     wireUserMenu();
+    wireSidebarToggle();
     return document.getElementById("pg-page");
+  }
+
+  /* Mobile off-canvas sidebar: the "<900px" drawer state has always existed in CSS
+     (.pg-sidebar.open) but had no trigger anywhere in the app — this wires the header
+     hamburger, a tap-outside backdrop, Escape, and nav-link taps up to that class so the
+     drawer is actually reachable on phones/tablets, in both LTR and RTL. */
+  function wireSidebarToggle() {
+    var sidebar = document.querySelector(".pg-sidebar");
+    var toggleBtn = document.getElementById("pg-sidebar-toggle");
+    var backdrop = document.getElementById("pg-sidebar-backdrop");
+    if (!sidebar || !toggleBtn || !backdrop) return;
+
+    function closeSidebar() {
+      sidebar.classList.remove("open");
+      backdrop.classList.remove("show");
+      toggleBtn.setAttribute("aria-expanded", "false");
+    }
+    function openSidebar() {
+      sidebar.classList.add("open");
+      backdrop.classList.add("show");
+      toggleBtn.setAttribute("aria-expanded", "true");
+    }
+    toggleBtn.addEventListener("click", function () {
+      if (sidebar.classList.contains("open")) closeSidebar(); else openSidebar();
+    });
+    backdrop.addEventListener("click", closeSidebar);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && sidebar.classList.contains("open")) closeSidebar();
+    });
+    sidebar.querySelectorAll(".pg-nav-item").forEach(function (link) {
+      link.addEventListener("click", closeSidebar);
+    });
   }
 
   /* ---------------------------------------------------------------- */
