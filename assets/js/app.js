@@ -2654,7 +2654,7 @@
     if (!names.length) return '<span class="muted text-sm">—</span>';
     var visible = names.slice(0, max), rest = names.slice(max);
     var html = visible.map(function (n) { return '<span class="chip">' + esc(n) + '</span>'; }).join("");
-    if (rest.length) html += '<span class="chip" title="' + esc(rest.join(", ")) + '">+' + rest.length + "</span>";
+    if (rest.length) html += '<span class="chip chip-more" title="' + esc(rest.join(", ")) + '">+' + rest.length + "</span>";
     return html;
   }
   function openAmenitySelector(opts) {

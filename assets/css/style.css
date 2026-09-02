@@ -631,6 +631,10 @@ html[dir="rtl"] .pg-toast{right:auto;left:24px;}
 
 /* ===== Chips (attribute tags) ===== */
 .chip{display:inline-block;background:var(--pg-gray-100);border:1px solid var(--pg-border);border-radius:12px;padding:2px 8px;font-size:11px;color:var(--pg-gray-700);margin:2px 4px 2px 0;white-space:nowrap;}
+/* The "+N" overflow chip (amenityChipsHtml) carries a title tooltip listing the rest —
+   darken it on hover/focus so that's discoverable instead of looking like inert text. */
+.chip.chip-more{cursor:default;font-weight:700;color:var(--pg-primary);background:var(--pg-primary-light);border-color:#D9EAFF;transition:background .12s,color .12s;}
+.chip.chip-more:hover,.chip.chip-more:focus-visible{background:var(--pg-primary);color:#fff;border-color:var(--pg-primary);}
 
 /* ================================================================
    Shared control patterns (PG.segmented / PG.filterChips / PG.renderCombobox)
