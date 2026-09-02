@@ -20,8 +20,15 @@ html += '<div class="pg-page-head"><div><h1>Room Types</h1><div class="sub">Conf
   '<div class="pg-actions"><a class="btn btn-primary" href="room-type-form.html">+ Add Room Type</a></div></div>';
 
 html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
-  '<th>Room Type</th><th class="num">Sellable Quantity</th><th>Occupancy</th><th>Bed Configuration</th><th class="num">Base Rate</th><th>Status</th><th></th>' +
+  '<th>Room Type</th><th class="num">Sellable Quantity</th><th>Occupancy</th><th>Bed Configuration</th><th>Amenities</th><th class="num">Base Rate</th><th>Status</th><th></th>' +
 '</tr></thead><tbody>';
+
+function rtAmenitiesBadge(rt){
+  var ids = rt.amenities || [];
+  if (!ids.length) return '<span class="muted text-sm">—</span>';
+  var names = s.amenityCatalog.filter(function(a){ return ids.indexOf(a.id) > -1; }).map(function(a){ return a.name; });
+  return '<span class="am-table-badge" title="'+PG.esc(names.join(', '))+'">'+names.length+' amenit'+(names.length===1?'y':'ies')+'</span>';
+}
 
 s.roomTypes.forEach(function(rt){
   html += '<tr>' +
@@ -29,6 +36,7 @@ s.roomTypes.forEach(function(rt){
     '<td class="num">'+rt.sellable+'</td>' +
     '<td>'+PG.occupancyLabel(rt)+'</td>' +
     '<td>'+rt.bed+'</td>' +
+    '<td>'+rtAmenitiesBadge(rt)+'</td>' +
     '<td class="num">'+PG.fmtMoney(rt.baseRate)+' / night</td>' +
     '<td>'+(rt.active ? '<span class="badge badge-green"><span class="badge-dot"></span>Active</span>' : '<span class="badge badge-gray"><span class="badge-dot"></span>Inactive</span>')+'</td>' +
     '<td><a class="btn btn-outline btn-sm" href="room-type-form.html?id='+rt.id+'&mode=view">View</a> <a class="btn btn-light btn-sm" href="room-type-form.html?id='+rt.id+'">Edit</a></td>' +

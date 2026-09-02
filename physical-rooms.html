@@ -105,7 +105,7 @@ function init() {
 
   html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"><table class="dt"><thead><tr>' +
     '<th>Room Number</th><th>Room Type</th><th class="col-bldg">Building / Floor</th><th class="col-bed">Bed Configuration</th>' +
-    '<th class="col-attrs">Key Attributes</th><th>Today\'s Status</th><th>Current / Next Reservation</th><th>Active State</th><th></th>' +
+    '<th class="col-attrs">Key Attributes</th><th class="col-attrs">Amenities</th><th>Today\'s Status</th><th>Current / Next Reservation</th><th>Active State</th><th></th>' +
   '</tr></thead><tbody id="roomsBody"></tbody></table></div></div></div>';
 
   page.innerHTML = html;
@@ -142,6 +142,18 @@ function init() {
     }
     if (!chips.length) return '<span class="muted text-sm">—</span>';
     return chips.map(function (c) { return '<span class="chip">' + PG.esc(c) + '</span>'; }).join('');
+  }
+
+  // Compact "N amenities" badge — guaranteed (inherited from Room Type) + this room's
+  // own extra features combined, with a hover tooltip listing every name so the table
+  // doesn't need a wide chip list per row.
+  function amenitiesBadgeHtml(r) {
+    var st2 = PG.getState();
+    var type = st2.roomTypes.find(function (t) { return t.id === r.roomTypeId; });
+    var ids = (type ? (type.amenities || []) : []).concat(r.features || []);
+    if (!ids.length) return '<span class="muted text-sm">—</span>';
+    var names = st2.amenityCatalog.filter(function (a) { return ids.indexOf(a.id) > -1; }).map(function (a) { return a.name; });
+    return '<span class="am-table-badge" title="' + PG.esc(names.join(', ')) + '">' + names.length + ' amenit' + (names.length === 1 ? 'y' : 'ies') + '</span>';
   }
 
   function reservationCellHtml(r) {
@@ -188,13 +200,13 @@ function init() {
     renderApplied();
     var body = document.getElementById('roomsBody');
     if (!s.physicalRooms.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('door',30) + '</div>No physical rooms configured yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button>' : '') + '</div></td></tr>';
+      body.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="ic">' + PG.icon('door',30) + '</div>No physical rooms configured yet.' + (CAN_MANAGE ? '<br><br><button class="btn btn-primary" id="emptyAddBtn">+ Add Physical Room</button>' : '') + '</div></td></tr>';
       var emptyAddBtn = document.getElementById('emptyAddBtn');
       if (emptyAddBtn) emptyAddBtn.addEventListener('click', function () { openRoomDrawer(null); });
       return;
     }
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="ic">' + PG.icon('search',30) + '</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
+      body.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="ic">' + PG.icon('search',30) + '</div>No rooms match your filters.<br><br><button class="btn btn-outline btn-sm" id="emptyClearBtn">Clear Filters</button></div></td></tr>';
       document.getElementById('emptyClearBtn').addEventListener('click', clearFilters);
       return;
     }
@@ -206,6 +218,7 @@ function init() {
         '<td class="col-bldg text-sm">' + PG.esc(r.building) + ' &middot; Floor ' + r.floor + '</td>' +
         '<td class="col-bed text-sm">' + PG.esc(r.bedConfiguration) + '</td>' +
         '<td class="col-attrs">' + keyAttributesHtml(r) + '</td>' +
+        '<td class="col-attrs">' + amenitiesBadgeHtml(r) + '</td>' +
         '<td>' + PG.roomStatusBadge(today) + '</td>' +
         '<td>' + reservationCellHtml(r) + '</td>' +
         '<td>' + activeStateHtml(r) + '</td>' +
@@ -350,7 +363,7 @@ function init() {
   // ---- Loading state: brief skeleton, then real data ----
   renderSummary();
   document.getElementById('roomsBody').innerHTML = [0, 1, 2].map(function () {
-    return '<tr class="skeleton-row"><td colspan="9"><div class="skeleton-bar" style="width:60%;"></div></td></tr>';
+    return '<tr class="skeleton-row"><td colspan="10"><div class="skeleton-bar" style="width:60%;"></div></td></tr>';
   }).join('');
   setTimeout(renderTable, 220);
 
@@ -471,16 +484,19 @@ function init() {
       ? inherited.map(function (a) { return '<span class="am-inherited-chip">' + PG.icon('lockClosed', 11) + PG.esc(a.name) + '</span>'; }).join('')
       : '<span class="text-sm muted">No guaranteed amenities on this room type yet.</span>';
     var extrasHtml = extras.length
-      ? extras.map(function (a) { return '<span class="opc-chip">' + PG.esc(a.name) + '</span>'; }).join('')
-      : '<span class="text-sm muted">No room-specific features added.</span>';
+      ? '<div class="am-section-chips">' + extras.map(function (a) { return '<span class="chip">' + PG.esc(a.name) + '</span>'; }).join('') + '</div>'
+      : '<div class="text-sm muted">No room-specific features added.</div>';
     document.getElementById('rm-amenities-section').innerHTML =
       '<label class="form-label">Amenities &amp; Features</label>' +
-      '<div class="text-sm muted" style="margin-bottom:6px;">Inherited from ' + (type ? PG.esc(type.name) : 'Room Type') + (type ? ' &middot; <a href="room-type-form.html?id=' + type.id + '&mode=view">View Room Type</a>' : '') + '</div>' +
+      '<div class="text-sm muted" style="margin-bottom:6px;">Inherited from ' + (type ? PG.esc(type.name) : 'Room Type') + (type ? ' &middot; <a href="room-type-form.html?id=' + type.id + '&mode=view" target="_blank">View Room Type</a>' : '') + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">' + inheritedHtml + '</div>' +
       '<div class="help-note" style="margin-bottom:10px;">Use room-specific features only for differences that help staff assign the most suitable room.</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">' + extrasHtml + '</div>' +
-      '<button type="button" class="btn btn-outline btn-sm" id="editFeaturesBtn">Edit Room-Specific Features</button>';
-    document.getElementById('editFeaturesBtn').addEventListener('click', function () {
+      extrasHtml +
+      '<div class="am-section-actions">' +
+        '<button type="button" class="btn btn-primary btn-sm" id="editFeaturesBtn">'+PG.icon('edit',13)+' Edit Room-Specific Features</button>' +
+        '<button type="button" class="btn btn-outline btn-sm am-add-custom-btn" id="quickAddFeatureBtn">'+PG.icon('plus',13)+' Add Feature</button>' +
+      '</div>';
+    function openFeatureSelector(openCustom){
       PG.openAmenitySelector({
         scope: 'physicalRoom',
         title: 'Room-Specific Features',
@@ -488,9 +504,12 @@ function init() {
         selectedIds: featuresValue,
         excludeIds: inheritedIds,
         auditModule: 'Physical Rooms',
+        openCustomFormOnInit: !!openCustom,
         onApply: function (newIds) { featuresValue = newIds; renderRoomAmenitiesSection(); }
       });
-    });
+    }
+    document.getElementById('editFeaturesBtn').addEventListener('click', function () { openFeatureSelector(false); });
+    document.getElementById('quickAddFeatureBtn').addEventListener('click', function () { openFeatureSelector(true); });
   }
 
   function clearFieldErrors() {

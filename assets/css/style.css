@@ -551,12 +551,21 @@ html[dir="rtl"] .pg-drawer{right:auto;left:0;transform:translateX(-100%);box-sha
 html[dir="rtl"] .pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
 @media (max-width:640px){ .pg-drawer,.pg-drawer-wide{width:100vw;} }
 
-/* ===== Amenity selector (§5) ===== */
+/* ===== Amenities (§5) — selector drawer + section chips, all pages ===== */
 .am-toolbar{display:flex;gap:8px;}
 .am-toolbar #am-search{flex:1;}
 .am-toolbar #am-category{max-width:220px;}
+/* Selected chips (inside the selector drawer): same visual language as the app's
+   standard .chip tag everywhere else — rounded pill, gray-100 fill, thin border —
+   plus an integrated delete button styled like the View/Bed Configuration selector's
+   own delete icon (.pg-select-option .del), so every removable chip in the app reads
+   the same way instead of borrowing the Operations Calendar's filter-chip look. */
 .am-selected-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:var(--pg-gray-100);border-radius:8px;margin-bottom:14px;min-height:20px;}
-.am-chip{background:#fff;border:1px solid var(--pg-border);}
+.am-chip{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--pg-border);
+  border-radius:12px;padding:3px 4px 3px 10px;font-size:11.5px;font-weight:500;color:var(--pg-gray-800);}
+.am-chip button{background:none;border:none;color:var(--pg-gray-400);font-weight:700;font-size:13px;line-height:1;
+  cursor:pointer;padding:2px 5px;border-radius:4px;}
+.am-chip button:hover{color:var(--pg-danger);background:var(--pg-danger-light);}
 .am-groups{max-height:360px;overflow-y:auto;border:1px solid var(--pg-border);border-radius:8px;}
 .am-group{border-bottom:1px solid var(--pg-gray-200);}
 .am-group:last-child{border-bottom:none;}
@@ -565,12 +574,24 @@ html[dir="rtl"] .pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
 .am-row:hover{background:var(--pg-gray-100);}
 .am-row input{flex-shrink:0;}
 .am-count{background:rgba(255,255,255,.25);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:7px;}
+.am-add-custom-btn{display:inline-flex;align-items:center;gap:6px;}
 .am-custom-form{background:var(--pg-gray-100);border-radius:8px;padding:14px;margin-top:10px;}
+
+/* Amenities section (Hotel Profile / Room Type / Physical Room) — a consistent
+   header + helper text + chip display + action row, reused verbatim across all three
+   host pages so the pattern only needs to be learned once. */
+.am-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.am-section-count{color:var(--pg-gray-500);font-size:12.5px;font-weight:600;}
+.am-section-chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}
+.am-section-chips .chip{font-size:12px;padding:4px 10px;border-radius:14px;}
+.am-section-actions{display:flex;align-items:center;gap:8px;margin-top:14px;}
 /* Inherited (read-only) amenity chips on Physical Room — visually distinct from the
    editable room-specific feature chips so staff never mistake one for the other. */
 .am-inherited-chip{display:inline-flex;align-items:center;gap:5px;background:var(--pg-gray-100);
-  color:var(--pg-gray-600);border:1px solid var(--pg-border);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;}
+  color:var(--pg-gray-600);border:1px solid var(--pg-border);border-radius:14px;padding:4px 10px;font-size:12px;font-weight:600;}
 .am-inherited-chip svg{width:12px;height:12px;flex-shrink:0;}
+.am-table-badge{display:inline-flex;align-items:center;gap:4px;background:var(--pg-gray-100);color:var(--pg-gray-700);
+  border-radius:12px;padding:2px 9px;font-size:11px;font-weight:600;cursor:default;}
 
 /* ===== Toast ===== */
 .pg-toast{position:fixed;top:20px;right:24px;z-index:var(--z-toast);display:flex;flex-direction:column;gap:10px;}

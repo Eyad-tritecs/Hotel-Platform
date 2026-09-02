@@ -30,6 +30,7 @@ var html = '';
 html += '<div class="pg-page-head"><div><h1>'+(id ? (readOnly ? 'View Room Type' : 'Edit Room Type') : 'Add Room Type')+'</h1>' +
   '<div class="sub">'+(rt ? rt.name : 'Create a new room type for Palestine Grand Hotel')+'</div></div>' +
   '<div class="pg-actions">' +
+    (rt && readOnly ? '<a class="btn btn-primary" href="room-type-form.html?id='+id+'">'+PG.icon('edit',14)+' Edit This Room Type</a>' : '') +
     (rt && !readOnly ? '<button class="btn btn-danger-outline" id="deleteBtn">Delete Room Type</button>' : '') +
     '<a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a>' +
   '</div></div>';
@@ -47,7 +48,7 @@ html += '<div class="card"><div class="card-body"><div class="grid-2">' +
 '<div class="form-group"><label class="form-label">Essential Description</label><textarea class="form-control" id="f-desc" style="min-height:70px;" '+(readOnly?'disabled':'')+'>'+PG.esc(rt ? rt.desc : '')+'</textarea></div>' +
 '<div class="form-check"><input type="checkbox" id="f-active" '+((!rt || rt.active) ? 'checked' : '')+' '+(readOnly?'disabled':'')+'><label class="form-label" style="margin:0;" for="f-active">Active</label></div>' +
 '</div>' +
-(readOnly ? '<div class="card-footer"><a class="btn btn-primary" href="room-type-form.html?id='+id+'">Edit This Room Type</a></div>' :
+(readOnly ? '' :
   '<div class="card-footer"><button class="btn btn-primary" id="saveBtn">Save</button></div>') +
 '</div>';
 
@@ -91,32 +92,36 @@ function renderRtAmenities(){
   var st = PG.getState();
   var catalog = st.amenityCatalog.filter(function(a){ return a.active && amenitiesValue.indexOf(a.id) > -1; });
   var chips = catalog.length
-    ? catalog.map(function(a){ return '<span class="opc-chip" style="background:var(--pg-gray-100);color:var(--pg-gray-800);">'+PG.esc(a.name)+'</span>'; }).join('')
-    : '<span class="text-sm muted">No amenities selected yet.</span>';
+    ? '<div class="am-section-chips">' + catalog.map(function(a){ return '<span class="chip">'+PG.esc(a.name)+'</span>'; }).join('') + '</div>'
+    : '<div class="text-sm muted">No amenities selected yet.</div>';
   document.getElementById('amenitiesCard').innerHTML =
-    '<div class="card-header" style="align-items:center;"><h3>Amenities</h3>' +
-      '<div style="display:flex;align-items:center;gap:10px;">' +
-        '<span class="muted text-sm">'+catalog.length+' amenit'+(catalog.length===1?'y':'ies')+'</span>' +
-        (readOnly ? '' : '<button type="button" class="btn btn-outline btn-sm" id="editRtAmenitiesBtn">Edit Amenities</button>') +
-      '</div>' +
-    '</div>' +
+    '<div class="card-header am-section-head"><h3>Amenities</h3><span class="am-section-count">'+catalog.length+' amenit'+(catalog.length===1?'y':'ies')+'</span></div>' +
     '<div class="card-body">' +
       '<div class="help-note" style="margin-bottom:14px;">Select amenities available in every physical room of this room type.</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>' +
+      chips +
+      (readOnly ? '' :
+        '<div class="am-section-actions">' +
+          '<button type="button" class="btn btn-primary btn-sm" id="editRtAmenitiesBtn">'+PG.icon('edit',13)+' Edit Amenities</button>' +
+          '<button type="button" class="btn btn-outline btn-sm am-add-custom-btn" id="quickAddRtAmenityBtn">'+PG.icon('plus',13)+' Add Amenity</button>' +
+        '</div>') +
     '</div>';
-  if (!readOnly) document.getElementById('editRtAmenitiesBtn').addEventListener('click', function(){
+  if (readOnly) return;
+  function openRtSelector(openCustom){
     PG.openAmenitySelector({
       scope: 'roomType',
       title: 'Room Type Amenities',
       helperText: 'Select amenities available in every physical room of this room type.',
       selectedIds: amenitiesValue,
       auditModule: 'Room Types',
+      openCustomFormOnInit: !!openCustom,
       onApply: function(newIds){
         amenitiesValue = newIds;
         renderRtAmenities();
       }
     });
-  });
+  }
+  document.getElementById('editRtAmenitiesBtn').addEventListener('click', function(){ openRtSelector(false); });
+  document.getElementById('quickAddRtAmenityBtn').addEventListener('click', function(){ openRtSelector(true); });
 }
 renderRtAmenities();
 

@@ -2684,7 +2684,7 @@
       if (!groupsHtml) groupsHtml = '<div class="text-sm muted" style="padding:20px 4px;text-align:center;">No amenities match your search.</div>';
 
       var chipsHtml = draft.length
-        ? draft.map(function (id) { return '<span class="opc-chip am-chip" data-id="' + id + '">' + esc(nameOf(id)) + '<button type="button" data-remove="' + id + '">&times;</button></span>'; }).join("")
+        ? draft.map(function (id) { return '<span class="am-chip" data-id="' + id + '">' + esc(nameOf(id)) + '<button type="button" data-remove="' + id + '" aria-label="Remove ' + esc(nameOf(id)) + '">&times;</button></span>'; }).join("")
         : '<span class="text-sm muted">No amenities selected yet.</span>';
 
       el.innerHTML = '<div class="pg-drawer pg-drawer-wide">' +
@@ -2698,7 +2698,7 @@
           '<label class="form-check" style="margin:10px 0 14px;"><input type="checkbox" id="am-selected-only"' + (selectedOnly ? " checked" : "") + '><span class="form-label" style="margin:0;">Selected only</span></label>' +
           '<div class="am-selected-chips">' + chipsHtml + "</div>" +
           '<div class="am-groups">' + groupsHtml + "</div>" +
-          '<button type="button" class="pg-select-add" id="am-add-custom" style="margin-top:14px;">+ Add Custom Amenity</button>' +
+          '<button type="button" class="btn btn-outline btn-sm am-add-custom-btn" id="am-add-custom" style="margin-top:14px;">' + icon("plus", 13) + " Add Custom Amenity</button>" +
           '<div id="am-custom-form"></div>' +
         "</div>" +
         '<div class="pg-drawer-footer"><button class="btn btn-light" id="am-cancel">Cancel</button><button class="btn btn-primary" id="am-apply">Apply<span class="am-count">' + draft.length + "</span></button></div>" +
@@ -2770,6 +2770,9 @@
     function close() { closeModal("pg-amenity-selector"); }
     render();
     openModal("pg-amenity-selector");
+    // A page can jump straight to "Add Custom Amenity" (e.g. a quick-add shortcut
+    // next to "Edit Amenities") instead of making the user open the picker first.
+    if (opts.openCustomFormOnInit) openCustomForm();
   }
   // enhanceSelects only targets <select class="form-control">, and the amenity
   // drawer's category filter needs the same treatment as everywhere else in the app.
