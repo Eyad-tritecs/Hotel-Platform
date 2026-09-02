@@ -54,6 +54,28 @@
   --pg-shadow:0 3px 4px rgba(0,0,0,.03);
   --pg-shadow-lg:0 10px 30px 0 rgba(0,0,0,.08);
   --pg-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* ---- Global z-index scale ----------------------------------------------
+     One centralized hierarchy so every stacking layer in the app — the
+     Operations Calendar's sticky grid included — is judged against the same
+     scale instead of ad hoc per-component numbers that happened to work by
+     accident. Higher-numbered layers are meant to sit above everything with
+     a lower number; a "genuine blocking modal" is the only thing allowed
+     above the account menu. */
+  --z-calendar-cell:1;
+  --z-calendar-bar:5;
+  --z-calendar-sticky-date:20;
+  --z-calendar-sticky-room:30;
+  --z-calendar-corner:40;
+  --z-app-header:100;
+  --z-calendar-tooltip:600;
+  --z-calendar-popover:700;
+  --z-drawer:900;
+  --z-dropdown:1100;
+  --z-account-menu:1200;
+  --z-modal-backdrop:1300;
+  --z-modal-content:1310;
+  --z-toast:1400;
 }
 
 *{box-sizing:border-box;}
@@ -170,7 +192,7 @@ input,select,textarea{font-family:inherit;}
   border-bottom:1px solid var(--pg-border);
   display:flex;align-items:center;justify-content:space-between;gap:20px;
   padding:0 30px;
-  position:sticky;top:0;z-index:20;
+  position:sticky;top:0;z-index:var(--z-app-header);
 }
 .pg-header-left{display:flex;align-items:center;gap:14px;flex:0 1 auto;min-width:0;}
 .pg-property-ctx{display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--pg-primary-light);
@@ -190,7 +212,7 @@ input,select,textarea{font-family:inherit;}
 .pg-gsearch{position:relative;width:320px;flex-shrink:0;}
 .pg-gsearch-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--pg-border);border-radius:20px;font-size:12.8px;background:var(--pg-gray-100) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="%23767c8c" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>') no-repeat 11px center;}
 .pg-gsearch-input:focus{outline:none;border-color:var(--pg-primary);background-color:#fff;}
-.pg-gsearch-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:10px;box-shadow:var(--pg-shadow);max-height:420px;overflow-y:auto;z-index:60;display:none;}
+.pg-gsearch-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:10px;box-shadow:var(--pg-shadow);max-height:420px;overflow-y:auto;z-index:var(--z-dropdown);display:none;}
 .pg-gsearch-panel.show{display:block;}
 .pg-gsearch-group-title{padding:8px 14px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--pg-gray-500);}
 .pg-gsearch-item{display:flex;flex-direction:column;padding:8px 14px;cursor:pointer;}
@@ -222,9 +244,13 @@ input,select,textarea{font-family:inherit;}
 .pg-user .u-role{font-size:11px;color:var(--pg-gray-500);}
 .pg-user .u-chev{color:var(--pg-gray-400);display:inline-flex;}
 .pg-user .u-chev svg{width:14px;height:14px;}
-.pg-user-menu{position:absolute;top:calc(100% + 8px);inset-inline-end:0;min-width:250px;background:#fff;
+/* Rendered through a portal (moved to a direct child of <body> when opened — see
+   wireUserMenu()) so it is never subject to an ancestor's overflow:hidden/auto or a
+   sibling stacking context (the calendar's sticky grid, most notably). Positioned via
+   JS as position:fixed from the trigger's bounding rect, not from a CSS anchor. */
+.pg-user-menu{position:fixed;min-width:250px;background:#fff;
   border:1px solid var(--pg-border);border-radius:var(--pg-radius);box-shadow:var(--pg-shadow-lg);
-  padding:6px;z-index:70;display:none;cursor:default;}
+  padding:6px;z-index:var(--z-account-menu);display:none;cursor:default;}
 .pg-user-menu.show{display:block;}
 .pg-user-menu .um-head{display:flex;align-items:center;gap:10px;padding:10px 10px 12px;
   border-bottom:1px solid var(--pg-border);margin-bottom:6px;}
@@ -458,7 +484,7 @@ html[dir="rtl"] .pg-switch input:checked + .track::after{transform:translateX(-1
 
 /* ===== Modal ===== */
 .pg-modal-overlay{position:fixed;inset:0;background:rgba(7,20,55,.42);backdrop-filter:blur(1px);
-  display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  display:none;align-items:center;justify-content:center;z-index:var(--z-modal-backdrop);padding:20px;}
 .pg-modal-overlay.show{display:flex;}
 .pg-modal{background:#fff;border-radius:12px;width:500px;max-width:100%;max-height:88vh;
   overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.22);}
@@ -480,13 +506,16 @@ html[dir="rtl"] .pg-switch input:checked + .track::after{transform:translateX(-1
 .pg-select-trigger::after{content:"";position:absolute;right:13px;top:44%;width:7px;height:7px;border-right:2px solid var(--pg-gray-500);border-bottom:2px solid var(--pg-gray-500);transform:translateY(-50%) rotate(45deg);pointer-events:none;}
 .pg-select.open .pg-select-trigger{border-color:var(--pg-primary);box-shadow:0 0 0 3px rgba(27,132,255,.12);}
 .pg-select.disabled .pg-select-trigger{background:var(--pg-gray-100);color:var(--pg-gray-500);cursor:not-allowed;}
-.pg-select-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);max-height:260px;overflow-y:auto;z-index:60;display:none;padding:4px;}
+.pg-select-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--pg-border);border-radius:8px;box-shadow:var(--pg-shadow);max-height:260px;overflow-y:auto;z-index:var(--z-dropdown);display:none;padding:4px;}
 .pg-select-menu.show{display:block;}
 .pg-select-option{padding:8px 10px;font-size:12.8px;border-radius:5px;cursor:pointer;color:var(--pg-gray-800);display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .pg-select-option:hover{background:var(--pg-gray-100);}
 .pg-select-option.selected{background:var(--pg-primary-light);color:var(--pg-primary);font-weight:600;}
-.pg-select-option .del{color:var(--pg-gray-400);font-weight:700;padding:0 4px;border-radius:4px;flex-shrink:0;}
+.pg-select-option .del{color:var(--pg-gray-400);font-weight:700;padding:0 4px;border-radius:4px;flex-shrink:0;cursor:pointer;}
 .pg-select-option .del:hover{color:var(--pg-danger);background:var(--pg-danger-light);}
+.pg-select-option .del.disabled{color:var(--pg-gray-300);cursor:not-allowed;}
+.pg-select-option .del.disabled:hover{background:none;color:var(--pg-gray-300);}
+.pg-select-add-error{line-height:1.4;}
 .pg-select-add{padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--pg-primary);cursor:pointer;border-top:1px solid var(--pg-gray-200);margin-top:4px;border-radius:5px;}
 .pg-select-add:hover{background:var(--pg-primary-light);}
 .pg-select-add-form{display:flex;gap:6px;padding:6px 4px;}
@@ -498,7 +527,7 @@ html[dir="rtl"] .pg-switch input:checked + .track::after{transform:translateX(-1
    (PG.openModal/closeModal, toggling .show), just slides in from the edge instead of
    appearing centered. Reserve Modal for confirmations, Drawer for longer forms.
    Standard detail drawer ~440px; wide editor drawers opt in with .pg-drawer-wide. */
-.pg-drawer-overlay{position:fixed;inset:0;background:rgba(7,20,55,.42);display:none;z-index:100;}
+.pg-drawer-overlay{position:fixed;inset:0;background:rgba(7,20,55,.42);display:none;z-index:var(--z-drawer);}
 .pg-drawer-overlay.show{display:block;}
 .pg-drawer{position:fixed;top:0;right:0;height:100vh;width:440px;max-width:100vw;background:#fff;
   box-shadow:-12px 0 40px rgba(0,0,0,.14);transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);
@@ -522,8 +551,29 @@ html[dir="rtl"] .pg-drawer{right:auto;left:0;transform:translateX(-100%);box-sha
 html[dir="rtl"] .pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
 @media (max-width:640px){ .pg-drawer,.pg-drawer-wide{width:100vw;} }
 
+/* ===== Amenity selector (§5) ===== */
+.am-toolbar{display:flex;gap:8px;}
+.am-toolbar #am-search{flex:1;}
+.am-toolbar #am-category{max-width:220px;}
+.am-selected-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:var(--pg-gray-100);border-radius:8px;margin-bottom:14px;min-height:20px;}
+.am-chip{background:#fff;border:1px solid var(--pg-border);}
+.am-groups{max-height:360px;overflow-y:auto;border:1px solid var(--pg-border);border-radius:8px;}
+.am-group{border-bottom:1px solid var(--pg-gray-200);}
+.am-group:last-child{border-bottom:none;}
+.am-group-title{padding:9px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--pg-gray-500);background:var(--pg-gray-100);}
+.am-row{display:flex;align-items:center;gap:9px;padding:8px 12px;font-size:12.8px;color:var(--pg-gray-800);cursor:pointer;}
+.am-row:hover{background:var(--pg-gray-100);}
+.am-row input{flex-shrink:0;}
+.am-count{background:rgba(255,255,255,.25);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:7px;}
+.am-custom-form{background:var(--pg-gray-100);border-radius:8px;padding:14px;margin-top:10px;}
+/* Inherited (read-only) amenity chips on Physical Room — visually distinct from the
+   editable room-specific feature chips so staff never mistake one for the other. */
+.am-inherited-chip{display:inline-flex;align-items:center;gap:5px;background:var(--pg-gray-100);
+  color:var(--pg-gray-600);border:1px solid var(--pg-border);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;}
+.am-inherited-chip svg{width:12px;height:12px;flex-shrink:0;}
+
 /* ===== Toast ===== */
-.pg-toast{position:fixed;top:20px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px;}
+.pg-toast{position:fixed;top:20px;right:24px;z-index:var(--z-toast);display:flex;flex-direction:column;gap:10px;}
 html[dir="rtl"] .pg-toast{right:auto;left:24px;}
 .pg-toast-item{
   background:#fff;color:var(--pg-gray-900);padding:14px 18px;border-radius:var(--pg-radius);
@@ -612,7 +662,7 @@ html[dir="rtl"] .pg-toast{right:auto;left:24px;}
 .pg-cbx-value .v-sub{font-size:11px;color:var(--pg-gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pg-cbx-value .v-placeholder{color:var(--pg-gray-500);}
 .pg-cbx-caret{color:var(--pg-gray-500);font-size:11px;flex-shrink:0;}
-.pg-cbx-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:60;background:#fff;
+.pg-cbx-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:var(--z-dropdown);background:#fff;
   border:1px solid var(--pg-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);overflow:hidden;}
 .pg-cbx.open .pg-cbx-panel{display:block;}
 .pg-cbx-searchwrap{padding:8px;border-bottom:1px solid var(--pg-gray-200);}
@@ -635,12 +685,14 @@ html[dir="rtl"] .pg-toast{right:auto;left:24px;}
   border:1px solid var(--pg-border);background:#fff;border-radius:6px;color:var(--pg-gray-600);cursor:pointer;}
 .more-btn:hover{background:var(--pg-gray-100);border-color:var(--pg-gray-400);color:var(--pg-gray-900);}
 .more-btn:focus-visible{outline:2px solid var(--pg-primary);outline-offset:1px;}
-/* z-index:600 — deliberately higher than cards, sticky table headers (5), and both
-   the modal and drawer overlays (100), because PG.openMoreMenu() portals this node to
-   <body> while open: a menu triggered from inside a drawer (e.g. Reservation Details'
-   "More actions") must still render above that drawer, not behind it. */
+/* z-index: var(--z-dropdown), the app's "general dropdowns and action menus" tier —
+   deliberately higher than cards, sticky table headers, and the drawer overlay,
+   because PG.openMoreMenu() portals this node to <body> while open: a menu triggered
+   from inside a drawer (e.g. Reservation Details' "More actions") must still render
+   above that drawer, not behind it. Same portal mechanism the header account menu
+   reuses (var(--z-account-menu), one tier above this one). */
 .more-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--pg-border);
-  border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:210px;z-index:600;display:none;overflow:hidden;padding:4px;}
+  border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:210px;z-index:var(--z-dropdown);display:none;overflow:hidden;padding:4px;}
 .more-menu.show{display:block;}
 .more-menu a,.more-menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;
   font-family:var(--pg-font);font-size:12.5px;line-height:1.3;color:var(--pg-gray-800);background:none;border:none;
@@ -720,14 +772,16 @@ html[dir="rtl"] .ic-dir svg{transform:scaleX(-1);}
 .pg-sidebar-toggle{display:none;}
 .pg-sidebar-backdrop{display:none;}
 @media (max-width:900px){
-  .pg-sidebar{position:fixed;left:-280px;top:0;bottom:0;transition:left .2s;z-index:50;}
+  /* Above var(--z-app-header) (100) — the mobile drawer must cover the header strip
+     it slides out over, not sit behind it. */
+  .pg-sidebar{position:fixed;left:-280px;top:0;bottom:0;transition:left .2s;z-index:110;}
   .pg-sidebar.open{left:0;}
   .grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}
   html[dir="rtl"] .pg-sidebar{left:auto;right:-280px;transition:right .2s;}
   html[dir="rtl"] .pg-sidebar.open{right:0;}
   .pg-sidebar-toggle{display:inline-flex;}
   .pg-sidebar-backdrop{
-    display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49;
+    display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:109;
     opacity:0;pointer-events:none;transition:opacity .2s;
   }
   .pg-sidebar-backdrop.show{opacity:1;pointer-events:auto;}
@@ -740,7 +794,7 @@ html[dir="rtl"] .ic-dir svg{transform:scaleX(-1);}
   /* Deliberately a fixed physical `right`, not a logical inset — the spec calls for
      "bottom-right" as a stable screen position in both LTR and RTL, the way most
      floating action buttons behave, rather than mirroring with reading direction. */
-  position:fixed;right:24px;bottom:24px;z-index:80;
+  position:fixed;right:24px;bottom:24px;z-index:110;
   display:inline-flex;align-items:center;gap:9px;height:48px;padding:0 18px 0 16px;
   border-radius:24px;border:none;background:var(--pg-primary);color:#fff;
   box-shadow:0 8px 22px rgba(27,132,255,.35);cursor:pointer;font-family:var(--pg-font);

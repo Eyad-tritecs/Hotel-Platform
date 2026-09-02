@@ -22,18 +22,36 @@
 
   .opc-wrap{position:relative;overflow:auto;border:1px solid var(--pg-border);border-radius:var(--pg-radius);background:#fff;height:calc(100vh - 400px);min-height:440px;}
   .opc-grid{position:relative;}
-  .opc-header-row{position:sticky;top:0;z-index:20;display:flex;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);}
-  .opc-corner{position:sticky;left:0;z-index:21;width:210px;min-width:210px;background:var(--pg-gray-100);border-right:1px solid var(--pg-border);display:flex;align-items:center;padding:0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-600);}
+  /* Sticky date header: only this row (and the corner cell within it) may ever move
+     with horizontal scroll being the thing that "moves" it back into view — it never
+     scrolls with the room column below it. */
+  .opc-header-row{position:sticky;top:0;z-index:var(--z-calendar-sticky-date);display:flex;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);}
+  /* Top-left "ROOM" corner — sticky on BOTH axes (top from the header row, left from
+     the room column), so it must sit above both of the sticky layers it straddles. */
+  .opc-corner{position:sticky;left:0;z-index:var(--z-calendar-corner);width:270px;min-width:270px;background:var(--pg-gray-100);border-right:1px solid var(--pg-border);display:flex;align-items:center;padding:0 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--pg-gray-600);}
   .opc-date-cell{width:90px;min-width:90px;padding:8px 4px;text-align:center;font-size:11.5px;font-weight:600;color:var(--pg-gray-700);border-right:1px solid var(--pg-gray-200);}
   .opc-date-cell .dow{font-size:10px;color:var(--pg-gray-500);text-transform:uppercase;}
   .opc-date-cell.today{background:var(--pg-primary-light);color:var(--pg-primary);}
   .opc-date-cell.weekend{background:#fbfbfd;}
 
-  .opc-group-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--pg-gray-100);border-bottom:1px solid var(--pg-border);position:sticky;left:0;width:fit-content;min-width:100%;font-size:12.5px;box-sizing:border-box;}
+  /* Room-type group row: split into a sticky, fixed-width identity cell (name, icon,
+     chevron, count, and the operational summary all live here) and a plain
+     non-sticky "track" cell that only exists to keep the gray header stripe filled in
+     behind the date columns. Nothing that must stay visible while scrolling lives in
+     the track — this is what fixes group headers going cut/missing on horizontal
+     scroll (the old single sticky row put the summary past the sticky box's own
+     right edge via margin-left:auto, which is never reachable by scrolling). */
+  .opc-group-row{display:flex;border-bottom:1px solid var(--pg-border);}
+  .opc-group-id{position:sticky;left:0;z-index:var(--z-calendar-sticky-room);width:270px;min-width:270px;
+    background:var(--pg-gray-100);border-right:1px solid var(--pg-border);box-sizing:border-box;
+    padding:8px 14px;display:flex;flex-direction:column;justify-content:center;gap:3px;font-size:12.5px;}
+  .opc-group-id-top{display:flex;align-items:center;gap:7px;min-width:0;}
+  .opc-group-id-top strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .opc-group-track{background:var(--pg-gray-100);flex-shrink:0;}
   .opc-collapse-btn{background:none;border:none;cursor:pointer;font-size:11px;color:var(--pg-gray-600);width:16px;flex-shrink:0;}
 
   .opc-row{display:flex;border-bottom:1px solid var(--pg-gray-200);position:relative;}
-  .opc-room-info{position:sticky;left:0;z-index:10;width:210px;min-width:210px;background:#fff;border-right:1px solid var(--pg-border);padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:3px;box-sizing:border-box;}
+  .opc-room-info{position:sticky;left:0;z-index:var(--z-calendar-sticky-room);width:270px;min-width:270px;background:#fff;border-right:1px solid var(--pg-border);padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:3px;box-sizing:border-box;}
   .opc-row:hover .opc-room-info{background:var(--pg-gray-100);}
   .opc-room-num{font-weight:700;font-size:12.8px;color:var(--pg-gray-900);}
   .opc-room-meta{font-size:11px;color:var(--pg-gray-500);}
@@ -48,7 +66,7 @@
   .opc-status-dot.inactive{background:var(--pg-gray-300);}
 
   .opc-track{position:relative;height:56px;flex-shrink:0;}
-  .opc-cell{position:absolute;top:0;bottom:0;border-right:1px solid var(--pg-gray-200);cursor:pointer;}
+  .opc-cell{position:absolute;top:0;bottom:0;border-right:1px solid var(--pg-gray-200);cursor:pointer;z-index:var(--z-calendar-cell);}
   .opc-cell:hover{background:var(--pg-primary-light);}
   .opc-cell.today{background:rgba(27,132,255,.05);}
   .opc-cell.weekend{background:#fbfbfd;}
@@ -61,8 +79,8 @@
 
   .opc-bar{position:absolute;top:9px;height:44px;border-radius:7px;padding:0 8px;display:flex;align-items:center;gap:6px;
     font-size:12px;font-weight:600;overflow:hidden;white-space:nowrap;text-align:left;
-    transition:box-shadow .12s,transform .12s;}
-  .opc-bar:hover{box-shadow:0 4px 12px rgba(0,0,0,.14);z-index:6;}
+    transition:box-shadow .12s,transform .12s;z-index:var(--z-calendar-bar);}
+  .opc-bar:hover{box-shadow:0 4px 12px rgba(0,0,0,.14);z-index:calc(var(--z-calendar-bar) + 1);}
   /* The body of an editable bar is the MOVE affordance; the two edges are RESIZE. */
   .opc-bar.editable{cursor:grab;}
   .opc-bar.editable:active{cursor:grabbing;}
@@ -161,15 +179,14 @@
 
   @media (max-width:900px){ .opc-wrap{height:calc(100vh - 460px);} }
 
-  .opc-group-header{flex-wrap:wrap;row-gap:6px;}
-  .opc-group-summary{display:flex;gap:14px;flex-wrap:wrap;margin-left:auto;font-size:11px;color:var(--pg-gray-600);}
+  .opc-group-summary{font-size:11px;color:var(--pg-gray-600);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .opc-group-summary b{color:var(--pg-gray-900);font-weight:700;}
   .opc-row.highlight-flash{animation:opc-row-flash 1.8s ease-out 1;}
   @keyframes opc-row-flash{0%{background:var(--pg-primary-light);}100%{background:transparent;}}
 
   .opc-bar.res, .opc-bar.block{touch-action:none;}
   .opc-bar.drag-source{opacity:.35;}
-  .opc-drag-ghost{position:absolute;top:8px;height:36px;border-radius:6px;border:2px dashed var(--pg-primary);background:rgba(27,132,255,.14);z-index:15;pointer-events:none;display:flex;align-items:center;padding:0 8px;font-size:11.5px;font-weight:700;color:var(--pg-primary-dark);overflow:hidden;white-space:nowrap;}
+  .opc-drag-ghost{position:absolute;top:8px;height:36px;border-radius:6px;border:2px dashed var(--pg-primary);background:rgba(27,132,255,.14);z-index:var(--z-calendar-tooltip);pointer-events:none;display:flex;align-items:center;padding:0 8px;font-size:11.5px;font-weight:700;color:var(--pg-primary-dark);overflow:hidden;white-space:nowrap;}
   .opc-drag-ghost.invalid{border-color:var(--pg-danger);background:rgba(248,40,90,.12);color:var(--pg-danger);}
 
   /* ---- Contextual range selection: replaces the old permanently-visible per-row  */
@@ -177,14 +194,14 @@
   /* a pending selection — highlighted range, a small tooltip bubble, and a single  */
   /* "+ Add" control — which the user must explicitly click to choose what to do    */
   /* with it, via the quick-create popover below. Nothing happens until that click. */
-  .opc-range-select{position:absolute;top:2px;bottom:2px;background:rgba(27,132,255,.12);border:2px solid var(--pg-primary);border-radius:6px;z-index:14;display:flex;align-items:center;justify-content:center;}
+  .opc-range-select{position:absolute;top:2px;bottom:2px;background:rgba(27,132,255,.12);border:2px solid var(--pg-primary);border-radius:6px;z-index:var(--z-calendar-tooltip);display:flex;align-items:center;justify-content:center;}
   .opc-range-select.dragging{border-style:dashed;pointer-events:none;}
   .opc-range-tip{position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:var(--pg-gray-900);color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:5px 10px;border-radius:6px;pointer-events:none;box-shadow:0 4px 10px rgba(0,0,0,.18);}
   .opc-range-tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--pg-gray-900);}
   .opc-range-add{background:var(--pg-primary);color:#fff;border:none;border-radius:20px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(27,132,255,.35);}
   .opc-range-add:hover{background:var(--pg-primary-dark);}
 
-  .opc-quickcreate-popover{position:fixed;z-index:60;width:270px;background:#fff;border:1px solid var(--pg-border);border-radius:12px;box-shadow:0 12px 32px rgba(17,24,39,.18);padding:8px;}
+  .opc-quickcreate-popover{position:fixed;z-index:var(--z-calendar-popover);width:270px;background:#fff;border:1px solid var(--pg-border);border-radius:12px;box-shadow:0 12px 32px rgba(17,24,39,.18);padding:8px;}
   .opc-qc-opt{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:none;border:1.5px solid transparent;border-radius:9px;padding:9px 10px;cursor:pointer;font-family:inherit;}
   .opc-qc-opt + .opc-qc-opt{margin-top:4px;}
   .opc-qc-opt > span:last-child{display:flex;flex-direction:column;gap:1px;min-width:0;}
@@ -216,7 +233,7 @@ var CAN_VIEW = PG.hasPermission('view_operations_calendar');
 var CAN_MANAGE = PG.hasPermission('assign_rooms'); // move/resize/create reservations, assign/change room
 var CAN_BLOCK = PG.hasPermission('block_rooms'); // create/move/resize/edit/end room blocks
 
-var CELL_W = 90, ROOM_COL_W = 210;
+var CELL_W = 90, ROOM_COL_W = 270;
 var BLOCK_TYPES = ['Out of Order', 'Out of Service', 'Management Hold', 'Other'];
 var RES_STATUSES = ['Draft','Pending Payment','Confirmed','Completed','No Show'];
 var PAY_STATUSES = ['Pay on Arrival','Payment Required','Link Sent','Paid','Failed','Expired','Refund Pending','Refunded'];
@@ -637,14 +654,24 @@ function init(){
         if (!typeRooms.length) return;
         var isCollapsed = !!collapsed[typeDef.id];
         var gs = groupSummary(st, typeDef);
-        bodyHtml += '<div class="opc-group-header" data-group="'+typeDef.id+'">' +
-          '<button type="button" class="opc-collapse-btn" data-toggle-group="'+typeDef.id+'" aria-expanded="'+(!isCollapsed)+'">'+(isCollapsed?'&#9656;':'&#9662;')+'</button>' +
-          '<span class="ic" style="display:inline-flex;color:var(--pg-gray-500);">'+PG.icon('bed',14)+'</span>' +
-          '<strong style="text-transform:uppercase;letter-spacing:.02em;font-size:11.5px;">'+PG.esc(typeDef.name)+'</strong>' +
-          '<span class="muted text-sm">&middot; '+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span>' +
-          '<div class="opc-group-summary">' +
-            '<span><b>'+gs.available+'</b> available &middot; <b>'+gs.reserved+'</b> reserved &middot; <b>'+gs.held+'</b> held &middot; <b>'+gs.blocked+'</b> blocked</span>' +
+        // Split into a sticky identity cell (name/icon/chevron/count/summary — the only
+        // things required to stay visible) and a plain decorative track cell that just
+        // keeps the header stripe's background filled in behind the date columns.
+        // Nothing inside the track cell is meaningful content, so nothing is lost by it
+        // scrolling — only the identity cell needs to, and does, stay fixed.
+        bodyHtml += '<div class="opc-group-row" data-group="'+typeDef.id+'">' +
+          '<div class="opc-group-id">' +
+            '<div class="opc-group-id-top">' +
+              '<button type="button" class="opc-collapse-btn" data-toggle-group="'+typeDef.id+'" aria-expanded="'+(!isCollapsed)+'">'+(isCollapsed?'&#9656;':'&#9662;')+'</button>' +
+              '<span class="ic" style="display:inline-flex;color:var(--pg-gray-500);flex-shrink:0;">'+PG.icon('bed',14)+'</span>' +
+              '<strong style="text-transform:uppercase;letter-spacing:.02em;font-size:11.5px;">'+PG.esc(typeDef.name)+'</strong>' +
+              '<span class="muted text-sm" style="flex-shrink:0;">&middot; '+typeRooms.length+' room'+(typeRooms.length===1?'':'s')+'</span>' +
+            '</div>' +
+            '<div class="opc-group-summary" title="'+gs.available+' available &middot; '+gs.reserved+' reserved &middot; '+gs.held+' held &middot; '+gs.blocked+' blocked">' +
+              '<b>'+gs.available+'</b> available &middot; <b>'+gs.reserved+'</b> reserved &middot; <b>'+gs.held+'</b> held &middot; <b>'+gs.blocked+'</b> blocked' +
+            '</div>' +
           '</div>' +
+          '<div class="opc-group-track" style="width:'+(dates.length*CELL_W)+'px;"></div>' +
         '</div>';
         if (!isCollapsed) bodyHtml += typeRooms.map(function(room){ return renderRoomRow(st, room, dates); }).join('');
       });

@@ -51,6 +51,8 @@ html += '<div class="card"><div class="card-body"><div class="grid-2">' +
   '<div class="card-footer"><button class="btn btn-primary" id="saveBtn">Save</button></div>') +
 '</div>';
 
+html += '<div class="card" id="amenitiesCard"></div>';
+
 page.innerHTML = html;
 
 var bedValue = rt ? rt.bed : s.bedConfigs[0];
@@ -62,9 +64,61 @@ if (readOnly){
     getList: function(){ return PG.getState().bedConfigs; },
     setList: function(list){ var st = PG.getState(); st.bedConfigs = list; PG.setState(st); },
     onChange: function(v){ bedValue = v; },
-    placeholder: 'e.g. 2 Queen Beds'
+    placeholder: 'e.g. 2 Queen Beds',
+    entityLabel: 'Bed Configuration',
+    deleteButtonLabel: 'Configuration',
+    // Assigned to this room type itself (excluding the one being edited) or to any
+    // physical room — either usage blocks deletion, same rule as Physical Rooms.
+    isUsedCount: function (v) {
+      var st2 = PG.getState();
+      var onTypes = st2.roomTypes.filter(function (r) { return r.bed === v && r.id !== id; }).length;
+      var onRooms = st2.physicalRooms.filter(function (r) { return r.bedConfiguration === v; }).length;
+      return onTypes + onRooms;
+    },
+    addedMessage: 'Bed configuration added successfully.',
+    deletedMessage: 'Bed configuration deleted successfully.',
+    auditModule: 'Room Types'
   });
 }
+
+/* ================================================================ */
+/* Room Type amenities (§5) — guaranteed in every physical room of this type. */
+/* Physical Rooms display these as read-only inherited chips; they are never  */
+/* edited from that page.                                                     */
+/* ================================================================ */
+var amenitiesValue = rt ? (rt.amenities || []) : [];
+function renderRtAmenities(){
+  var st = PG.getState();
+  var catalog = st.amenityCatalog.filter(function(a){ return a.active && amenitiesValue.indexOf(a.id) > -1; });
+  var chips = catalog.length
+    ? catalog.map(function(a){ return '<span class="opc-chip" style="background:var(--pg-gray-100);color:var(--pg-gray-800);">'+PG.esc(a.name)+'</span>'; }).join('')
+    : '<span class="text-sm muted">No amenities selected yet.</span>';
+  document.getElementById('amenitiesCard').innerHTML =
+    '<div class="card-header" style="align-items:center;"><h3>Amenities</h3>' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span class="muted text-sm">'+catalog.length+' amenit'+(catalog.length===1?'y':'ies')+'</span>' +
+        (readOnly ? '' : '<button type="button" class="btn btn-outline btn-sm" id="editRtAmenitiesBtn">Edit Amenities</button>') +
+      '</div>' +
+    '</div>' +
+    '<div class="card-body">' +
+      '<div class="help-note" style="margin-bottom:14px;">Select amenities available in every physical room of this room type.</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + chips + '</div>' +
+    '</div>';
+  if (!readOnly) document.getElementById('editRtAmenitiesBtn').addEventListener('click', function(){
+    PG.openAmenitySelector({
+      scope: 'roomType',
+      title: 'Room Type Amenities',
+      helperText: 'Select amenities available in every physical room of this room type.',
+      selectedIds: amenitiesValue,
+      auditModule: 'Room Types',
+      onApply: function(newIds){
+        amenitiesValue = newIds;
+        renderRtAmenities();
+      }
+    });
+  });
+}
+renderRtAmenities();
 
 if (rt && !readOnly){
   document.getElementById('deleteBtn').addEventListener('click', function(){
@@ -86,7 +140,6 @@ if (rt && !readOnly){
 
 if (!readOnly){
   document.getElementById('saveBtn').addEventListener('click', function(){
-    var st = PG.getState();
     var name = document.getElementById('f-name').value.trim();
     if (!name){ PG.toast('Room type name is required.', 'danger'); return; }
     var data = {
@@ -96,12 +149,44 @@ if (!readOnly){
       maxAdults: parseInt(document.getElementById('f-adults').value,10) || 1,
       maxChildren: parseInt(document.getElementById('f-children').value,10) || 0,
       bed: bedValue,
+      amenities: amenitiesValue,
       desc: document.getElementById('f-desc').value,
       active: document.getElementById('f-active').checked
     };
+    // Amenity changes on an EXISTING room type reach every physical room of that
+    // type automatically (they inherit live, nothing is copied onto the room), so the
+    // only thing needed before applying is telling the user how many rooms that is.
+    var amenitiesChanged = rt && JSON.stringify((rt.amenities||[]).slice().sort()) !== JSON.stringify(amenitiesValue.slice().sort());
+    if (amenitiesChanged) {
+      var affected = PG.getState().physicalRooms.filter(function (r) { return r.roomTypeId === rt.id; }).length;
+      PG.confirmDialog({
+        title: 'Update Room Type Amenities?',
+        message: 'This update will apply to ' + affected + ' physical room' + (affected===1?'':'s') + ' assigned to ' + rt.name + '.',
+        confirmLabel: 'Save Changes',
+        onConfirm: function () { doSaveRoomType(data); }
+      });
+    } else {
+      doSaveRoomType(data);
+    }
+  });
+}
+function doSaveRoomType(data){
+    var st = PG.getState();
+    var auditCalls = []; // deferred until after PG.setState(st) below — see note
     if (rt){
-      Object.assign(rt, data);
-      PG.addAudit('Room Type Updated', rt.name + ' details updated.');
+      // PG.getState() re-parses localStorage on every call rather than returning a
+      // cached object, so the page-load-time `rt` reference is a different object
+      // graph than this fresh `st` — mutating `rt` directly would silently never
+      // reach `st`, and PG.setState(st) would write back the room type unchanged.
+      // Find and mutate the record that actually lives inside `st`.
+      var freshRt = st.roomTypes.find(function (r) { return r.id === rt.id; });
+      var prevAmenityCount = (freshRt.amenities||[]).length;
+      Object.assign(freshRt, data);
+      var newAmenityCount = data.amenities.length;
+      auditCalls.push(function () { PG.addAudit('Room Type Updated', freshRt.name + ' details updated.'); });
+      if (newAmenityCount !== prevAmenityCount) {
+        auditCalls.push(function () { PG.addAudit('Room Type Amenities Updated', freshRt.name + ' amenities changed from ' + prevAmenityCount + ' to ' + newAmenityCount + ' selected.', null, { module: 'Room Types', recordId: freshRt.id, previousValue: prevAmenityCount, newValue: newAmenityCount }); });
+      }
       PG.toast('Room type updated.', 'success');
     } else {
       var newId = 'rt-' + Date.now();
@@ -109,12 +194,15 @@ if (!readOnly){
       st.roomTypes.push(newRt);
       st.rates[newId] = {};
       PG.dateRange(PG.addDays(PG.TODAY,-2), PG.addDays(PG.TODAY,30)).forEach(function(d){ st.rates[newId][d] = newRt.baseRate; });
-      PG.addAudit('Room Type Created', newRt.name + ' added.');
+      auditCalls.push(function () { PG.addAudit('Room Type Created', newRt.name + ' added.'); });
       PG.toast('Room type created.', 'success');
     }
+    // PG.setState(st) must run BEFORE PG.addAudit() — addAudit does its own
+    // read-current-state/append/write cycle, and calling it first would have its
+    // write immediately clobbered by this one (st.audit here doesn't include it).
     PG.setState(st);
+    auditCalls.forEach(function (fn) { fn(); });
     setTimeout(function(){ location.href = 'room-types.html'; }, 500);
-  });
 }
 </script>
 </body>

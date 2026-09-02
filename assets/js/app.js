@@ -85,10 +85,61 @@
     // README §5.2/§10 and the header's single-property pill, which already gives every
     // page clear property context).
     var PROPERTY_ID = "PGH-001";
+    // Property-scoped amenity catalog (§5). Three distinct scopes — 'property',
+    // 'roomType', 'physicalRoom' — deliberately kept as separate items rather than one
+    // shared list with a checkbox per level, so each host page's selector only ever
+    // offers amenities that actually make sense there. Room View, Bed Configuration,
+    // Operational Status, Room Type, Building and Floor stay their own dedicated
+    // fields (see roomViews/bedConfigs/etc.) and are never catalog entries.
+    var AMENITY_CATALOG = [
+      { id: "am-parking", name: "Parking", category: "Parking and Transportation", scope: "property" },
+      { id: "am-pool", name: "Swimming Pool", category: "Pool, Spa, and Wellness", scope: "property" },
+      { id: "am-gym", name: "Gym", category: "Pool, Spa, and Wellness", scope: "property" },
+      { id: "am-restaurant", name: "Restaurant", category: "Food and Beverage", scope: "property" },
+      { id: "am-spa", name: "Spa", category: "Pool, Spa, and Wellness", scope: "property" },
+      { id: "am-shuttle", name: "Airport Shuttle", category: "Parking and Transportation", scope: "property" },
+      { id: "am-elevator", name: "Elevator", category: "General Guest Services", scope: "property" },
+      { id: "am-reception", name: "Reception", category: "General Guest Services", scope: "property" },
+      { id: "am-bizcenter", name: "Business Center", category: "Business Services", scope: "property" },
+      { id: "am-wifi-common", name: "Common-area Wi-Fi", category: "Business Services", scope: "property" },
+      { id: "am-meeting", name: "Meeting Facilities", category: "Business Services", scope: "property" },
+      { id: "am-ev", name: "Electric Vehicle Charging", category: "Parking and Transportation", scope: "property" },
+
+      { id: "am-ac", name: "Air Conditioning", category: "Room Features", scope: "roomType" },
+      { id: "am-tv", name: "Television", category: "Entertainment", scope: "roomType" },
+      { id: "am-wifi-room", name: "In-room Wi-Fi", category: "Room Features", scope: "roomType" },
+      { id: "am-minibar", name: "Minibar", category: "Kitchen", scope: "roomType" },
+      { id: "am-safe", name: "Safe", category: "Room Features", scope: "roomType" },
+      { id: "am-privatebath", name: "Private Bathroom", category: "Bathroom", scope: "roomType" },
+      { id: "am-hairdryer", name: "Hair Dryer", category: "Bathroom", scope: "roomType" },
+      { id: "am-desk", name: "Work Desk", category: "Room Features", scope: "roomType" },
+      { id: "am-balcony", name: "Balcony", category: "Room Features", scope: "roomType" },
+      { id: "am-kitchenette", name: "Kitchenette", category: "Kitchen", scope: "roomType" },
+      { id: "am-coffeemaker", name: "Coffee Maker", category: "Kitchen", scope: "roomType" },
+      { id: "am-iron", name: "Iron", category: "Room Features", scope: "roomType" },
+      { id: "am-phone", name: "Telephone", category: "Room Features", scope: "roomType" },
+      { id: "am-toiletries", name: "Toiletries", category: "Bathroom", scope: "roomType" },
+
+      { id: "am-accbath", name: "Accessible Bathroom", category: "Accessibility", scope: "physicalRoom" },
+      { id: "am-connectdoor", name: "Connecting Door", category: "Room Features", scope: "physicalRoom" },
+      { id: "am-corner", name: "Corner Room", category: "Room Features", scope: "physicalRoom" },
+      { id: "am-nearelevator", name: "Near Elevator", category: "Room Features", scope: "physicalRoom" },
+      { id: "am-quiet", name: "Quiet Location", category: "Room Features", scope: "physicalRoom" },
+      { id: "am-renovated", name: "Recently Renovated", category: "Room Features", scope: "physicalRoom" },
+      { id: "am-widedoor", name: "Extra-wide Door", category: "Accessibility", scope: "physicalRoom" },
+      { id: "am-rollinshower", name: "Roll-in Shower", category: "Accessibility", scope: "physicalRoom" }
+    ].map(function (a) {
+      return { id: a.id, propertyId: PROPERTY_ID, name: a.name, nameLocalized: null, category: a.category,
+        scope: a.scope, standard: true, active: true, iconKey: null,
+        createdBy: "Hotel Admin", createdDate: TODAY, updatedBy: null, updatedDate: null };
+    });
     var roomTypes = [
-      { id: "std", propertyId: PROPERTY_ID, name: "Standard Room", code: "STD", sellable: 10, baseCapacity: 10, maxAdults: 2, maxChildren: 0, bed: "1 Queen Bed", baseRate: 100, active: true, desc: "Comfortable entry-level room with modern amenities, ideal for solo travelers and couples." },
-      { id: "dlx", propertyId: PROPERTY_ID, name: "Deluxe Room", code: "DLX", sellable: 6, baseCapacity: 6, maxAdults: 2, maxChildren: 1, bed: "1 King Bed", baseRate: 120, active: true, desc: "Spacious upgraded room with premium furnishings and city views." },
-      { id: "fam", propertyId: PROPERTY_ID, name: "Family Room", code: "FAM", sellable: 4, baseCapacity: 4, maxAdults: 2, maxChildren: 2, bed: "1 Queen + 2 Single Beds", baseRate: 150, active: true, desc: "Generous layout designed for families, with separate sleeping areas." }
+      { id: "std", propertyId: PROPERTY_ID, name: "Standard Room", code: "STD", sellable: 10, baseCapacity: 10, maxAdults: 2, maxChildren: 0, bed: "1 Queen Bed", baseRate: 100, active: true, desc: "Comfortable entry-level room with modern amenities, ideal for solo travelers and couples.",
+        amenities: ["am-ac", "am-tv", "am-wifi-room", "am-safe", "am-privatebath", "am-hairdryer", "am-toiletries", "am-phone"] },
+      { id: "dlx", propertyId: PROPERTY_ID, name: "Deluxe Room", code: "DLX", sellable: 6, baseCapacity: 6, maxAdults: 2, maxChildren: 1, bed: "1 King Bed", baseRate: 120, active: true, desc: "Spacious upgraded room with premium furnishings and city views.",
+        amenities: ["am-ac", "am-tv", "am-wifi-room", "am-minibar", "am-safe", "am-privatebath", "am-hairdryer", "am-desk", "am-toiletries", "am-phone", "am-coffeemaker"] },
+      { id: "fam", propertyId: PROPERTY_ID, name: "Family Room", code: "FAM", sellable: 4, baseCapacity: 4, maxAdults: 2, maxChildren: 2, bed: "1 Queen + 2 Single Beds", baseRate: 150, active: true, desc: "Generous layout designed for families, with separate sleeping areas.",
+        amenities: ["am-ac", "am-tv", "am-wifi-room", "am-minibar", "am-safe", "am-privatebath", "am-hairdryer", "am-desk", "am-toiletries", "am-phone", "am-kitchenette"] }
     ];
 
     var rates = {};
@@ -232,7 +283,7 @@
       { id: "std-102", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "102", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
       { id: "std-103", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "103", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: ["std-104"], notes: "Connects to Room 104.", isActive: true, isSellable: true, operationalStatus: "Available" },
       { id: "std-104", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "104", building: "Main Building", floor: 1, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: ["std-103"], notes: "Connects to Room 103.", isActive: true, isSellable: true, operationalStatus: "Available" },
-      { id: "std-105", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "105", building: "Main Building", floor: 1, bedConfiguration: "2 Single Beds", view: "Courtyard View", accessibilityFeatures: ["Wheelchair Accessible", "Grab Bars"], connectingRoomIds: [], notes: "ADA-compliant accessible room.", isActive: true, isSellable: true, operationalStatus: "Available" },
+      { id: "std-105", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "105", building: "Main Building", floor: 1, bedConfiguration: "2 Single Beds", view: "Courtyard View", accessibilityFeatures: ["Wheelchair Accessible", "Grab Bars"], features: ["am-accbath", "am-widedoor"], connectingRoomIds: [], notes: "ADA-compliant accessible room.", isActive: true, isSellable: true, operationalStatus: "Available" },
       { id: "std-201", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "201", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
       { id: "std-202", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "202", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Garden View", accessibilityFeatures: [], connectingRoomIds: [], notes: "Held for a walk-in currently at the desk.", isActive: true, isSellable: true, operationalStatus: "Held" },
       { id: "std-203", propertyId: PROPERTY_ID, roomTypeId: "std", roomNumber: "203", building: "Main Building", floor: 2, bedConfiguration: "1 Queen Bed", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
@@ -251,6 +302,9 @@
       { id: "fam-403", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "403", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Courtyard View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" },
       { id: "fam-404", propertyId: PROPERTY_ID, roomTypeId: "fam", roomNumber: "404", building: "Main Building", floor: 4, bedConfiguration: "1 Queen + 2 Single Beds", view: "Old City View", accessibilityFeatures: [], connectingRoomIds: [], notes: "", isActive: true, isSellable: true, operationalStatus: "Available" }
     ];
+    // Every physical room not given exceptional features explicitly above just
+    // inherits its Room Type's amenities with no extras — features defaults to [].
+    physicalRooms.forEach(function (r) { if (!r.features) r.features = []; });
 
     // Room assignments connect each reservation's room items to specific physical
     // rooms. A reservation that isn't yet Confirmed/Paid gets a "Held" (tentative)
@@ -297,14 +351,20 @@
         timezone: "GMT+2 (Asia/Hebron)",
         starRating: 4,
         status: "Active",
-        policySummary: "Free cancellation up to 24 hours before arrival. Standard check-in is 14:00 and check-out is 12:00. Full payment is due at check-in unless the reservation was prepaid via Payment Link."
+        policySummary: "Free cancellation up to 24 hours before arrival. Standard check-in is 14:00 and check-out is 12:00. Full payment is due at check-in unless the reservation was prepaid via Payment Link.",
+        amenities: ["am-parking", "am-pool", "am-gym", "am-restaurant", "am-wifi-common", "am-reception", "am-elevator", "am-shuttle"]
       },
+      amenityCatalog: AMENITY_CATALOG,
       roomTypes: roomTypes,
       physicalRooms: physicalRooms,
       roomAssignments: roomAssignments,
       roomBlocks: roomBlocks,
       rates: rates,
       bedConfigs: ["1 Queen Bed", "1 King Bed", "1 Queen + 2 Single Beds", "2 Single Beds", "2 Double Beds"],
+      // Reusable, property-scoped Room View options (§3). Seeded with every view
+      // already used on a physical room below, plus the prototype's example set, so
+      // nothing already assigned ever points at a missing option.
+      roomViews: ["Old City View", "Courtyard View", "Garden View", "City View", "Sea View", "Pool View", "Mountain View", "No Specific View"],
       mealPlans: ["Room Only", "Breakfast Included", "Half Board", "Full Board"],
       inventoryOverrides: {}, // key "roomTypeId|date" -> {stopSell:true, reason}
       dateAdjustments: {}, // key "roomTypeId|date" -> cumulative sellable-quantity delta for that date
@@ -525,6 +585,13 @@
           if (!p.currency) { p.currency = "USD"; dirty = true; }
           if (!p.periods) { p.periods = []; dirty = true; }
         });
+
+        // Nested migration for the amenities model (§5) — same reasoning as ratePlans
+        // above: these keys may already exist on an object saved before the field was
+        // added to it, so the top-level backfill loop never sees them missing.
+        if (state.hotel && !state.hotel.amenities) { state.hotel.amenities = []; dirty = true; }
+        (state.roomTypes || []).forEach(function (rt) { if (!rt.amenities) { rt.amenities = []; dirty = true; } });
+        (state.physicalRooms || []).forEach(function (r) { if (!r.features) { r.features = []; dirty = true; } });
       } catch (e) {
         state = buildSeed();
         dirty = true;
@@ -1779,27 +1846,26 @@
     return html;
   }
 
-  // The header user menu is the only dropdown in the shell, so it wires itself here
-  // rather than every page repeating the open/close/outside-click plumbing.
+  // The header account menu reuses the exact same body-portal mechanism as every
+  // row "more actions" kebab (openMoreMenu/closeMoreMenu) instead of its own
+  // absolute-positioned dropdown. That old approach anchored the menu inside
+  // .pg-header's own stacking context, so a sibling sticky element elsewhere on the
+  // page with an equal-or-higher z-index (the Operations Calendar's sticky grid, most
+  // notably) could paint over it, and it was subject to any clipping ancestor.
+  // Portaling to <body> as position:fixed — the same fix already proven for
+  // .more-menu — makes it immune to both.
   function wireUserMenu() {
     var btn = document.getElementById("pg-user-menu-btn");
     var menu = document.getElementById("pg-user-menu");
     if (!btn || !menu) return;
-    function setOpen(v) {
-      menu.classList.toggle("show", v);
-      btn.setAttribute("aria-expanded", v ? "true" : "false");
-    }
     btn.addEventListener("click", function (e) {
-      if (e.target.closest(".pg-user-menu")) return; // let menu items act normally
-      setOpen(!menu.classList.contains("show"));
+      e.stopPropagation();
+      openMoreMenu(btn, menu);
     });
     btn.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!menu.classList.contains("show")); }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); }
     });
-    document.addEventListener("click", function (e) {
-      if (!btn.contains(e.target)) setOpen(false);
-    });
+    ensureMenuPortalGlobalWired();
   }
 
   function globalSearch(state, query) {
@@ -2314,9 +2380,23 @@
     var first = menu.querySelector("a, button:not(:disabled)");
     if (first) first.focus();
   }
-  // Attach once globally — every page's menus share this one delegate rather than each
-  // page registering its own document click/keydown/scroll listeners.
+  // Attach once globally — every portaled menu in the app (row "more actions" kebabs
+  // AND the header account menu, see wireUserMenu()) shares this one delegate rather
+  // than each page/component registering its own document click/keydown/scroll
+  // listeners. Called from both wireMoreMenus() and wireUserMenu() so it's live on
+  // every page regardless of which portaled menus that page actually uses.
   var MORE_MENU_GLOBAL_WIRED = false;
+  function ensureMenuPortalGlobalWired() {
+    if (MORE_MENU_GLOBAL_WIRED) return;
+    MORE_MENU_GLOBAL_WIRED = true;
+    document.addEventListener("click", function () { closeMoreMenu(false); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMoreMenu(true); });
+    // A scroll anywhere on the page can leave a fixed-position portal menu visually
+    // detached from the trigger it belongs to — closing is simpler and safer than
+    // tracking every scrollable ancestor to reposition live.
+    window.addEventListener("scroll", function () { closeMoreMenu(false); }, true);
+    window.addEventListener("resize", function () { closeMoreMenu(false); });
+  }
   function wireMoreMenus(root) {
     (root || document).querySelectorAll(".more-btn").forEach(function (btn) {
       if (btn.dataset.moreWired) return;
@@ -2330,15 +2410,7 @@
         if (menu) openMoreMenu(btn, menu);
       });
     });
-    if (MORE_MENU_GLOBAL_WIRED) return;
-    MORE_MENU_GLOBAL_WIRED = true;
-    document.addEventListener("click", function () { closeMoreMenu(false); });
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMoreMenu(true); });
-    // A scroll anywhere on the page can leave a fixed-position portal menu visually
-    // detached from the trigger it belongs to — closing is simpler and safer than
-    // tracking every scrollable ancestor to reposition live.
-    window.addEventListener("scroll", function () { closeMoreMenu(false); }, true);
-    window.addEventListener("resize", function () { closeMoreMenu(false); });
+    ensureMenuPortalGlobalWired();
   }
 
   function enhanceSelects(root) {
@@ -2397,12 +2469,53 @@
     });
   }
 
+  /* Reusable confirmation dialog (title + message + Cancel + a single labeled action,
+     red only when opts.danger) — the same pg-modal shell every other confirm in this
+     app already uses, just factored out so Room Views and Bed Configurations (and
+     anything added later) don't each hand-roll their own copy. */
+  var CONFIRM_MODAL_EL = null;
+  function confirmDialog(opts) {
+    if (!CONFIRM_MODAL_EL) {
+      CONFIRM_MODAL_EL = document.createElement("div");
+      CONFIRM_MODAL_EL.className = "pg-modal-overlay";
+      CONFIRM_MODAL_EL.id = "pg-confirm-modal";
+      document.body.appendChild(CONFIRM_MODAL_EL);
+    }
+    var el = CONFIRM_MODAL_EL;
+    el.innerHTML = '<div class="pg-modal" style="width:420px;">' +
+      '<div class="pg-modal-header"><h3>' + esc(opts.title) + '</h3><button class="pg-modal-close" id="pg-confirm-close">&times;</button></div>' +
+      '<div class="pg-modal-body"><p style="margin:0;font-size:13px;color:var(--pg-gray-700);line-height:1.55;">' + esc(opts.message) + '</p></div>' +
+      '<div class="pg-modal-footer"><button class="btn btn-light" id="pg-confirm-cancel">' + esc(opts.cancelLabel || "Cancel") + '</button>' +
+      '<button class="btn ' + (opts.danger ? "btn-danger" : "btn-primary") + '" id="pg-confirm-ok">' + esc(opts.confirmLabel || "Confirm") + '</button></div>' +
+    '</div>';
+    function close() { closeModal("pg-confirm-modal"); }
+    document.getElementById("pg-confirm-close").addEventListener("click", close);
+    document.getElementById("pg-confirm-cancel").addEventListener("click", close);
+    document.getElementById("pg-confirm-ok").addEventListener("click", function () { close(); opts.onConfirm(); });
+    openModal("pg-confirm-modal");
+  }
+
   /* Managed-list dropdown: a select-style control backed by an editable list of
-     strings (e.g. Bed Configurations, Meal Plans) with inline "+ Add New" and a
-     delete (x) per option. Renders into `container`; calls onChange(value) when
-     the selection changes, and persists list add/remove via getList/setList. */
+     strings (Room Views, Bed Configurations, Meal Plans) with inline "+ Add New" and
+     a delete icon per option. Renders into `container`; calls onChange(value) when
+     the selection changes, and persists list add/remove via getList/setList.
+
+     opts: { value, getList, setList, onChange, placeholder,
+             entityLabel        — e.g. "View" / "Bed configuration", used in messages
+             isUsedCount(item)  — optional; returns how many rooms use this option.
+                                   Omit only for lists with no "assigned" concept.
+             addedMessage, deletedMessage — exact toast text (spec wording differs:
+                                   "View added successfully." vs "Bed configuration
+                                   added successfully.")
+             auditAction, auditModule     — passed straight to PG.addAudit() }
+     Add validates: required, trimmed, no whitespace-only, max 60 chars, and a
+     case-insensitive duplicate check against the current list — shown inline rather
+     than silently failing. Delete is blocked (icon disabled, tooltip explains why)
+     when isUsedCount(item) > 0, and otherwise goes through confirmDialog() rather
+     than a native confirm(). */
   function renderManagedSelect(container, opts) {
     var current = opts.value;
+    var entityLabel = opts.entityLabel || "option";
     var wrap = document.createElement("div");
     wrap.className = "pg-select";
     var trigger = document.createElement("div");
@@ -2415,26 +2528,41 @@
     container.appendChild(wrap);
 
     function syncTrigger() { trigger.textContent = current || "Select…"; }
+    function usedCount(item) { return opts.isUsedCount ? opts.isUsedCount(item) : 0; }
+    function doDelete(item) {
+      var list = opts.getList().filter(function (x) { return x !== item; });
+      opts.setList(list);
+      if (current === item) { current = list[0]; opts.onChange(current); syncTrigger(); }
+      addAudit((opts.auditAction || entityLabel + " Deleted"), "“" + item + "” removed from the " + entityLabel.toLowerCase() + " list.", null, { module: opts.auditModule, previousValue: item, newValue: null });
+      toast(opts.deletedMessage || (entityLabel + " deleted successfully."), "success");
+      renderMenu();
+    }
     function renderMenu() {
       menu.innerHTML = "";
       opts.getList().forEach(function (item) {
+        var count = usedCount(item);
         var row = document.createElement("div");
         row.className = "pg-select-option" + (item === current ? " selected" : "");
         var label = document.createElement("span");
         label.textContent = item;
         row.appendChild(label);
         var del = document.createElement("span");
-        del.className = "del";
+        del.className = "del" + (count > 0 ? " disabled" : "");
         del.textContent = "×";
-        del.title = "Remove this option";
+        del.title = count > 0
+          ? "This " + entityLabel.toLowerCase() + " is assigned to " + count + " room" + (count === 1 ? "" : "s") + " and cannot be deleted."
+          : "Delete this " + entityLabel.toLowerCase();
         del.addEventListener("mousedown", function (e) {
           e.preventDefault(); e.stopPropagation();
+          if (count > 0) { toast(del.title, "danger"); return; }
           if (opts.getList().length <= 1) { toast("At least one option must remain.", "danger"); return; }
-          if (!confirm('Remove "' + item + '" from this list?')) return;
-          var list = opts.getList().filter(function (x) { return x !== item; });
-          opts.setList(list);
-          if (current === item) { current = list[0]; opts.onChange(current); syncTrigger(); }
-          renderMenu();
+          confirmDialog({
+            title: "Delete " + entityLabel + "?",
+            message: "Are you sure you want to delete “" + item + "”? It will no longer be available when creating or editing rooms.",
+            confirmLabel: "Delete " + (opts.deleteButtonLabel || entityLabel),
+            danger: true,
+            onConfirm: function () { doDelete(item); }
+          });
         });
         row.appendChild(del);
         row.addEventListener("mousedown", function (e) {
@@ -2449,27 +2577,38 @@
       });
       var addRow = document.createElement("div");
       addRow.className = "pg-select-add";
-      addRow.textContent = "+ Add New…";
+      addRow.textContent = "+ Add New " + entityLabel;
       addRow.addEventListener("mousedown", function (e) {
         e.preventDefault();
         var formRow = document.createElement("div");
         formRow.className = "pg-select-add-form";
-        formRow.innerHTML = '<input type="text" placeholder="' + (opts.placeholder || "New option") + '"><button type="button">Add</button>';
+        formRow.innerHTML = '<input type="text" placeholder="' + (opts.placeholder || "New option") + '" maxlength="60"><button type="button">Add</button>' +
+          '<div class="pg-select-add-error" style="display:none;width:100%;color:var(--pg-danger);font-size:11.5px;margin-top:4px;"></div>';
         addRow.replaceWith(formRow);
         var input = formRow.querySelector("input");
+        var errEl = formRow.querySelector(".pg-select-add-error");
         input.focus();
+        function showError(msg) { errEl.textContent = msg; errEl.style.display = "block"; }
         function commit() {
-          var v = input.value.trim();
-          if (!v) return;
+          var raw = input.value;
+          var v = raw.trim();
+          if (!v) { showError("This field is required."); return; }
+          if (v.length > 60) { showError("Maximum length is 60 characters."); return; }
           var list = opts.getList();
-          if (list.indexOf(v) === -1) { list.push(v); opts.setList(list); }
+          var dup = list.some(function (x) { return x.toLowerCase() === v.toLowerCase(); });
+          if (dup) { showError("This " + entityLabel.toLowerCase() + " already exists. Select it from the list."); return; }
+          list = list.concat([v]);
+          opts.setList(list);
           current = v;
           syncTrigger();
           opts.onChange(current);
+          addAudit((opts.auditAction || entityLabel + " Added"), "“" + v + "” added to the " + entityLabel.toLowerCase() + " list.", null, { module: opts.auditModule, previousValue: null, newValue: v });
+          toast(opts.addedMessage || (entityLabel + " added successfully."), "success");
           renderMenu();
         }
         formRow.querySelector("button").addEventListener("mousedown", function (e) { e.preventDefault(); commit(); });
         input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+        input.addEventListener("input", function () { errEl.style.display = "none"; });
       });
       menu.appendChild(addRow);
     }
@@ -2484,6 +2623,157 @@
     document.addEventListener("click", function (e) { if (!wrap.contains(e.target)) closeMenu(); });
     syncTrigger();
   }
+
+  /* ---------------------------------------------------------------- */
+  /* Amenity selector (§5) — one shared drawer for property, room-type, and         */
+  /* physical-room amenity pickers. A long single <select> can't hold a scoped,      */
+  /* categorized, growing catalog with custom entries, so this is a searchable,      */
+  /* grouped, multi-select drawer instead: search box, category filter, "selected    */
+  /* only" toggle, checkboxes grouped by category, removable selected chips, and an  */
+  /* "Add Custom Amenity" mini-form — all working off a local draft so nothing is    */
+  /* written to state until Apply.                                                   */
+  /* opts: { scope: 'property'|'roomType'|'physicalRoom', title, helperText,         */
+  /*         selectedIds, excludeIds (already-inherited, hidden from the picker),    */
+  /*         onApply(newSelectedIds), auditModule }                                  */
+  /* ---------------------------------------------------------------- */
+  var amenitySelectorEl = null;
+  function amenityCategoryOrder() {
+    return ["General Guest Services", "Room Features", "Bathroom", "Food and Beverage", "Kitchen",
+      "Entertainment", "Parking and Transportation", "Pool, Spa, and Wellness", "Family Services",
+      "Business Services", "Accessibility", "Safety and Security", "Environment and Sustainability", "Custom"];
+  }
+  function openAmenitySelector(opts) {
+    if (!amenitySelectorEl) {
+      amenitySelectorEl = document.createElement("div");
+      amenitySelectorEl.className = "pg-drawer-overlay";
+      amenitySelectorEl.id = "pg-amenity-selector";
+      document.body.appendChild(amenitySelectorEl);
+    }
+    var el = amenitySelectorEl;
+    var draft = (opts.selectedIds || []).slice();
+    var search = "", categoryFilter = "all", selectedOnly = false;
+    var excludeIds = opts.excludeIds || [];
+
+    function catalogAll() {
+      return getState().amenityCatalog.filter(function (a) { return a.active && a.scope === opts.scope && excludeIds.indexOf(a.id) === -1; });
+    }
+    function nameOf(id) { var a = catalogAll().find(function (x) { return x.id === id; }); return a ? a.name : id; }
+    function visibleCatalog() {
+      var q = search.trim().toLowerCase();
+      return catalogAll().filter(function (a) {
+        if (categoryFilter !== "all" && a.category !== categoryFilter) return false;
+        if (selectedOnly && draft.indexOf(a.id) === -1) return false;
+        if (q && a.name.toLowerCase().indexOf(q) === -1) return false;
+        return true;
+      });
+    }
+    function render() {
+      var cats = amenityCategoryOrder().filter(function (c) { return catalogAll().some(function (a) { return a.category === c; }); });
+      var catOptions = '<option value="all">All Categories</option>' + cats.map(function (c) { return '<option value="' + esc(c) + '"' + (categoryFilter === c ? " selected" : "") + '>' + esc(c) + "</option>"; }).join("");
+      var visible = visibleCatalog();
+      var groupsHtml = "";
+      cats.forEach(function (c) {
+        var items = visible.filter(function (a) { return a.category === c; });
+        if (!items.length) return;
+        groupsHtml += '<div class="am-group"><div class="am-group-title">' + esc(c) + '</div>' +
+          items.map(function (a) {
+            var checked = draft.indexOf(a.id) > -1;
+            return '<label class="am-row"><input type="checkbox" class="am-check" data-id="' + a.id + '"' + (checked ? " checked" : "") + '><span>' + esc(a.name) + "</span></label>";
+          }).join("") + "</div>";
+      });
+      if (!groupsHtml) groupsHtml = '<div class="text-sm muted" style="padding:20px 4px;text-align:center;">No amenities match your search.</div>';
+
+      var chipsHtml = draft.length
+        ? draft.map(function (id) { return '<span class="opc-chip am-chip" data-id="' + id + '">' + esc(nameOf(id)) + '<button type="button" data-remove="' + id + '">&times;</button></span>'; }).join("")
+        : '<span class="text-sm muted">No amenities selected yet.</span>';
+
+      el.innerHTML = '<div class="pg-drawer pg-drawer-wide">' +
+        '<div class="pg-drawer-header"><h3>' + esc(opts.title || "Select Amenities") + '</h3><button class="pg-modal-close" id="am-close">&times;</button></div>' +
+        '<div class="pg-drawer-body">' +
+          (opts.helperText ? '<div class="help-note" style="margin-bottom:14px;">' + esc(opts.helperText) + "</div>" : "") +
+          '<div class="am-toolbar">' +
+            '<input type="search" class="form-control" id="am-search" placeholder="Search amenities…" value="' + esc(search) + '">' +
+            '<select class="form-control" id="am-category">' + catOptions + "</select>" +
+          "</div>" +
+          '<label class="form-check" style="margin:10px 0 14px;"><input type="checkbox" id="am-selected-only"' + (selectedOnly ? " checked" : "") + '><span class="form-label" style="margin:0;">Selected only</span></label>' +
+          '<div class="am-selected-chips">' + chipsHtml + "</div>" +
+          '<div class="am-groups">' + groupsHtml + "</div>" +
+          '<button type="button" class="pg-select-add" id="am-add-custom" style="margin-top:14px;">+ Add Custom Amenity</button>' +
+          '<div id="am-custom-form"></div>' +
+        "</div>" +
+        '<div class="pg-drawer-footer"><button class="btn btn-light" id="am-cancel">Cancel</button><button class="btn btn-primary" id="am-apply">Apply<span class="am-count">' + draft.length + "</span></button></div>" +
+      "</div>";
+      PG_enhanceAmenityDrawerSelects();
+
+      document.getElementById("am-close").addEventListener("click", close);
+      document.getElementById("am-cancel").addEventListener("click", close);
+      document.getElementById("am-search").addEventListener("input", function (e) { search = e.target.value; render(); focusSearch(); });
+      document.getElementById("am-category").addEventListener("change", function (e) { categoryFilter = e.target.value; render(); });
+      document.getElementById("am-selected-only").addEventListener("change", function (e) { selectedOnly = e.target.checked; render(); });
+      el.querySelectorAll(".am-check").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          var id = cb.dataset.id;
+          if (cb.checked) { if (draft.indexOf(id) === -1) draft.push(id); }
+          else { draft = draft.filter(function (x) { return x !== id; }); }
+          render();
+        });
+      });
+      el.querySelectorAll("[data-remove]").forEach(function (btn) {
+        btn.addEventListener("click", function () { draft = draft.filter(function (x) { return x !== btn.dataset.remove; }); render(); });
+      });
+      document.getElementById("am-add-custom").addEventListener("click", openCustomForm);
+      document.getElementById("am-apply").addEventListener("click", function () { close(); opts.onApply(draft); });
+    }
+    function focusSearch() {
+      var s = document.getElementById("am-search");
+      if (s) { s.focus(); var v = s.value; s.value = ""; s.value = v; }
+    }
+    function openCustomForm() {
+      var box = document.getElementById("am-custom-form");
+      var scopeLabel = { property: "Property", roomType: "Room Type", physicalRoom: "Physical Room" }[opts.scope];
+      box.innerHTML = '<div class="am-custom-form">' +
+        '<div class="form-group"><label class="form-label">Amenity Name <span class="opt">(required)</span></label><input class="form-control" id="am-c-name" maxlength="60"></div>' +
+        '<div class="form-group"><label class="form-label">Arabic / Localized Name <span class="opt">(optional)</span></label><input class="form-control" id="am-c-name-local"></div>' +
+        '<div class="form-group"><label class="form-label">Category</label><select class="form-control" id="am-c-category">' +
+          amenityCategoryOrder().map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("") +
+        "</select></div>" +
+        '<div class="form-group"><label class="form-label">Applies To</label><input class="form-control" value="' + esc(scopeLabel) + '" disabled></div>' +
+        '<div class="pg-select-add-error" id="am-c-error" style="display:none;color:var(--pg-danger);font-size:11.5px;margin-bottom:8px;"></div>' +
+        '<div style="display:flex;gap:8px;"><button type="button" class="btn btn-light btn-sm" id="am-c-cancel">Cancel</button><button type="button" class="btn btn-primary btn-sm" id="am-c-save">Add Amenity</button></div>' +
+      "</div>";
+      PG.enhanceSelects(box);
+      document.getElementById("am-c-cancel").addEventListener("click", function () { box.innerHTML = ""; });
+      document.getElementById("am-c-save").addEventListener("click", function () {
+        var name = document.getElementById("am-c-name").value.trim();
+        var errEl = document.getElementById("am-c-error");
+        function showErr(m) { errEl.textContent = m; errEl.style.display = "block"; }
+        if (!name) { showErr("Amenity name is required."); return; }
+        if (name.length > 60) { showErr("Maximum length is 60 characters."); return; }
+        var st = getState();
+        var dup = st.amenityCatalog.find(function (a) { return a.scope === opts.scope && a.name.toLowerCase() === name.toLowerCase(); });
+        if (dup) { showErr('An amenity named "' + dup.name + '" already exists for this scope. Select it from the list instead.'); return; }
+        var category = document.getElementById("am-c-category").value;
+        var localized = document.getElementById("am-c-name-local").value.trim();
+        var newId = "am-custom-" + Date.now();
+        st.amenityCatalog.push({ id: newId, propertyId: st.hotel.propertyCode, name: name, nameLocalized: localized || null,
+          category: category, scope: opts.scope, standard: false, active: true, iconKey: null,
+          createdBy: CURRENT_ROLE, createdDate: TODAY, updatedBy: null, updatedDate: null });
+        setState(st);
+        addAudit("Custom Amenity Created", "“" + name + "” added to the " + category + " category (" + opts.scope + ").", null, { module: opts.auditModule, newValue: name });
+        draft.push(newId);
+        toast("Custom amenity added.", "success");
+        box.innerHTML = "";
+        render();
+      });
+      document.getElementById("am-c-name").focus();
+    }
+    function close() { closeModal("pg-amenity-selector"); }
+    render();
+    openModal("pg-amenity-selector");
+  }
+  // enhanceSelects only targets <select class="form-control">, and the amenity
+  // drawer's category filter needs the same treatment as everywhere else in the app.
+  function PG_enhanceAmenityDrawerSelects() { if (amenitySelectorEl) enhanceSelects(amenitySelectorEl); }
 
   /* ---------------------------------------------------------------- */
   /* Change Room drawer — a structured, filterable room picker shared by New       */
@@ -3843,6 +4133,9 @@
     wireMoreMenus: wireMoreMenus,
     closeMoreMenu: closeMoreMenu,
     renderManagedSelect: renderManagedSelect,
+    confirmDialog: confirmDialog,
+    openAmenitySelector: openAmenitySelector,
+    amenityCategoryOrder: amenityCategoryOrder,
     segmented: segmented,
     wireSegmented: wireSegmented,
     filterChips: filterChips,

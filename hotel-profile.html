@@ -55,6 +55,8 @@ html += '<div class="card"><div class="card-header"><h3>Reservation Policy Summa
   '<textarea class="form-control" id="f-policy" style="min-height:90px;">'+PG.esc(h.policySummary)+'</textarea>' +
 '</div></div>';
 
+html += '<div class="card" id="amenitiesCard"></div>';
+
 html += '<button class="btn btn-primary" id="saveBtn">Save Changes</button>';
 html += '</div>';
 
@@ -63,6 +65,65 @@ html += '</div>';
 
 page.innerHTML = html;
 PG.enhanceSelects(page);
+
+/* ================================================================ */
+/* Property amenities (§5) — shared facilities and services at the hotel     */
+/* level. Managed here only; Room Type and Physical Room have their own      */
+/* separate sections for their own scopes.                                    */
+/* ================================================================ */
+var amenitySearch = '';
+function renderAmenitiesSection(){
+  var st = PG.getState();
+  var ids = st.hotel.amenities || [];
+  var catalog = st.amenityCatalog.filter(function(a){ return a.active && ids.indexOf(a.id) > -1; });
+  var q = amenitySearch.trim().toLowerCase();
+  var visible = q ? catalog.filter(function(a){ return a.name.toLowerCase().indexOf(q) > -1; }) : catalog;
+  var cats = PG.amenityCategoryOrder().filter(function(c){ return visible.some(function(a){ return a.category===c; }); });
+  var body = '';
+  if (!catalog.length){
+    body = '<div class="empty-state" style="padding:26px 0;">No property amenities have been added yet.</div>';
+  } else if (!visible.length){
+    body = '<div class="text-sm muted" style="padding:12px 0;">No amenities match your search.</div>';
+  } else {
+    body = cats.map(function(c){
+      var items = visible.filter(function(a){ return a.category===c; });
+      return '<div style="margin-bottom:14px;"><div class="text-sm" style="font-weight:700;color:var(--pg-gray-600);text-transform:uppercase;letter-spacing:.04em;font-size:11px;margin-bottom:8px;">'+PG.esc(c)+'</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + items.map(function(a){ return '<span class="opc-chip" style="background:var(--pg-gray-100);color:var(--pg-gray-800);">'+PG.esc(a.name)+'</span>'; }).join('') + '</div></div>';
+    }).join('');
+  }
+  document.getElementById('amenitiesCard').innerHTML =
+    '<div class="card-header" style="align-items:center;"><h3>Amenities</h3>' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span class="muted text-sm">'+catalog.length+' amenit'+(catalog.length===1?'y':'ies')+'</span>' +
+        '<input type="search" class="form-control" id="am-profile-search" placeholder="Search amenities…" style="width:200px;" value="'+PG.esc(amenitySearch)+'">' +
+        '<button type="button" class="btn btn-outline btn-sm" id="editAmenitiesBtn">Edit Amenities</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card-body">' +
+      '<div class="help-note" style="margin-bottom:14px;">Add shared facilities and services available to guests across the property.</div>' +
+      body +
+    '</div>';
+  document.getElementById('am-profile-search').addEventListener('input', function(e){ amenitySearch = e.target.value; renderAmenitiesSection(); });
+  document.getElementById('editAmenitiesBtn').addEventListener('click', function(){
+    PG.openAmenitySelector({
+      scope: 'property',
+      title: 'Property Amenities',
+      helperText: 'Select shared facilities and services available to guests across the property.',
+      selectedIds: PG.getState().hotel.amenities || [],
+      auditModule: 'Hotel Profile',
+      onApply: function(newIds){
+        var st2 = PG.getState();
+        var before = st2.hotel.amenities || [];
+        st2.hotel.amenities = newIds;
+        PG.setState(st2);
+        PG.addAudit('Property Amenities Updated', 'Property amenities changed from ' + before.length + ' to ' + newIds.length + ' selected.', null, { module: 'Hotel Profile', previousValue: before.length, newValue: newIds.length });
+        PG.toast('Amenities updated.', 'success');
+        renderAmenitiesSection();
+      }
+    });
+  });
+}
+renderAmenitiesSection();
 
 document.getElementById('f-country').addEventListener('change', function(){
   var cities = R.citiesByCountry[this.value] || [];

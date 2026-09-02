@@ -59,7 +59,9 @@ function rtName(id) { var r = rt(id); return r ? r.name : id; }
 function roomById(id) { return s.physicalRooms.find(function (r) { return r.id === id; }); }
 
 var ACCESSIBILITY_OPTIONS = ['Wheelchair Accessible', 'Grab Bars', 'Roll-in Shower', 'Visual Alarm'];
-var VIEW_OPTIONS = ['No View', 'Old City View', 'Courtyard View', 'Garden View'];
+// VIEW_OPTIONS is gone — Room View is now a reusable, property-scoped list
+// (PG.getState().roomViews) editable in place via PG.renderManagedSelect, same as
+// Bed Configuration below.
 var STATUS_OPTIONS = ['Available', 'Reserved', 'Held', 'Out of Order', 'Out of Service', 'Inactive'];
 // "Reserved" is never a stored baseline — it's always derived live from a covering
 // roomAssignment (PG.roomStatusOn, README §4.6) — so it's excluded from what staff can
@@ -365,11 +367,22 @@ function init() {
   roomDrawer.id = 'roomDrawer';
   document.body.appendChild(roomDrawer);
   var bedConfigValue = '';
+  var viewValue = '';
+  // Assigned-option protection (§3/§4): a View or Bed Configuration in use on ANY
+  // physical room — not just ones visible under the current filters — can't be
+  // deleted. Excludes the room currently open in this drawer so re-saving the same
+  // room with its own existing value never falsely blocks deletion of anything else.
+  function roomsUsingView(v) { return PG.getState().physicalRooms.filter(function (r) { return r.view === v && r.id !== editingId; }).length; }
+  function roomsUsingBed(v) {
+    var st2 = PG.getState();
+    var onRooms = st2.physicalRooms.filter(function (r) { return r.bedConfiguration === v && r.id !== editingId; }).length;
+    var onTypes = st2.roomTypes.filter(function (rt2) { return rt2.bed === v; }).length;
+    return onRooms + onTypes;
+  }
 
   function buildRoomDrawer(room) {
     editingId = room ? room.id : null;
     var rtOptions = s.roomTypes.map(function (r) { return '<option value="' + r.id + '"' + (room && room.roomTypeId === r.id ? ' selected' : '') + '>' + PG.esc(r.name) + '</option>'; }).join('');
-    var viewOptions = VIEW_OPTIONS.map(function (v) { return '<option value="' + v + '"' + (room && room.view === v ? ' selected' : '') + '>' + v + '</option>'; }).join('');
     var accHtml = ACCESSIBILITY_OPTIONS.map(function (a, i) {
       var checked = room && (room.accessibilityFeatures || []).indexOf(a) > -1 ? ' checked' : '';
       return '<div class="form-check"><input type="checkbox" class="acc-check" id="acc-' + i + '" value="' + a + '"' + checked + '><label class="form-label" style="margin:0;" for="acc-' + i + '">' + a + '</label></div>';
@@ -381,6 +394,7 @@ function init() {
     }).join('') : '<span class="muted text-sm">No other rooms yet.</span>';
 
     bedConfigValue = room ? room.bedConfiguration : s.bedConfigs[0];
+    viewValue = room ? room.view : (s.roomViews[0] || '');
 
     roomDrawer.innerHTML = '<div class="pg-drawer">' +
       '<div class="pg-drawer-header"><h3>' + (room ? 'Edit Physical Room' : 'Add Physical Room') + '</h3><button class="pg-modal-close" onclick="PG.closeModal(\'roomDrawer\')">&times;</button></div>' +
@@ -391,13 +405,14 @@ function init() {
           '<div class="form-group"><label class="form-label">Building</label><input class="form-control" id="rm-building" value="' + (room ? PG.esc(room.building) : (s.hotel.name ? 'Main Building' : '')) + '"></div>' +
           '<div class="form-group"><label class="form-label">Floor</label><input type="number" class="form-control" id="rm-floor" value="' + (room ? room.floor : 1) + '"></div>' +
           '<div class="form-group"><label class="form-label">Bed Configuration</label><div id="rm-bed-container"></div></div>' +
-          '<div class="form-group"><label class="form-label">View</label><select class="form-control" id="rm-view">' + viewOptions + '</select></div>' +
+          '<div class="form-group"><label class="form-label">View</label><div id="rm-view-container"></div></div>' +
           '<div class="form-group"><label class="form-label">Operational Status <span class="opt">(baseline, when not overridden by a live reservation or block)</span></label><select class="form-control" id="rm-opstatus">' +
             OPERATIONAL_STATUS_OPTIONS.map(function (st2) { return '<option value="' + st2 + '"' + (room && room.operationalStatus === st2 ? ' selected' : '') + '>' + st2 + '</option>'; }).join('') +
           '</select></div>' +
         '</div>' +
         '<div class="form-group"><label class="form-label">Accessibility Features</label><div class="checklist-box">' + accHtml + '</div></div>' +
         '<div class="form-group"><label class="form-label">Connecting Rooms</label><div class="checklist-box">' + connHtml + '</div></div>' +
+        '<div class="form-group" id="rm-amenities-section"></div>' +
         '<div class="form-check"><input type="checkbox" id="rm-sellable"' + (!room || room.isSellable ? ' checked' : '') + '><label class="form-label" style="margin:0;" for="rm-sellable">Sellable</label></div>' +
         '<div class="form-check" style="margin-top:10px;"><input type="checkbox" id="rm-active"' + (!room || room.isActive ? ' checked' : '') + '><label class="form-label" style="margin:0;" for="rm-active">Active</label></div>' +
         '<div class="form-group" style="margin-top:16px;"><label class="form-label">Internal Notes <span class="opt">(optional)</span></label><textarea class="form-control" id="rm-notes">' + (room ? PG.esc(room.notes) : '') + '</textarea></div>' +
@@ -410,9 +425,72 @@ function init() {
       getList: function () { return PG.getState().bedConfigs; },
       setList: function (list) { var st = PG.getState(); st.bedConfigs = list; PG.setState(st); },
       onChange: function (v) { bedConfigValue = v; },
-      placeholder: 'e.g. 2 Queen Beds'
+      placeholder: 'e.g. 2 Queen Beds',
+      entityLabel: 'Bed Configuration',
+      deleteButtonLabel: 'Configuration',
+      isUsedCount: roomsUsingBed,
+      addedMessage: 'Bed configuration added successfully.',
+      deletedMessage: 'Bed configuration deleted successfully.',
+      auditModule: 'Physical Rooms'
     });
+    PG.renderManagedSelect(document.getElementById('rm-view-container'), {
+      value: viewValue,
+      getList: function () { return PG.getState().roomViews; },
+      setList: function (list) { var st = PG.getState(); st.roomViews = list; PG.setState(st); },
+      onChange: function (v) { viewValue = v; },
+      placeholder: 'e.g. Sea View',
+      entityLabel: 'View',
+      isUsedCount: roomsUsingView,
+      addedMessage: 'View added successfully.',
+      deletedMessage: 'View deleted successfully.',
+      auditModule: 'Physical Rooms'
+    });
+    // Amenities & Features (§5) — inherited amenities are read-only and follow
+    // whichever Room Type is currently selected in the form (live, before Save);
+    // room-specific extras are a separate catalog-backed multi-select that excludes
+    // whatever is already guaranteed by that room type, so the same amenity is never
+    // offered twice.
+    featuresValue = room ? (room.features || []) : [];
+    renderRoomAmenitiesSection();
+    document.getElementById('rm-type').addEventListener('change', renderRoomAmenitiesSection);
     document.getElementById('roomSave').addEventListener('click', saveRoom);
+  }
+
+  var featuresValue = [];
+  function renderRoomAmenitiesSection(){
+    var st = PG.getState();
+    var typeId = document.getElementById('rm-type').value;
+    var type = st.roomTypes.find(function (r) { return r.id === typeId; });
+    var inheritedIds = type ? (type.amenities || []) : [];
+    // If the room type changed and a room-specific feature is now guaranteed by the
+    // new type, drop it from the extras list rather than showing it in both places.
+    featuresValue = featuresValue.filter(function (fid) { return inheritedIds.indexOf(fid) === -1; });
+    var inherited = st.amenityCatalog.filter(function (a) { return a.active && inheritedIds.indexOf(a.id) > -1; });
+    var extras = st.amenityCatalog.filter(function (a) { return a.active && featuresValue.indexOf(a.id) > -1; });
+    var inheritedHtml = inherited.length
+      ? inherited.map(function (a) { return '<span class="am-inherited-chip">' + PG.icon('lockClosed', 11) + PG.esc(a.name) + '</span>'; }).join('')
+      : '<span class="text-sm muted">No guaranteed amenities on this room type yet.</span>';
+    var extrasHtml = extras.length
+      ? extras.map(function (a) { return '<span class="opc-chip">' + PG.esc(a.name) + '</span>'; }).join('')
+      : '<span class="text-sm muted">No room-specific features added.</span>';
+    document.getElementById('rm-amenities-section').innerHTML =
+      '<label class="form-label">Amenities &amp; Features</label>' +
+      '<div class="text-sm muted" style="margin-bottom:6px;">Inherited from ' + (type ? PG.esc(type.name) : 'Room Type') + (type ? ' &middot; <a href="room-type-form.html?id=' + type.id + '&mode=view">View Room Type</a>' : '') + '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">' + inheritedHtml + '</div>' +
+      '<div class="help-note" style="margin-bottom:10px;">Use room-specific features only for differences that help staff assign the most suitable room.</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">' + extrasHtml + '</div>' +
+      '<button type="button" class="btn btn-outline btn-sm" id="editFeaturesBtn">Edit Room-Specific Features</button>';
+    document.getElementById('editFeaturesBtn').addEventListener('click', function () {
+      PG.openAmenitySelector({
+        scope: 'physicalRoom',
+        title: 'Room-Specific Features',
+        helperText: 'Use room-specific features only for differences that help staff assign the most suitable room.',
+        selectedIds: featuresValue,
+        excludeIds: inheritedIds,
+        auditModule: 'Physical Rooms',
+        onApply: function (newIds) { featuresValue = newIds; renderRoomAmenitiesSection(); }
+      });
+    });
   }
 
   function clearFieldErrors() {
@@ -452,9 +530,10 @@ function init() {
       building: document.getElementById('rm-building').value.trim(),
       floor: parseInt(document.getElementById('rm-floor').value, 10) || 0,
       bedConfiguration: bedConfigValue,
-      view: document.getElementById('rm-view').value,
+      view: viewValue,
       operationalStatus: document.getElementById('rm-opstatus').value,
       accessibilityFeatures: accessibility,
+      features: featuresValue,
       connectingRoomIds: connecting,
       notes: document.getElementById('rm-notes').value.trim(),
       isSellable: document.getElementById('rm-sellable').checked,
