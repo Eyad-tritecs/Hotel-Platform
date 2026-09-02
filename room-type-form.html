@@ -31,6 +31,7 @@ html += '<div class="pg-page-head"><div><h1>'+(id ? (readOnly ? 'View Room Type'
   '<div class="sub">'+(rt ? rt.name : 'Create a new room type for Palestine Grand Hotel')+'</div></div>' +
   '<div class="pg-actions">' +
     (rt && readOnly ? '<a class="btn btn-primary" href="room-type-form.html?id='+id+'">'+PG.icon('edit',14)+' Edit This Room Type</a>' : '') +
+    (!readOnly ? '<button class="btn btn-primary" id="saveBtn">'+PG.icon('check',14)+' Save</button>' : '') +
     (rt && !readOnly ? '<button class="btn btn-danger-outline" id="deleteBtn">Delete Room Type</button>' : '') +
     '<a class="btn btn-light" href="room-types.html">&larr; Back to Room Types</a>' +
   '</div></div>';
@@ -48,8 +49,6 @@ html += '<div class="card"><div class="card-body"><div class="grid-2">' +
 '<div class="form-group"><label class="form-label">Essential Description</label><textarea class="form-control" id="f-desc" style="min-height:70px;" '+(readOnly?'disabled':'')+'>'+PG.esc(rt ? rt.desc : '')+'</textarea></div>' +
 '<div class="form-check"><input type="checkbox" id="f-active" '+((!rt || rt.active) ? 'checked' : '')+' '+(readOnly?'disabled':'')+'><label class="form-label" style="margin:0;" for="f-active">Active</label></div>' +
 '</div>' +
-(readOnly ? '' :
-  '<div class="card-footer"><button class="btn btn-primary" id="saveBtn">Save</button></div>') +
 '</div>';
 
 html += '<div class="card" id="amenitiesCard"></div>';

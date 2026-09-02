@@ -2642,6 +2642,21 @@
       "Entertainment", "Parking and Transportation", "Pool, Spa, and Wellness", "Family Services",
       "Business Services", "Accessibility", "Safety and Security", "Environment and Sustainability", "Custom"];
   }
+
+  // Shared table-cell rendering for a list of amenity/feature ids: the same .chip
+  // style as any other attribute chip in the app (Key Attributes, etc.), truncated to
+  // `max` visible chips with a "+N" chip whose title lists the rest — so a table row
+  // never grows tall just because a room happens to have a dozen amenities.
+  function amenityChipsHtml(ids, max) {
+    max = max || 4;
+    if (!ids || !ids.length) return '<span class="muted text-sm">—</span>';
+    var names = getState().amenityCatalog.filter(function (a) { return ids.indexOf(a.id) > -1; }).map(function (a) { return a.name; });
+    if (!names.length) return '<span class="muted text-sm">—</span>';
+    var visible = names.slice(0, max), rest = names.slice(max);
+    var html = visible.map(function (n) { return '<span class="chip">' + esc(n) + '</span>'; }).join("");
+    if (rest.length) html += '<span class="chip" title="' + esc(rest.join(", ")) + '">+' + rest.length + "</span>";
+    return html;
+  }
   function openAmenitySelector(opts) {
     if (!amenitySelectorEl) {
       amenitySelectorEl = document.createElement("div");
@@ -4139,6 +4154,7 @@
     confirmDialog: confirmDialog,
     openAmenitySelector: openAmenitySelector,
     amenityCategoryOrder: amenityCategoryOrder,
+    amenityChipsHtml: amenityChipsHtml,
     segmented: segmented,
     wireSegmented: wireSegmented,
     filterChips: filterChips,

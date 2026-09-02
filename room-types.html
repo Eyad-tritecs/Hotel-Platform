@@ -24,10 +24,7 @@ html += '<div class="card"><div class="card-body no-pad"><div class="table-wrap"
 '</tr></thead><tbody>';
 
 function rtAmenitiesBadge(rt){
-  var ids = rt.amenities || [];
-  if (!ids.length) return '<span class="muted text-sm">—</span>';
-  var names = s.amenityCatalog.filter(function(a){ return ids.indexOf(a.id) > -1; }).map(function(a){ return a.name; });
-  return '<span class="am-table-badge" title="'+PG.esc(names.join(', '))+'">'+names.length+' amenit'+(names.length===1?'y':'ies')+'</span>';
+  return PG.amenityChipsHtml(rt.amenities || [], 4);
 }
 
 s.roomTypes.forEach(function(rt){

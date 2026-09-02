@@ -590,8 +590,6 @@ html[dir="rtl"] .pg-drawer-overlay.show .pg-drawer{transform:translateX(0);}
 .am-inherited-chip{display:inline-flex;align-items:center;gap:5px;background:var(--pg-gray-100);
   color:var(--pg-gray-600);border:1px solid var(--pg-border);border-radius:14px;padding:4px 10px;font-size:12px;font-weight:600;}
 .am-inherited-chip svg{width:12px;height:12px;flex-shrink:0;}
-.am-table-badge{display:inline-flex;align-items:center;gap:4px;background:var(--pg-gray-100);color:var(--pg-gray-700);
-  border-radius:12px;padding:2px 9px;font-size:11px;font-weight:600;cursor:default;}
 
 /* ===== Toast ===== */
 .pg-toast{position:fixed;top:20px;right:24px;z-index:var(--z-toast);display:flex;flex-direction:column;gap:10px;}

@@ -151,9 +151,7 @@ function init() {
     var st2 = PG.getState();
     var type = st2.roomTypes.find(function (t) { return t.id === r.roomTypeId; });
     var ids = (type ? (type.amenities || []) : []).concat(r.features || []);
-    if (!ids.length) return '<span class="muted text-sm">—</span>';
-    var names = st2.amenityCatalog.filter(function (a) { return ids.indexOf(a.id) > -1; }).map(function (a) { return a.name; });
-    return '<span class="am-table-badge" title="' + PG.esc(names.join(', ')) + '">' + names.length + ' amenit' + (names.length === 1 ? 'y' : 'ies') + '</span>';
+    return PG.amenityChipsHtml(ids, 4);
   }
 
   function reservationCellHtml(r) {
